@@ -1,0 +1,40 @@
+/* Full-page splash */
+#splash-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: white;
+    z-index: 9999;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+
+    font-family: 'Arial';
+    text-align: center;
+}
+
+#splash-logo {
+    height: 120px;
+    margin-bottom: 20px;
+    animation: fadein 1.5s ease-in-out;
+}
+
+#splash-text {
+    font-size: 22px;
+    color: #444;
+    animation: fadein 2s ease-in-out;
+}
+
+@keyframes fadeout {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+@keyframes fadein {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}

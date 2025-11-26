@@ -1,0 +1,1726 @@
+import os
+import json
+import datetime as dt
+
+import numpy as np
+import pandas as pd
+import requests
+import gspread
+from google.oauth2.service_account import Credentials
+from dotenv import load_dotenv
+
+from dash import (
+    Dash, html, dcc, Input, Output, State, ALL,
+    callback_context, no_update
+)
+import dash_bootstrap_components as dbc
+import plotly.graph_objects as go
+from dash.exceptions import PreventUpdate
+
+# ============================================================
+#  Environment
+# ============================================================
+load_dotenv()
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+GS_SERVICE_JSON = os.getenv("GS_SERVICE_JSON", "service-account.json")
+GSHEET_ID = os.getenv("GSHEET_ID", "")
+EMAIL_WEBHOOK_URL = os.getenv("EMAIL_WEBHOOK_URL", "")
+APP_PASSCODE = os.getenv("APP_PASSCODE", "AAD2025")
+
+if not GSHEET_ID:
+    raise ValueError("GSHEET_ID not set in .env")
+
+if not os.path.exists(GS_SERVICE_JSON):
+    raise FileNotFoundError(
+        f"Service account JSON '{GS_SERVICE_JSON}' not found. "
+        "Place it beside app.py or update GS_SERVICE_JSON in .env."
+    )
+
+# ============================================================
+#  Google Sheets client
+# ============================================================
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
+
+creds = Credentials.from_service_account_file(GS_SERVICE_JSON, scopes=SCOPES)
+gc = gspread.authorize(creds)
+sh = gc.open_by_key(GSHEET_ID)
+
+
+# ============================================================
+#  Helpers: Sheets
+# ============================================================
+
+def list_tabs():
+    """Return worksheet titles (athlete sheets)."""
+    return [ws.title for ws in sh.worksheets()]
+
+
+def load_tab(tab_name: str) -> pd.DataFrame:
+    """Load worksheet to DataFrame with parsed Date."""
+    try:
+        ws = sh.worksheet(tab_name)
+    except gspread.WorksheetNotFound:
+        ws = sh.get_worksheet(0)
+    records = ws.get_all_records()
+    df = pd.DataFrame(records)
+
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
+    return df
+
+
+def write_row(tab_name: str, row_idx_0: int, payload: dict):
+    """
+    Update one row (0-based from df) with payload values.
+    Only updates columns that already exist.
+    """
+    ws = sh.worksheet(tab_name)
+    sheet_vals = ws.get_all_values()
+    if not sheet_vals:
+        return
+
+    headers = sheet_vals[0]
+    row_number = row_idx_0 + 2  # 1 for header + 1-based index
+
+    row = ws.row_values(row_number)
+    if len(row) < len(headers):
+        row += [""] * (len(headers) - len(row))
+
+    for col_name, value in payload.items():
+        if col_name in headers:
+            j = headers.index(col_name)
+            row[j] = "" if value is None else str(value)
+
+    ws.update(values=[row], range_name=f"A{row_number}")
+
+
+def safe(df: pd.DataFrame, row_idx: int, col: str, default: str = "") -> str:
+    """Safely fetch a value from df[row_idx, col] as string."""
+    try:
+        if col in df.columns:
+            val = df.at[row_idx, col]
+            if pd.notna(val):
+                return str(val)
+    except Exception:
+        pass
+    return default
+
+
+# ============================================================
+#  AI Personas & Helpers (Unified Engine, no TTS)
+# ============================================================
+
+def build_context_summary(df: pd.DataFrame, days: int = 7) -> str:
+    """Summarise last `days` worth of load / wellness & ACWR."""
+    if df.empty:
+        return "No recent data available."
+
+    if "Date" in df.columns:
+        ddf = df.copy()
+        ddf["Date"] = pd.to_datetime(ddf["Date"], errors="coerce").dt.date
+        cutoff = dt.date.today() - dt.timedelta(days=days)
+        recent = ddf[ddf["Date"] >= cutoff]
+    else:
+        recent = df.tail(days)
+
+    def safe_mean(col):
+        if col not in recent.columns:
+            return "n/a"
+        vals = pd.to_numeric(recent[col], errors="coerce")
+        if vals.dropna().empty:
+            return "n/a"
+        return round(float(vals.mean(skipna=True)), 1)
+
+    sRPE7 = safe_mean("sRPE")
+    load7 = safe_mean("Load")
+    sesh7 = safe_mean("Session_1_5")
+    fat7 = safe_mean("Fatigue_1_5")
+    mood7 = safe_mean("Mood_1_5")
+
+    # Approx ACWR from EWMA/EMWA cols if present
+    ew7_col = "EWMA 7" if "EWMA 7" in df.columns else ("EMWA 7" if "EMWA 7" in df.columns else None)
+    ew28_col = "EWMA 28" if "EWMA 28" in df.columns else ("EMWA 28" if "EMWA 28" in df.columns else None)
+
+    if ew7_col and ew28_col:
+        try:
+            ew7 = pd.to_numeric(df[ew7_col], errors="coerce")
+            ew28 = pd.to_numeric(df[ew28_col], errors="coerce").replace(0, np.nan)
+            acwr = (ew7 / ew28).replace([np.inf, -np.inf], np.nan)
+            if acwr.dropna().empty:
+                acwr7 = "n/a"
+            else:
+                acwr7 = round(float(acwr.tail(days).mean(skipna=True)), 2)
+        except Exception:
+            acwr7 = "n/a"
+    else:
+        acwr7 = "n/a"
+
+    return (
+        f"Last {days} days — sRPE avg: {sRPE7}, Load avg: {load7}, "
+        f"Fatigue avg: {fat7}, Session avg: {sesh7}, Mood avg: {mood7}, ACWR approx: {acwr7}."
+    )
+
+
+def build_history_text(df: pd.DataFrame, max_rows: int = 7) -> str:
+    """Use previous notes + AI suggestions as context (last `max_rows` entries)."""
+    if df.empty:
+        return ""
+
+    cols = [
+        c
+        for c in ["Date", "Athlete_Notes", "AI_Suggestion_1", "AI_Suggestion_2"]
+        if c in df.columns
+    ]
+    if not cols:
+        return ""
+
+    tail = df[cols].tail(max_rows)
+
+    def _clean_str(val):
+        s = str(val).strip()
+        if s.lower() in ("nan", "none"):
+            return ""
+        return s
+
+    lines = []
+    for _, r in tail.iterrows():
+        d = r.get("Date", "")
+        note = _clean_str(r.get("Athlete_Notes", ""))
+        ai1 = _clean_str(r.get("AI_Suggestion_1", ""))
+        ai2 = _clean_str(r.get("AI_Suggestion_2", ""))
+        if note or ai1 or ai2:
+            lines.append(f"{d}: Note='{note}' AI1='{ai1}' AI2='{ai2}'")
+
+    if not lines:
+        return ""
+    return "Recent interaction history:\n" + "\n".join(lines)
+
+
+def persona_prompt(mode: str) -> str:
+    """
+    Coaching personas tuned to be evidence-informed, short, and specific.
+    """
+    PERSONAS = {
+        "100m Sprint":
+            "You are an elite sprint coach synthesising the philosophies of "
+            "Stu McMillan (ALTIS systems thinking & individualisation), "
+            "Lance Brauman (max velocity development & race modelling), "
+            "Ken Clark (acceleration biomechanics), and "
+            "JB Morin & Matt Jordan (force diagnostics & eccentric strength). "
+            "Your role is to interpret readiness markers and provide a precise next-step coaching action.",
+
+        "400m Sprint":
+            "You are a world-class 400m coach influenced by Clyde Hart and Stephen Francis. "
+            "You emphasise rhythm, distribution, speed endurance, careful dose management, "
+            "and avoiding unnecessary fatigue.",
+
+        "S&C":
+            "You are an S&C coach combining Mike Boyle (robust unilateral progressions), "
+            "Matt Jordan (force diagnostics & tendon integrity), and "
+            "JB Morin (force-velocity profiling). "
+            "You interpret neuromuscular readiness and prescribe appropriate micro-adjustments.",
+
+        "General":
+            "You are a holistic sports performance coach integrating physical, psychological, "
+            "and life-load readiness. You are specific, supportive, and realistic."
+    }
+    return PERSONAS.get(mode, PERSONAS["General"])
+
+
+def call_openai_chat(messages: list) -> str:
+    """
+    Wrapper for OpenAI chat completions.
+    Keeps responses short (2–3 sentences) and robust to failures.
+    """
+    if not OPENAI_API_KEY:
+        return "AI suggestion unavailable (missing API key)."
+    try:
+        resp = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "gpt-4o-mini",
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": 260,
+            },
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            return f"AI suggestion unavailable (HTTP {resp.status_code})."
+        data = resp.json()
+        return data["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        return f"AI suggestion unavailable ({e})."
+
+
+def make_ai_suggestions(
+    athlete_name: str,
+    selected_date,
+    session_rpe: int | float,
+    session: int | float,
+    fatigue: int | float,
+    mood: int | float,
+    notes: str,
+    sets_reps_load: str,
+    track_reps_times: str,
+    ai_mode_1: str,
+    ai_mode_2: str,
+):
+    """
+    Unified AI engine:
+      - Uses 7-day context (load, wellness, ACWR)
+      - Uses recent history (notes + AI suggestions)
+      - Uses current session metrics (RPE, session rating, fatigue, mood)
+      - Uses training inputs (notes, sets × reps × load, track reps & times)
+      - Generates 2 persona-based suggestions (modes 1 & 2)
+    """
+    df = load_tab(athlete_name)
+
+    # Context & history
+    summary = build_context_summary(df)
+    history = build_history_text(df)
+
+    # Current session snapshot
+    session_block = (
+        f"Current session — date: {selected_date}\n"
+        f"Session RPE (1–10): {session_rpe}\n"
+        f"Session performance (1–5): {session}\n"
+        f"Fatigue (1–5): {fatigue}\n"
+        f"Mood (1–5): {mood}\n\n"
+        f"Athlete notes: {notes}\n"
+        f"Sets × Reps × Load: {sets_reps_load}\n"
+        f"Track Reps & Times: {track_reps_times}\n"
+    )
+
+    def build_messages(mode: str):
+        persona = persona_prompt(mode)
+        history_text = history if history else "No previous note/AI history available."
+
+        return [
+            {
+                "role": "system",
+                "content": (
+                    persona +
+                    " Always remain evidence-informed. "
+                    "Never guess injury, illness, or personal issues. "
+                    "Base all recommendations strictly on the provided metrics and notes. "
+                    "Respond in 2–3 sentences maximum."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"{summary}\n\n"
+                    f"{history_text}\n\n"
+                    f"{session_block}\n"
+                    "Using these data points (load, sRPE, session performance, fatigue, mood, "
+                    "and the training details provided), give a 2–3 sentence response that:\n"
+                    "1. Interprets readiness and risk.\n"
+                    "2. Gives one actionable recommendation for the next 24–48 hours.\n"
+                    "3. Uses the coaching philosophy of your persona.\n"
+                    "4. Is specific to this athlete and this session, not generic.\n"
+                ),
+            },
+        ]
+
+    ai1 = call_openai_chat(build_messages(ai_mode_1))
+    ai2 = call_openai_chat(build_messages(ai_mode_2))
+
+    return ai1, ai2
+
+
+# ============================================================
+#  Email webhook
+# ============================================================
+
+def send_email_payload(payload: dict):
+    """
+    POST to EMAIL_WEBHOOK_URL if configured.
+    Handle routing to athlete & coach via Apps Script.
+    """
+    if not EMAIL_WEBHOOK_URL:
+        return
+
+    try:
+        print("\n=== EMAIL PAYLOAD ===")
+        print(payload)
+        print("====================\n")
+
+        requests.post(
+            EMAIL_WEBHOOK_URL,
+            json=payload,
+            timeout=15,
+        )
+    except Exception as e:
+        print("Email webhook error:", e)
+        pass
+
+
+# ============================================================
+#  Plot builders
+# ============================================================
+
+def build_calendar_cards(df: pd.DataFrame):
+    """
+    Return rows of calendar cards (4 weeks, Sat-start) with RPE-based colour shading
+    and clickable selection.
+    """
+    if df.empty or "Date" not in df.columns:
+        return "No data available."
+
+    today = dt.date.today()
+    # Saturday = 5
+    days_since_sat = (today.weekday() - 5) % 7
+    last_sat = today - dt.timedelta(days=days_since_sat)
+    start = last_sat - dt.timedelta(days=21)
+    dates = [start + dt.timedelta(days=i) for i in range(28)]
+
+    weekdays = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"]
+    header = dbc.Row(
+        [
+            dbc.Col(
+                html.Strong(day, className="text-center"),
+                width=1,
+                className="p-1 text-center",
+            )
+            for day in weekdays
+        ],
+        className="mb-1 justify-content-center"
+    )
+
+    cards = []
+    for d_ in dates:
+        day_df = df[df["Date"] == d_]
+        if not day_df.empty:
+            row = day_df.iloc[-1]
+            workout = str(row.get("Workout", "")).strip()
+            focus = str(row.get("Focus", "")).strip()
+            sRPE = pd.to_numeric(row.get("sRPE", np.nan), errors="coerce")
+        else:
+            workout = ""
+            focus = ""
+            sRPE = np.nan
+
+        # --- Dynamic RPE-based colour scale ---
+        if pd.isna(sRPE):
+            color = "#CFD8DC"  # grey
+            text_color = "black"
+        elif sRPE <= 2:
+            color = f"rgba(66, 133, 244, {0.5 + 0.05 * sRPE})"  # blue
+            text_color = "white"
+        elif 3 <= sRPE <= 5:
+            color = f"rgba(76, 175, 80, {0.5 + 0.1 * (sRPE - 3)})"  # green
+            text_color = "white"
+        elif 6 <= sRPE <= 7:
+            color = f"rgba(255, 152, 0, {0.7 + 0.1 * (sRPE - 6)})"  # orange
+            text_color = "white"
+        else:
+            color = f"rgba(244, 67, 54, {0.7 + 0.05 * (sRPE - 8)})"  # red (stronger)
+            text_color = "white"
+
+        tooltip_text = f"{d_.strftime('%b %d')}"
+        if not pd.isna(sRPE):
+            tooltip_text += f" | RPE: {sRPE}"
+        if workout:
+            tooltip_text += f" | {workout}"
+
+        cards.append(
+            dbc.Col(
+                html.Div(
+                    dbc.Card(
+                        dbc.CardBody(
+                            [
+                                html.Div(
+                                    d_.strftime("%b %d"),
+                                    className="fw-bold small text-center",
+                                ),
+                                html.Div(
+                                    focus,
+                                    className="small text-center",
+                                    style={"fontSize": "0.65rem", "fontWeight": "600"},
+                                ),
+                                html.Div(
+                                    workout,
+                                    className="small text-truncate",
+                                    style={"fontSize": "0.65rem"},
+                                ),
+
+                            ]
+                        ),
+                        style={
+                            "minHeight": "70px",
+                            "backgroundColor": color,
+                            "color": text_color,
+                            "border": "1px solid #ddd",
+                            "borderRadius": "6px",
+                            "boxShadow": "0 1px 3px rgba(0,0,0,0.1)",
+                            "cursor": "pointer",
+                        },
+                    ),
+                    id={"type": "calendar-day", "date": str(d_)},
+                    title=tooltip_text,
+                    n_clicks=0,
+                ),
+                width=1,
+                className="p-1",
+            )
+        )
+
+    rows = [
+        dbc.Row(cards[i:i + 7], className="g-1 justify-content-center")
+        for i in range(0, 28, 7)
+    ]
+
+    legend = html.Div(
+        [
+            html.Small("RPE Colour Scale:", className="fw-bold me-2"),
+            html.Span("1–2", style={
+                "background": "#4285F4", "color": "white",
+                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
+            }),
+            html.Span("3–5", style={
+                "background": "#4CAF50", "color": "white",
+                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
+            }),
+            html.Span("6–7", style={
+                "background": "#FF9800", "color": "white",
+                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
+            }),
+            html.Span("8–10", style={
+                "background": "#F44336", "color": "white",
+                "padding": "2px 8px", "borderRadius": "4px"
+            }),
+        ],
+        className="mb-3 text-center",
+    )
+
+    return [legend, header] + rows
+
+
+def _legend_right_layout(base: dict | None = None) -> dict:
+    """Shared legend layout: vertical, right side."""
+    base = base or {}
+    base.update(
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02,
+        )
+    )
+    return base
+
+
+def _week_agg_date(d):
+    """Convert dates to week-buckets starting Sat -> Fri."""
+    return d.dt.to_period("W-SAT").apply(lambda r: r.start_time)
+
+
+# ============================================================
+#   TRAINING LOAD
+# ============================================================
+def build_load_plot(df: pd.DataFrame, view_mode: str):
+    """
+    Training Load plot (daily / weekly)
+    - Bars: Load
+    - Lines: 7d rolling load, EWMA7, EWMA28
+    - ACWR on secondary axis with safe band
+    """
+
+    # Colour palette (complementary + consistent)
+    BLUE       = "#1E88E5"   # Load bars
+    ORANGE     = "#FB8C00"   # 7d avg
+    TEAL       = "#26A69A"   # EWMA 7
+    GREEN_DARK = "#2E7D32"   # EWMA 28
+    PURPLE     = "#8E24AA"   # ACWR
+
+    fig = go.Figure()
+
+    # Basic guards
+    if df.empty or "Date" not in df.columns or "Load" not in df.columns:
+        fig.update_layout(**_legend_right_layout())
+        return fig
+
+    # ---------- Core prep ----------
+    d = df.copy()
+    d["Date"] = pd.to_datetime(d["Date"], errors="coerce")
+    d = d.sort_values("Date")
+
+    d["Load"] = pd.to_numeric(d["Load"], errors="coerce")
+    d["Load_7d"] = d["Load"].rolling(7, min_periods=1).mean()
+
+    # EWMA columns (if present)
+    d["EWMA7"] = pd.to_numeric(
+        d.get("EMWA 7", d.get("EWMA 7", np.nan)),
+        errors="coerce"
+    )
+    d["EWMA28"] = pd.to_numeric(
+        d.get("EWMA 28", d.get("EMWA 28", np.nan)),
+        errors="coerce"
+    )
+    d["ACWR_col"] = pd.to_numeric(
+        d.get("EMWA ACWR", d.get("EWMA ACWR", np.nan)),
+        errors="coerce"
+    )
+
+    # =========================================
+    # WEEKLY VIEW
+    # =========================================
+    if view_mode == "weekly":
+        # Week bucket: Sat–Fri via helper
+        d["Week"] = _week_agg_date(d["Date"])
+
+        g = d.groupby("Week", as_index=False).agg(
+            Load=("Load", "sum"),
+            Load_7d=("Load_7d", "mean"),
+            EWMA7=("EWMA7", "mean"),
+            EWMA28=("EWMA28", "mean"),
+            ACWR_col=("ACWR_col", "mean"),
+        )
+
+        x = g["Week"]
+
+        # Bars – Weekly Load
+        fig.add_bar(
+            x=x,
+            y=g["Load"],
+            name="Weekly Load",
+            marker_color=BLUE,
+        )
+
+        # 7d Avg Load
+        fig.add_trace(go.Scatter(
+            x=x, y=g["Load_7d"],
+            name="7-day Avg Load",
+            mode="lines",
+            line=dict(color=ORANGE, width=3),
+        ))
+
+        # EWMA 7
+        fig.add_trace(go.Scatter(
+            x=x, y=g["EWMA7"],
+            name="EWMA 7",
+            mode="lines",
+            line=dict(color=TEAL, width=2, dash="dash"),
+        ))
+
+        # EWMA 28
+        fig.add_trace(go.Scatter(
+            x=x, y=g["EWMA28"],
+            name="EWMA 28",
+            mode="lines",
+            line=dict(color=GREEN_DARK, width=2, dash="dot"),
+        ))
+
+        # ACWR on secondary axis
+        fig.add_trace(go.Scatter(
+            x=x, y=g["ACWR_col"],
+            name="ACWR",
+            mode="lines",
+            yaxis="y2",
+            line=dict(color=PURPLE, width=2),
+        ))
+
+        # Safe ACWR band 0.8–1.3
+        fig.add_shape(
+            type="rect",
+            xref="paper", x0=0, x1=1,
+            yref="y2", y0=0.8, y1=1.3,
+            fillcolor="rgba(38,166,154,0.15)",  # soft teal
+            line_width=0,
+            layer="below",
+        )
+
+        fig.update_layout(
+            title="Training Load (Weekly)",
+            xaxis_title="Week (Sat–Fri)",
+            yaxis=dict(title="Load"),
+            yaxis2=dict(
+                title="ACWR",
+                overlaying="y",
+                side="right",
+                range=[0, 2],
+                showgrid=False,
+            ),
+            hovermode="x unified",
+            **_legend_right_layout()
+        )
+        return fig
+
+    # =========================================
+    # DAILY VIEW
+    # =========================================
+    x = d["Date"]
+
+    # Bars – Daily Load
+    fig.add_bar(x=x, y=d["Load"].round(2), name="Daily Load", marker_color=BLUE)
+
+    # 7d Avg Load
+    fig.add_trace(go.Scatter(
+        x=x, y=d["Load_7d"],
+        name="7-day Avg Load",
+        mode="lines",
+        line=dict(color=ORANGE, width=3),
+    ))
+
+    # EWMA 7
+    fig.add_trace(go.Scatter(
+        x=x, y=d["EWMA7"],
+        name="EWMA 7",
+        mode="lines",
+        line=dict(color=TEAL, width=2, dash="dash"),
+    ))
+
+    # EWMA 28
+    fig.add_trace(go.Scatter(
+        x=x, y=d["EWMA28"],
+        name="EWMA 28",
+        mode="lines",
+        line=dict(color=GREEN_DARK, width=2, dash="dot"),
+    ))
+
+    # ACWR on y2
+    fig.add_trace(go.Scatter(
+        x=x, y=d["ACWR_col"],
+        name="ACWR",
+        mode="lines",
+        yaxis="y2",
+        line=dict(color=PURPLE, width=2),
+    ))
+
+    # Safe band
+    fig.add_shape(
+        type="rect",
+        xref="paper", x0=0, x1=1,
+        yref="y2", y0=0.8, y1=1.3,
+        fillcolor="rgba(38,166,154,0.15)",
+        line_width=0,
+        layer="below",
+    )
+
+    fig.update_layout(
+        title="Training Load (Daily)",
+        xaxis_title="Date",
+        yaxis=dict(title="Load"),
+        yaxis2=dict(
+            title="ACWR",
+            overlaying="y",
+            side="right",
+            range=[0, 2],
+            showgrid=False,
+        ),
+        hovermode="x unified",
+        **_legend_right_layout()
+    )
+
+    return fig
+
+
+# ============================================================
+#   WELLNESS
+# ============================================================
+def build_wellness_plot(df: pd.DataFrame, view_mode: str):
+    fig = go.Figure()
+
+    if df.empty or "Date" not in df.columns:
+        fig.update_layout(**_legend_right_layout())
+        return fig
+
+    # -------------------------
+    # CLEAN + PREP DATAFRAME
+    # -------------------------
+    d = df.copy()
+    d["Date"] = pd.to_datetime(d["Date"], errors="coerce")
+    d = d.sort_values("Date")
+
+    # Columns that must be numeric
+    wellness_cols = ["Session_1_5", "Fatigue_1_5", "Mood_1_5", "RPE_Post_Session"]
+
+    for c in wellness_cols:
+        if c in d.columns:
+            d[c] = (
+                d[c].astype(str)
+                .str.strip()
+                .replace("", np.nan)
+            )
+            d[c] = pd.to_numeric(d[c], errors="coerce").round(2)
+
+    # Scale RPE (1–10 → 1–5)
+    if "RPE_Post_Session" in d.columns:
+        d["RPE_SCALED"] = (d["RPE_Post_Session"] / 2).round(2)
+    else:
+        d["RPE_SCALED"] = np.nan
+
+    # -------------------------
+    # WEEKLY MODE
+    # -------------------------
+    if view_mode == "weekly":
+        d["Week"] = _week_agg_date(d["Date"])
+        d = d.groupby("Week", as_index=False).mean(numeric_only=True)
+        x = d["Week"]
+    else:
+        x = d["Date"]
+
+    # -------------------------
+    # Helper to add lines
+    # -------------------------
+    def add_line(col, name, color):
+        if col in d.columns:
+            vals = pd.to_numeric(d[col], errors="coerce").round(2)
+            if vals.dropna().empty:
+                return
+            fig.add_trace(go.Scatter(
+                x=x,
+                y=vals,
+                mode="lines",
+                name=name,
+                line=dict(width=3, color=color),
+            ))
+
+    # -------------------------
+    # ADD ALL WELLNESS SERIES
+    # -------------------------
+    add_line("Session_1_5",      "Session",   "#1E88E5")
+    add_line("RPE_SCALED",       "RPE Post",  "#E53935")
+    add_line("Fatigue_1_5",      "Fatigue",   "#FB8C00")
+    add_line("Mood_1_5",         "Mood",      "#8E24AA")
+
+    # -------------------------
+    # Layout
+    # -------------------------
+    fig.update_layout(
+        title=f"Wellness ({'Weekly Avg' if view_mode=='weekly' else 'Daily'})",
+        xaxis_title="Date",
+        yaxis_title="Scale (1–5)",
+        hovermode="x unified",
+        **_legend_right_layout()
+    )
+
+    return fig
+
+
+# ============================================================
+#   SPEED & TEMPO
+# ============================================================
+def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
+    BLUE = "#1E88E5"
+    ORANGE = "#FB8C00"
+    TEAL = "#26A69A"
+    PURPLE = "#8E24AA"
+
+    fig = go.Figure()
+
+    if df.empty or "Date" not in df.columns:
+        fig.update_layout(**_legend_right_layout())
+        return fig
+
+    d = df.copy()
+    d["Date"] = pd.to_datetime(d["Date"], errors="coerce")
+    d = d.sort_values("Date")
+
+    speed = pd.to_numeric(d.get("SPEED (m)", np.nan), errors="coerce").fillna(0).round(2)
+    tempo = pd.to_numeric(d.get("TEMPO (m)", np.nan), errors="coerce").fillna(0).round(2)
+
+    if view_mode == "daily":
+        x = d["Date"]
+
+        fig.add_bar(x=x, y=speed, name="Speed (m)", marker_color=BLUE)
+        fig.add_bar(x=x, y=tempo, name="Tempo (m)", marker_color=ORANGE)
+
+        fig.add_trace(go.Scatter(
+            x=x, y=speed.rolling(7, min_periods=1).mean(),
+            name="Speed 7d", mode="lines",
+            line=dict(color=TEAL, width=2, dash="dash")
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=x, y=speed.rolling(28, min_periods=1).mean(),
+            name="Speed 28d", mode="lines",
+            line=dict(color=PURPLE, width=2, dash="dot")
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=x, y=tempo.rolling(7, min_periods=1).mean(),
+            name="Tempo 7d", mode="lines",
+            line=dict(color=TEAL, width=2, dash="dash")
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=x, y=tempo.rolling(28, min_periods=1).mean(),
+            name="Tempo 28d", mode="lines",
+            line=dict(color=PURPLE, width=2, dash="dot")
+        ))
+
+        fig.update_layout(
+            title="Speed & Tempo Volumes (Daily)",
+            xaxis_title="Date",
+            yaxis_title="Metres",
+            barmode="stack",
+            hovermode="x unified",
+            **_legend_right_layout()
+        )
+        return fig
+
+    # Weekly view -----------------------------------------
+    d["Week"] = _week_agg_date(d["Date"])
+    d["Speed_clean"] = speed
+    d["Tempo_clean"] = tempo
+
+    g = d.groupby("Week", as_index=False).agg(
+        Speed=("Speed_clean", "sum"),
+        Tempo=("Tempo_clean", "sum"),
+    )
+
+    x = g["Week"]
+
+    fig.add_bar(x=x, y=g["Speed"], name="Speed (m)", marker_color=BLUE)
+    fig.add_bar(x=x, y=g["Tempo"], name="Tempo (m)", marker_color=ORANGE)
+
+    fig.add_trace(go.Scatter(
+        x=x, y=g["Speed"].rolling(1).mean(),
+        name="Speed 7d", mode="lines",
+        line=dict(color=TEAL, width=2, dash="dash")
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=x, y=g["Speed"].rolling(4).mean(),
+        name="Speed 28d", mode="lines",
+        line=dict(color=PURPLE, width=2, dash="dot")
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=x, y=g["Tempo"].rolling(1).mean(),
+        name="Tempo 7d", mode="lines",
+        line=dict(color=TEAL, width=2, dash="dash")
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=x, y=g["Tempo"].rolling(4).mean(),
+        name="Tempo 28d", mode="lines",
+        line=dict(color=PURPLE, width=2, dash="dot")
+    ))
+
+    fig.update_layout(
+        title="Speed & Tempo Volumes (Weekly)",
+        xaxis_title="Week",
+        yaxis_title="Metres",
+        barmode="stack",
+        hovermode="x unified",
+        **_legend_right_layout()
+    )
+    return fig
+
+
+# ============================================================
+#  Dash app
+# ============================================================
+
+app = Dash(
+    __name__,
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    suppress_callback_exceptions=True,
+)
+
+server = app.server
+
+app.title = "Adaptive Coaching Intelligence"
+app.config.suppress_callback_exceptions = True
+
+
+# --------------- UI Components ---------------
+
+def app_header(center=False):
+    align = "center" if center else "left"
+    return html.Div(
+        [
+            html.Img(
+                src="/assets/app_icon.png",
+                style={
+                    "height": "56px",
+                    "marginRight": "10px",
+                    "verticalAlign": "middle",
+                },
+            ),
+            html.Div(
+                [
+                    html.H2(
+                        "Adaptive Coaching Intelligence",
+                        style={
+                            "margin": 0,
+                            "fontWeight": 600,
+                            "textAlign": align,
+                        },
+                    ),
+                    html.Small(
+                        "AI-aligned athlete & coaching feedback",
+                        style={"color": "#555", "textAlign": align, "display": "block"},
+                    ),
+                ],
+                style={"display": "inline-block", "verticalAlign": "middle"},
+            ),
+        ],
+        style={"textAlign": align, "marginBottom": "20px"},
+    )
+
+
+def build_login_layout():
+    return dbc.Container(
+        [
+            app_header(center=True),
+            dbc.Row(
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody(
+                            [
+                                html.H4(
+                                    "Secure Access",
+                                    className="mb-3",
+                                    style={"textAlign": "center"},
+                                ),
+                                dcc.Input(
+                                    id="login-passcode",
+                                    type="password",
+                                    placeholder="Enter access code",
+                                    className="form-control mb-3",
+                                ),
+                                dbc.Button(
+                                    "Login",
+                                    id="login-button",
+                                    color="primary",
+                                    style={"width": "100%"},
+                                ),
+                                html.Div(
+                                    id="login-error",
+                                    className="text-danger mt-2",
+                                    style={"textAlign": "center"},
+                                ),
+                            ]
+                        ),
+                        className="login-card shadow-sm",
+                    ),
+                    width=12,
+                    lg=4,
+                ),
+                justify="center",
+                className="mt-4",
+            ),
+        ],
+        fluid=True,
+        className="pt-5",
+    )
+
+
+def build_main_layout():
+    tabs = list_tabs()
+    default_tab = tabs[0] if tabs else None
+
+    return dbc.Container(
+        [
+            app_header(center=False),
+
+            dcc.Store(id="selected-date-store"),
+
+            dbc.Row(
+                [
+                    dbc.Col(
+                        [
+                            dbc.Label("Select athlete sheet"),
+                            dcc.Dropdown(
+                                id="athlete-dropdown",
+                                options=[{"label": t, "value": t} for t in tabs],
+                                value=default_tab,
+                                clearable=False,
+                            ),
+                        ],
+                        lg=6, width=12,
+                    ),
+                    dbc.Col(
+                        [
+                            dbc.Label("View mode"),
+                            dcc.RadioItems(
+                                id="view-mode",
+                                options=[
+                                    {"label": "Daily", "value": "daily"},
+                                    {"label": "Weekly", "value": "weekly"},
+                                ],
+                                value="daily",
+                                inline=True,
+                            ),
+                            dbc.Button(
+                                "Refresh",
+                                id="refresh-btn",
+                                color="secondary",
+                                size="sm",
+                                className="mt-2",
+                            ),
+                        ],
+                        lg=3, width=12,
+                        className="mt-3 mt-lg-0",
+                    ),
+                ],
+                className="mb-3 g-3",
+            ),
+
+            # Summary cards
+            dbc.Row(
+                [
+                    dbc.Col(
+                        dbc.Card(
+                            dbc.CardBody(
+                                [
+                                    html.Div("Today's Date", className="text-muted small"),
+                                    html.H4(id="today-date", className="mb-0"),
+                                ]
+                            ),
+                            className="mb-3 shadow-sm",
+                        ),
+                        lg=3, md=6, width=12,
+                    ),
+                    dbc.Col(
+                        dbc.Card(
+                            dbc.CardBody(
+                                [
+                                    html.Div("Sessions Logged This Week", className="text-muted small"),
+                                    html.H4(id="weekly-count", className="mb-0 text-primary"),
+                                ]
+                            ),
+                            className="mb-3 shadow-sm",
+                        ),
+                        lg=3, md=6, width=12,
+                    ),
+                    dbc.Col(
+                        dbc.Card(
+                            dbc.CardBody(
+                                [
+                                    html.Div("Avg Fatigue / Mood", className="text-muted small"),
+                                    html.H4(id="avg-fatigue-mood", className="mb-0 text-success"),
+                                ]
+                            ),
+                            className="mb-3 shadow-sm",
+                        ),
+                        lg=3, md=6, width=12,
+                    ),
+                    dbc.Col(
+                        dbc.Card(
+                            dbc.CardBody(
+                                [
+                                    html.Div("Readiness Index", className="text-muted small"),
+                                    html.H4(id="readiness-index", className="mb-0 text-info"),
+                                ]
+                            ),
+                            className="mb-3 shadow-sm",
+                        ),
+                        lg=3, md=6, width=12,
+                    ),
+                ],
+                className="g-3",
+            ),
+
+            html.H4("4-Week Training Program", className="mt-4"),
+            html.Div(id="calendar-grid", className="mb-4"),
+
+            html.Hr(),
+
+            html.H3("Selected Session & Athlete Input", className="mt-3"),
+            html.Div(
+                id="session-input-container",
+                style={"display": "none"},
+                children=[
+                    dbc.Button(
+                        "Close",
+                        id="close-session-button",
+                        color="secondary",
+                        outline=True,
+                        size="sm",
+                        className="mb-3",
+                    ),
+                    html.H5(id="selected-date-header", className="mb-3"),
+
+                    dbc.Row([
+                        # LEFT SIDE: Athlete Notes + Session Inputs
+                        dbc.Col([
+
+                            # Athlete Notes
+                            html.Div([
+                                html.Label("Athlete Notes"),
+                                dcc.Textarea(
+                                    id="athlete-notes",
+                                    placeholder="e.g., Last two reps were my best, powerful first step, strong projection, and better stiffness on ground contact",
+                                    style={
+                                        "width": "100%", "height": "80px",
+                                        "border": "none", "outline": "none",
+                                        "padding": "10px", "background": "transparent"
+                                    },
+                                ),
+                            ], style={
+                                "border": "1px solid #e0e0e0",
+                                "borderRadius": "10px",
+                                "padding": "10px",
+                                "boxShadow": "0 2px 4px rgba(0,0,0,0.08)",
+                                "marginBottom": "12px",
+                                "background": "#fafafa",
+                            }),
+
+                            # Sets × Reps × Load
+                            html.Div([
+                                html.Label("Sets × Reps × Load"),
+                                dcc.Textarea(
+                                    id="sets-reps-load",
+                                    placeholder="e.g., Cleans - 4 × 5 @ 85kg",
+                                    style={
+                                        "width": "100%", "height": "80px",
+                                        "border": "none", "outline": "none",
+                                        "padding": "10px", "background": "transparent"
+                                    },
+                                ),
+                            ], style={
+                                "border": "1px solid #e0e0e0",
+                                "borderRadius": "10px",
+                                "padding": "10px",
+                                "boxShadow": "0 2px 4px rgba(0,0,0,0.08)",
+                                "marginBottom": "12px",
+                                "background": "#fafafa",
+                            }),
+
+                            # Track Reps & Times
+                            html.Div([
+                                html.Label("Track Reps & Times"),
+                                dcc.Textarea(
+                                    id="track-reps-times",
+                                    placeholder="e.g., 4 × 60m @ 6.85s",
+                                    style={
+                                        "width": "100%", "height": "80px",
+                                        "border": "none", "outline": "none",
+                                        "padding": "10px", "background": "transparent"
+                                    },
+                                ),
+                            ], style={
+                                "border": "1px solid #e0e0e0",
+                                "borderRadius": "10px",
+                                "padding": "10px",
+                                "boxShadow": "0 2px 4px rgba(0,0,0,0.08)",
+                                "marginBottom": "12px",
+                                "background": "#fafafa",
+                            }),
+
+                            html.Br(),
+                            dbc.Label("Session RPE (1=easy, 10=maximal)"),
+                            dcc.Slider(
+                                id="slider-session-rpe",
+                                min=1, max=10, step=1, value=5,
+                                marks={i: str(i) for i in range(1, 11)},
+                                tooltip={"placement": "bottom"},
+                            ),
+
+                            html.Br(),
+                            dbc.Label("Session Performance (1=poor, 5=excellent)"),
+                            dcc.Slider(
+                                id="slider-session",
+                                min=1, max=5, step=1, value=3,
+                                marks={i: str(i) for i in range(1, 6)},
+                                tooltip={"placement": "bottom"},
+                            ),
+
+                            html.Br(),
+                            dbc.Label("Fatigue (1=very tired, 5=fresh)"),
+                            dcc.Slider(
+                                id="slider-fatigue",
+                                min=1, max=5, step=1, value=3,
+                                marks={i: str(i) for i in range(1, 6)},
+                                tooltip={"placement": "bottom"},
+                            ),
+
+                            html.Br(),
+                            dbc.Label("Mood (1=sad, 5=upbeat)"),
+                            dcc.Slider(
+                                id="slider-mood",
+                                min=1, max=5, step=1, value=3,
+                                marks={i: str(i) for i in range(1, 6)},
+                                tooltip={"placement": "bottom"},
+                            ),
+
+                            dbc.Button(
+                                "Save & Generate AI Suggestions",
+                                id="btn-generate-ai",
+                                color="success",
+                                className="mt-3 w-100",
+                            ),
+
+                            html.Div(id="save-status", className="mt-2 text-success"),
+                        ], md=6),
+
+                        # RIGHT SIDE — AI Focus & AI Output
+                        dbc.Col([
+                            dbc.Row([
+                                dbc.Col([
+                                    dbc.Label("AI Suggestion 1 Focus"),
+                                    dcc.Dropdown(
+                                        id="ai-mode-1",
+                                        options=["100m Sprint", "400m Sprint", "S&C", "General"],
+                                        value="400m Sprint",
+                                        clearable=False,
+                                    ),
+                                ], md=6),
+
+                                dbc.Col([
+                                    dbc.Label("AI Suggestion 2 Focus"),
+                                    dcc.Dropdown(
+                                        id="ai-mode-2",
+                                        options=["100m Sprint", "400m Sprint", "S&C", "General"],
+                                        value="S&C",
+                                        clearable=False,
+                                    ),
+                                ], md=6),
+                            ], className="g-3"),
+
+                            dcc.Loading(
+                                id="ai-loader",
+                                type="circle",
+                                children=[
+                                    html.Div(id="ai-suggestion-1", className="mt-3"),
+                                    html.Div(id="ai-suggestion-2", className="mt-3"),
+                                ]
+                            )
+                        ], md=6),
+                    ]),
+                ]
+            ),
+
+            html.Hr(),
+
+            html.H3("Training Load / Readiness", className="mt-3"),
+            dcc.Graph(id="load-plot", figure=go.Figure()),
+
+            html.H3("Wellness (Session / RPE / Fatigue / Mood)", className="mt-4"),
+            dcc.Graph(id="wellness-plot", figure=go.Figure()),
+
+            html.H3("Speed & Tempo Volumes", className="mt-4"),
+            dcc.Graph(id="speedtempo-plot", figure=go.Figure()),
+        ],
+        fluid=True,
+        className="pb-5",
+    )
+
+
+# Root layout
+app.layout = html.Div(
+    [
+        dcc.Location(id="url", refresh=False),
+        dcc.Store(id="auth-store", storage_type="session"),
+
+        # Step 1: Temporary splash screen
+        html.Div(
+            id="splash-screen",
+            children=[
+                html.Div([
+                    html.Img(
+                        src="/assets/app_icon.png",
+                        style={"height": "120px", "marginBottom": "20px"}
+                    ),
+                    html.H2("Adaptive Coaching Intelligence", style={"color": "#333"}),
+                    html.P("Loading...", style={"fontSize": "18px", "color": "#666"}),
+                ],
+                style={"textAlign": "center", "paddingTop": "120px"})
+            ]
+        ),
+
+        # Real content loads after splash
+        html.Div(
+            id="page-content",
+            children=build_login_layout(),   # initial layout so login-error etc exist
+            style={"display": "none"}
+        ),
+
+        dcc.Interval(id="splash-timer", interval=3200, n_intervals=0)
+    ]
+)
+
+
+# ============================================================
+#  Callbacks
+# ============================================================
+
+# --- Splash visibility ---
+@app.callback(
+    Output("splash-screen", "style"),
+    Input("splash-timer", "n_intervals"),
+)
+def hide_splash(n):
+    if n > 0:
+        return {"display": "none"}
+    return {"display": "block"}
+
+
+@app.callback(
+    Output("page-content", "style"),
+    Input("splash-timer", "n_intervals")
+)
+def show_page_after_splash(n):
+    if n > 0:
+        return {"display": "block"}
+    return {"display": "none"}
+
+
+# --- Render page (login vs main) ---
+@app.callback(
+    Output("page-content", "children"),
+    Input("auth-store", "data"),
+)
+def render_page(auth_data):
+    if auth_data and auth_data.get("authed"):
+        return build_main_layout()
+    return build_login_layout()
+
+
+# --- Login ---
+@app.callback(
+    Output("auth-store", "data"),
+    Output("login-error", "children"),
+    Input("login-button", "n_clicks"),
+    State("login-passcode", "value"),
+    prevent_initial_call=True,
+)
+def do_login(n_clicks, code):
+    if not n_clicks:
+        raise PreventUpdate
+    if not code:
+        return {"authed": False}, "Please enter access code."
+    if code == APP_PASSCODE:
+        return {"authed": True}, ""
+    return {"authed": False}, "Incorrect access code."
+
+
+# --- Calendar grid ---
+@app.callback(
+    Output("calendar-grid", "children"),
+    Input("athlete-dropdown", "value"),
+)
+def update_calendar(athlete_tab):
+    if not athlete_tab:
+        return "Select athlete."
+    df = load_tab(athlete_tab)
+    return build_calendar_cards(df)
+
+
+# --- Dashboard metrics & plots ---
+@app.callback(
+    Output("today-date", "children"),
+    Output("weekly-count", "children"),
+    Output("avg-fatigue-mood", "children"),
+    Output("readiness-index", "children"),
+    Output("load-plot", "figure"),
+    Output("wellness-plot", "figure"),
+    Output("speedtempo-plot", "figure"),
+    Input("athlete-dropdown", "value"),
+    Input("view-mode", "value"),
+    Input("refresh-btn", "n_clicks"),
+)
+def update_dashboard(athlete_id, view_mode, n_clicks):
+    """
+    Dashboard updater:
+    - today’s real date
+    - sessions this week via Athlete_Notes
+    - load, wellness, speed/tempo plots
+    """
+
+    df = load_tab(athlete_id)
+
+    # ------------------------
+    # EMPTY DATAFRAME HANDLING
+    # ------------------------
+    if df is None or df.empty:
+        empty = go.Figure()
+        empty.update_layout(title="No Data")
+        return "—", "0 sessions", "—", "—", empty, empty, empty
+
+    # ------------------------
+    # BUILD PLOTS
+    # ------------------------
+    load_fig = build_load_plot(df, view_mode)
+    wellness_fig = build_wellness_plot(df, view_mode)
+    speed_fig = build_speed_tempo_plot(df, view_mode)
+
+    # ------------------------
+    # TODAY’S DATE (REAL)
+    # ------------------------
+    today = dt.date.today()
+    today_date_str = today.strftime("%d %b %Y")
+
+    # ------------------------
+    # SESSIONS LOGGED THIS WEEK
+    # Based on Athlete_Notes column only
+    # ------------------------
+    if "Athlete_Notes" in df.columns:
+        df["Athlete_Notes"] = df["Athlete_Notes"].astype(str).str.strip()
+        df_sessions = df[df["Athlete_Notes"] != ""].copy()  # <--- FIXED
+    else:
+        df_sessions = df.copy()
+
+    if df_sessions.empty:
+        weekly_count_str = "0 sessions"
+    else:
+        df_sessions.loc[:, "Date"] = pd.to_datetime(df_sessions["Date"], errors="coerce").dt.date
+
+        # ISO weekday: Monday=0 ... Sunday=6
+        # Using Saturday (5) as week anchor
+        dow = today.weekday()
+        days_since_sat = (dow - 5) % 7
+        week_start = today - dt.timedelta(days=days_since_sat)
+        week_end = week_start + dt.timedelta(days=6)
+
+        weekly_count = df_sessions[
+            (df_sessions["Date"] >= week_start) &
+            (df_sessions["Date"] <= week_end)
+        ].shape[0]
+
+        weekly_count_str = f"{weekly_count} sessions"
+
+    # ------------------------
+    # AVG FATIGUE / MOOD
+    # ------------------------
+    fatigue = pd.to_numeric(df.get("Fatigue_1_5"), errors="coerce")
+    mood = pd.to_numeric(df.get("Mood_1_5"), errors="coerce")
+
+    if fatigue.dropna().empty or mood.dropna().empty:
+        avg_fm_str = "—"
+    else:
+        avg_fm = (fatigue.mean() + mood.mean()) / 2
+        avg_fm_str = f"{avg_fm:.1f} / 5"
+
+    # ------------------------
+    # READINESS INDEX (simple)
+    # ------------------------
+    try:
+        load_vals = pd.to_numeric(df.get("Load"), errors="coerce").dropna()
+        if load_vals.empty:
+            readiness_index_str = "—"
+        else:
+            z = (load_vals - load_vals.mean()) / (load_vals.std() or 1)
+            readiness = 5 - z.clip(-2, 2)
+            readiness_index_str = f"{readiness.iloc[-1]:.1f}"
+    except Exception:
+        readiness_index_str = "—"
+
+    # ------------------------
+    # RETURN EVERYTHING
+    # ------------------------
+    return (
+        today_date_str,
+        weekly_count_str,
+        avg_fm_str,
+        readiness_index_str,
+        load_fig,
+        wellness_fig,
+        speed_fig,
+    )
+
+
+# --- Save & AI & Email ---
+@app.callback(
+    [
+        Output("ai-suggestion-1", "children"),
+        Output("ai-suggestion-2", "children"),
+        Output("save-status", "children"),
+    ],
+    Input("btn-generate-ai", "n_clicks"),
+    [
+        State("athlete-dropdown", "value"),       # athlete_name
+        State("selected-date-store", "data"),     # selected_date
+        State("ai-mode-1", "value"),              # ai_mode_1
+        State("ai-mode-2", "value"),              # ai_mode_2
+        State("athlete-notes", "value"),          # notes
+        State("sets-reps-load", "value"),         # sets_reps_load
+        State("track-reps-times", "value"),       # track_reps_times
+        State("slider-session-rpe", "value"),     # rpe
+        State("slider-session", "value"),         # session
+        State("slider-fatigue", "value"),         # fatigue
+        State("slider-mood", "value"),            # mood
+    ],
+    prevent_initial_call=True,
+)
+def save_and_ai(
+    n_clicks,
+    athlete_name,
+    selected_date,
+    ai_mode_1,
+    ai_mode_2,
+    notes,
+    sets_reps_load,
+    track_reps_times,
+    rpe,
+    session,
+    fatigue,
+    mood,
+):
+
+    if not n_clicks:
+        raise PreventUpdate
+
+    if not selected_date:
+        return None, None, "⚠️ Please select a date from the calendar first."
+
+    # NIL defaults
+    notes = notes or "nil"
+    sets_reps_load = sets_reps_load or "nil"
+    track_reps_times = track_reps_times or "nil"
+
+    # Load sheet
+    df = load_tab(athlete_name)
+    df["Date"] = pd.to_datetime(df["Date"]).dt.date
+    selected_date_dt = pd.to_datetime(selected_date).date()
+
+    row_matches = df.index[df["Date"] == selected_date_dt].tolist()
+    if not row_matches:
+        return None, None, "⚠️ No session entry exists for this date."
+
+    row_idx = row_matches[0]
+
+    # Generate AI suggestions (unified engine)
+    ai1, ai2 = make_ai_suggestions(
+        athlete_name,
+        selected_date_dt,
+        rpe,
+        session,
+        fatigue,
+        mood,
+        notes,
+        sets_reps_load,
+        track_reps_times,
+        ai_mode_1,
+        ai_mode_2,
+    )
+
+    # Write to sheet
+    payload = {
+        "RPE_Post_Session": rpe,
+        "Session_1_5": session,
+        "Fatigue_1_5": fatigue,
+        "Mood_1_5": mood,
+        "Athlete_Notes": notes,
+        "Sets_Reps_Load": sets_reps_load,
+        "Track_Reps_Times": track_reps_times,
+        "AI_Suggestion_1": ai1,
+        "AI_Suggestion_2": ai2,
+        "Last_Updated": dt.datetime.now().isoformat(timespec="seconds"),
+    }
+
+    write_row(athlete_name, row_idx, payload)
+
+    # Send email
+    focus = df.loc[row_idx, "Focus"] if "Focus" in df.columns else "unspecified"
+    send_email_payload({
+        "sheet_name": athlete_name,
+        "row": row_idx + 1,
+        "athlete": athlete_name,
+        "focus": focus,
+        "date": str(selected_date_dt),
+        "session_rpe": rpe,
+        "session": session,
+        "fatigue": fatigue,
+        "mood": mood,
+        "notes": notes,
+        "sets_reps_load": sets_reps_load,
+        "track_reps_times": track_reps_times,
+        "ai_suggestion1": ai1,
+        "ai_suggestion2": ai2,
+        "Athlete_email": safe(df, row_idx, "Athlete_email"),
+    })
+
+    # Display – styled AI cards
+    ai1_div = html.Div(
+        html.Div([
+            html.Div("💡 AI Suggestion 1", className="ai-title"),
+            html.P(ai1),
+        ], className="ai-card ai-card-green")
+    )
+
+    ai2_div = html.Div(
+        html.Div([
+            html.Div("💡 AI Suggestion 2", className="ai-title"),
+            html.P(ai2),
+        ], className="ai-card ai-card-blue")
+    )
+
+    return ai1_div, ai2_div, "✅ Saved, AI suggestions generated & email sent to Coach."
+
+
+# ============================================================
+#  Select calendar day → open session input panel
+# ============================================================
+@app.callback(
+    Output("session-input-container", "style"),
+    Output("selected-date-store", "data"),
+    Output("selected-date-header", "children"),
+    Input({"type": "calendar-day", "date": ALL}, "n_clicks"),
+    State("athlete-dropdown", "value"),
+    prevent_initial_call=True,
+)
+def on_day_click(n_clicks_list, athlete_name):
+
+    # No clicks → stop
+    if not n_clicks_list or all(n is None or n == 0 for n in n_clicks_list):
+        raise PreventUpdate
+
+    ctx = callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+
+    # Extract clicked date
+    triggered_id = json.loads(ctx.triggered[0]["prop_id"].split(".")[0])
+    clicked_date = triggered_id["date"]
+    clicked_date_dt = pd.to_datetime(clicked_date).date()
+
+    # Lookup workout + RPE from selected athlete sheet
+    df = load_tab(athlete_name)
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
+
+    workout_txt = ""
+    rpe_txt = ""
+
+    matches = df.index[df["Date"] == clicked_date_dt].tolist()
+    if matches:
+        row = df.loc[matches[0]]
+
+        workout = str(row.get("Workout", "")).strip()
+        rpe = row.get("sRPE", "")
+
+        if workout:
+            workout_txt = f" / Workout: {workout}"
+        if pd.notna(rpe) and str(rpe).strip():
+            rpe_txt = f" / RPE: {rpe}"
+
+    # Final header
+    header = f"Selected Date: {clicked_date}{workout_txt}{rpe_txt}"
+
+    return (
+        {"display": "block"},   # show panel
+        clicked_date,           # store date
+        header,                 # header text
+    )
+
+
+@app.callback(
+    Output("session-input-container", "style", allow_duplicate=True),
+    Output("selected-date-store", "data", allow_duplicate=True),
+    Output("selected-date-header", "children", allow_duplicate=True),
+    Input("close-session-button", "n_clicks"),
+    prevent_initial_call=True,
+)
+def close_session_panel(n_clicks):
+    return {"display": "none"}, None, ""
+
+
+# ============================================================
+#  Run
+# ============================================================
+if __name__ == "__main__":
+    app.run(debug=True)
