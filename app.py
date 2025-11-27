@@ -845,13 +845,13 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
         fig.add_trace(go.Scatter(
             x=x, y=speed.rolling(7, min_periods=1).mean(),
             name="Speed 7d", mode="lines",
-            line=dict(color=TEAL, width=2, dash="dash")
+            line=dict(color=TEAL, width=2, dash="dashdot")
         ))
 
         fig.add_trace(go.Scatter(
             x=x, y=speed.rolling(28, min_periods=1).mean(),
             name="Speed 28d", mode="lines",
-            line=dict(color=PURPLE, width=2, dash="dot")
+            line=dict(color=PURPLE, width=2, dash="solid")
         ))
 
         fig.add_trace(go.Scatter(
@@ -894,13 +894,13 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
     fig.add_trace(go.Scatter(
         x=x, y=g["Speed"].rolling(1).mean(),
         name="Speed 7d", mode="lines",
-        line=dict(color=TEAL, width=2, dash="dash")
+        line=dict(color=TEAL, width=2, dash="dashdot")
     ))
 
     fig.add_trace(go.Scatter(
         x=x, y=g["Speed"].rolling(4).mean(),
         name="Speed 28d", mode="lines",
-        line=dict(color=PURPLE, width=2, dash="dot")
+        line=dict(color=PURPLE, width=2, dash="solid")
     ))
 
     fig.add_trace(go.Scatter(
