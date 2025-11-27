@@ -1,0 +1,36 @@
+.day-col {
+    width: 48px;
+    height: 160px;
+    border-radius: 12px;
+    margin: 4px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    font-size: 11px;
+    color: white;
+    font-weight: 600;
+    word-break: break-word;
+}
+
+.week-row {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-evenly;
+    width: 100%;
+}
+
+/* Mobile fix */
+@media only screen and (max-width: 600px) {
+    .day-col {
+        width: 40px;
+        height: 140px;
+        font-size: 10px;
+        padding: 2px;
+    }
+    .week-row {
+        gap: 2px;
+    }
+}
