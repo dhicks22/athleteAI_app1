@@ -941,6 +941,8 @@ server = app.server
 app.title = "Adaptive Coaching Intelligence"
 app.config.suppress_callback_exceptions = True
 
+app._favicon = "favicon.png"
+
 
 # --------------- UI Components ---------------
 
