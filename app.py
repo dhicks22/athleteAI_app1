@@ -947,12 +947,12 @@ app = Dash(
 )
 
 server = app.server
-
+app._favicon = "favicon.png"
 # ----------------------------------------------------
 # FAVICON + iPHONE ICON SUPPORT
 # ----------------------------------------------------
 # Browser tab icon
-app._favicon = "favicon.png"
+
 
 
 # --------------- UI Components ---------------
