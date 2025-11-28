@@ -1,69 +1,65 @@
 /* ============================================================
-   Your Existing Styles (unchanged)
+   SPLASH SCREEN — PURE CSS AUTO-HIDE (NO CALLBACK REQUIRED)
    ============================================================ */
-.day-col {
-    width: 48px;
-    height: 160px;
-    border-radius: 12px;
-    margin: 4px;
-    padding: 4px;
+
+#splash-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: white;
+    
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    text-align: center;
-    font-size: 11px;
-    color: white;
-    font-weight: 600;
-    word-break: break-word;
+
+    z-index: 9999;
+
+    /* Fadeout will hide it automatically */
+    animation: splashFade 1.2s ease-in-out forwards;
+    animation-delay: 0.8s;  /* how long it stays visible */
 }
 
-.week-row {
-    display: flex;
-    flex-direction: row;
-    justify-content: space-evenly;
-    width: 100%;
+@keyframes splashFade {
+    0%   { opacity: 1; }
+    70%  { opacity: 1; }
+    100% { opacity: 0; visibility: hidden; }
 }
 
-@media only screen and (max-width: 600px) {
-    .day-col {
-        width: 40px;
-        height: 140px;
-        font-size: 10px;
-        padding: 2px;
-    }
-    .week-row {
-        gap: 2px;
-    }
+/* Splash elements */
+.splash-logo {
+    width: 110px;
+    height: auto;
+    margin-bottom: 20px;
+}
+
+.splash-title {
+    font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
+    font-size: 28px;
+    margin: 0;
+}
+
+.splash-subtitle {
+    font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
+    margin: 5px 0 20px 0;
+    font-size: 16px;
+    opacity: 0.8;
 }
 
 
-/* ============================================================
-   NEW — Impact Font for SPLASH + LOGIN ONLY
-   ============================================================ */
-
-#splash-screen,
-#splash-title,
-#splash-subtitle,
-#wave-loader,
-.login-card,
-#login-passcode,
-#login-button,
-#login-error {
-    font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif !important;
+/* Spiral loader */
+.spinner {
+    width: 70px;
+    height: 70px;
+    border: 6px solid #e0e0e0;
+    border-top: 6px solid #2196F3;
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
 }
 
-/* Make all text elements inside splash screen Impact */
-#splash-screen *,
-#splash-screen div {
-    font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif !important;
-}
-
-/* Make the login card title + all children Impact */
-.login-card *,
-.login-card h4,
-.login-card label,
-.login-card input,
-.login-card button {
-    font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif !important;
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }

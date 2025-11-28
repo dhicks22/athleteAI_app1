@@ -24,24 +24,32 @@ EMAIL_WEBHOOK_URL = os.getenv("EMAIL_WEBHOOK_URL")
 APP_PASSCODE = os.getenv("APP_PASSCODE")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-
+print("Loaded GSHEET_ID:", GSHEET_ID)
+print("APP_PASSCODE set?:", bool(APP_PASSCODE))
+print("EMAIL_WEBHOOK_URL set?:", bool(EMAIL_WEBHOOK_URL))
+print("OPENAI_API_KEY set?:", bool(OPENAI_API_KEY))
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 service_json = os.getenv("GS_SERVICE_JSON")
+sh = None  # default to None so app can still run without Sheets
 
 if not service_json:
-    raise ValueError("❌ GS_SERVICE_JSON environment variable is missing.")
+    print("⚠️ WARNING: GS_SERVICE_JSON is missing. App will run but Sheets features will be disabled.")
+else:
+    try:
+        service_account_info = json.loads(service_json)
+        creds = Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
+        gc = gspread.authorize(creds)
+        if not GSHEET_ID:
+            print("⚠️ WARNING: GSHEET_ID is missing. Cannot open spreadsheet.")
+        else:
+            sh = gc.open_by_key(GSHEET_ID)
+            print("✅ Google Sheet opened successfully.")
+    except Exception as e:
+        print(f"❌ ERROR initialising Google Sheets: {e}")
+        sh = None
 
-try:
-    service_account_info = json.loads(service_json)
-except Exception as e:
-    raise ValueError(f"❌ Invalid GS_SERVICE_JSON JSON: {e}")
-
-creds = Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
-
-gc = gspread.authorize(creds)
-sh = gc.open_by_key(os.getenv("GSHEET_ID"))
 
 
 
@@ -62,11 +70,16 @@ from dash.exceptions import PreventUpdate
 
 def list_tabs():
     """Return worksheet titles (athlete sheets)."""
+    if sh is None:
+        return []
     return [ws.title for ws in sh.worksheets()]
 
 
 def load_tab(tab_name: str) -> pd.DataFrame:
     """Load worksheet to DataFrame with parsed Date."""
+    if sh is None:
+        return pd.DataFrame()
+
     try:
         ws = sh.worksheet(tab_name)
     except gspread.WorksheetNotFound:
@@ -77,6 +90,7 @@ def load_tab(tab_name: str) -> pd.DataFrame:
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
     return df
+
 
 
 def write_row(tab_name: str, row_idx_0: int, payload: dict):
@@ -1042,6 +1056,19 @@ def build_main_layout():
     tabs = list_tabs()
     default_tab = tabs[0] if tabs else None
 
+    # If no tabs because sh is None or sheet empty, you can still render UI:
+    # the dropdown will just say "No sheets found".
+    dropdown_options = [{"label": t, "value": t} for t in tabs] if tabs else []
+    ...
+    dcc.Dropdown(
+        id="athlete-dropdown",
+        options=dropdown_options,
+        value=default_tab,
+        clearable=False,
+        placeholder="No sheets available" if not tabs else None,
+    ),
+
+
     return dbc.Container(
         [
             app_header(center=False),
@@ -1338,22 +1365,21 @@ app.layout = html.Div(
 
         html.Div(
             id="splash-screen",
-            style={"display": "flex"},
             children=[
-                html.Img(id="splash-logo", src="/assets/app_icon.png"),
-                html.Div("Adaptive Coaching Intelligence", id="splash-title"),
-                html.Div("AI-aligned athlete & coaching feedback", id="splash-subtitle"),
-                html.Div("Loading...", id="wave-loader"),
-            ],
+                html.Img(src="/assets/app_icon.png", className="splash-logo"),
+                html.H2("Adaptive Coaching Intelligence", className="splash-title"),
+                html.P("AI-aligned athlete & coaching feedback", className="splash-subtitle"),
+                html.Div(className="spinner")  # spiral loader
+            ]
         ),
 
         html.Div(
             id="page-content",
-            style={"display": "none"},
+            style={"display": "block"},
             children=build_login_layout(),
         ),
 
-        dcc.Interval(id="splash-timer", interval=700, n_intervals=0, max_intervals=1),
+
 
     ]
 )
@@ -1361,22 +1387,6 @@ app.layout = html.Div(
 # ============================================================
 #  Callbacks
 # ============================================================
-
-
-
-
-# --- Splash visibility ---
-@app.callback(
-    Output("splash-screen", "style"),
-    Output("page-content", "style"),
-    Input("splash-timer", "n_intervals"),
-    prevent_initial_call=True,  # <<< important
-)
-def toggle_splash(n):
-    if n > 0:
-        return {"display": "none"}, {"display": "block"}
-    raise PreventUpdate
-
 
 
 
