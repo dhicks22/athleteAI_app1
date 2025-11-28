@@ -394,8 +394,11 @@ def build_calendar_cards(df: pd.DataFrame):
         [
             dbc.Col(
                 html.Strong(day, className="text-center"),
-                width=1,
-                className="p-1 text-center",
+                xs=12,  # full width on iPhone
+                sm=6,  # 2 per row small screens
+                md=4,  # 3 per row medium screens
+                lg=1,  # 7 across on desktop
+                className="p-1",
             )
             for day in weekdays
         ],
@@ -458,7 +461,6 @@ def build_calendar_cards(df: pd.DataFrame):
                                     className="small text-truncate",
                                     style={"fontSize": "0.65rem"},
                                 ),
-
                             ]
                         ),
                         style={
@@ -475,7 +477,10 @@ def build_calendar_cards(df: pd.DataFrame):
                     title=tooltip_text,
                     n_clicks=0,
                 ),
-                width=1,
+                xs=6,
+                sm=4,
+                md=3,
+                lg=1,
                 className="p-1",
             )
         )
@@ -1326,55 +1331,59 @@ def build_main_layout():
 
 
 # Root layout
-app.layout = html.Div([
-    dcc.Location(id="url", refresh=False),
-    dcc.Store(id="auth-store", storage_type="session"),
+app.layout = html.Div(
+    [
+        dcc.Location(id="url", refresh=False),
+        dcc.Store(id="auth-store", storage_type="session"),
 
-    # Splash FIRST so iPhone renders it centered
-    html.Div(
-        id="splash-screen",
-        children=[
-            html.Img(id="splash-logo", src="/assets/app_icon.png"),
-            html.Div("Adaptive Coaching Intelligence", id="splash-text"),
-            html.Div("Loading...", id="wave-loader")
-        ]
-    ),
+        # 🌟 SPLASH SCREEN (animated)
+        html.Div(
+            id="splash-screen",
+            children=[
+                html.Img(id="splash-logo", src="/assets/app_icon.png"),
 
-    # Main App Content Hidden at Start
-    html.Div(
-        id="page-content",
-        children=build_login_layout(),
-        style={"display": "none"}
-    ),
+                html.Div("Adaptive Coaching Intelligence", id="splash-title"),
+                html.Div("AI-aligned athlete & coaching feedback", id="splash-subtitle"),
 
-    dcc.Interval(id="splash-timer", interval=3200, n_intervals=0)
-])
+                html.Div("Loading...", id="wave-loader"),
+            ]
+        )
+
+        ,
+
+        # 🌟 Main content (hidden at first)
+        html.Div(
+            id="page-content",
+            children=build_login_layout(),
+            style={"display": "none"}
+        ),
+
+        # Timer to hide splash (3.2 seconds)
+        dcc.Interval(id="splash-timer", interval=3200, n_intervals=0)
+    ]
+)
 
 
 
-# ============================================================
+    # ============================================================
 #  Callbacks
 # ============================================================
 
 # --- Splash visibility ---
 @app.callback(
     Output("splash-screen", "style"),
+    Output("page-content", "style"),
     Input("splash-timer", "n_intervals"),
 )
-def hide_splash(n):
+def toggle_splash(n):
     if n > 0:
-        return {"display": "none"}
-    return {"display": "block"}
+        # hide splash, show real app
+        return {"display": "none"}, {"display": "block"}
+    else:
+        # show splash, hide real app
+        return {"display": "flex"}, {"display": "none"}
 
 
-@app.callback(
-    Output("page-content", "style"),
-    Input("splash-timer", "n_intervals")
-)
-def show_page_after_splash(n):
-    if n > 0:
-        return {"display": "block"}
-    return {"display": "none"}
 
 
 # --- Render page (login vs main) ---

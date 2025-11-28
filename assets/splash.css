@@ -1,27 +1,29 @@
-/* --------------------------------------------
-   FULL-PAGE SPLASH WRAPPER
---------------------------------------------- */
+/* --------------------------------------------------
+   FULL-PAGE SPLASH WRAPPER (iPhone safe)
+-------------------------------------------------- */
 #splash-screen {
     position: fixed;
     top: 0;
     left: 0;
+
     width: 100vw;
     height: 100vh;
+
     background: white;
     z-index: 9999;
 
-    display: flex;
+    display: flex !important;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-
     text-align: center;
-    font-family: 'Arial', sans-serif;
+
+    -webkit-transform: translateZ(0); /* iPhone rendering fix */
 }
 
-/* --------------------------------------------
-   LOGO FADE + SWIRL
---------------------------------------------- */
+/* --------------------------------------------------
+   LOGO SWIRL + POP-IN
+-------------------------------------------------- */
 #splash-logo {
     height: 120px;
     margin-bottom: 18px;
@@ -29,47 +31,56 @@
 }
 
 @keyframes logoSwirl {
-    0%   { opacity: 0; transform: scale(0.8) rotate(-8deg); }
-    50%  { opacity: 1; transform: scale(1.07) rotate(3deg); }
-    100% { opacity: 1; transform: scale(1) rotate(0deg); }
+    0%   { opacity: 0; transform: rotate(-10deg) scale(0.78); }
+    50%  { opacity: 1; transform: rotate(4deg) scale(1.10); }
+    100% { opacity: 1; transform: rotate(0) scale(1.00); }
 }
 
-/* --------------------------------------------
-   APP TITLE TEXT
---------------------------------------------- */
-#splash-text {
-    font-size: 24px;
-    font-weight: bold;
+/* --------------------------------------------------
+   TITLE (start small → grow to normal)
+-------------------------------------------------- */
+#splash-title {
+    font-size: 22px;
+    font-weight: 600;
     color: #1e88e5;
-    letter-spacing: 1px;
-    animation: titleFade 2.0s ease-in-out;
-    margin-bottom: 12px;
+    margin-bottom: 6px;
+    animation: titleGrow 1.3s ease-out forwards;
 }
 
-@keyframes titleFade {
-    0%   { opacity: 0; transform: translateY(10px); }
-    100% { opacity: 1; transform: translateY(0); }
+@keyframes titleGrow {
+    0%   { opacity: 0; transform: scale(0.82); }
+    60%  { opacity: 1; transform: scale(1.10); }
+    100% { opacity: 1; transform: scale(1.00); }
 }
 
-/* --------------------------------------------
-   WAVY LOADING TEXT
---------------------------------------------- */
-#wave-loader {
-    font-size: 20px;
+/* --------------------------------------------------
+   SUBTITLE (soft grow & fade)
+-------------------------------------------------- */
+#splash-subtitle {
+    font-size: 14px;
     color: #555;
-    animation: wave 1.4s infinite ease-in-out;
+    margin-bottom: 18px;
+    animation: subtitleGrow 1.4s ease-out forwards;
 }
 
-@keyframes wave {
-    0%   { letter-spacing: 0px; opacity: 0.7; }
-    50%  { letter-spacing: 3px; opacity: 1; }
-    100% { letter-spacing: 0px; opacity: 0.7; }
+@keyframes subtitleGrow {
+    0%   { opacity: 0; transform: scale(0.86); }
+    70%  { opacity: 1; transform: scale(1.06); }
+    100% { opacity: 1; transform: scale(1.00); }
 }
 
-/* --------------------------------------------
-   Generic fade-in used by other elements
---------------------------------------------- */
-@keyframes fadein {
-    from { opacity: 0; }
-    to   { opacity: 1; }
+/* --------------------------------------------------
+   WAVY "Loading..." TEXT
+-------------------------------------------------- */
+#wave-loader {
+    font-size: 18px;
+    color: #444;
+
+    animation: wavePulse 1.5s infinite ease-in-out;
+}
+
+@keyframes wavePulse {
+    0%   { letter-spacing: 0px; opacity: 0.65; }
+    50%  { letter-spacing: 4px; opacity: 1; }
+    100% { letter-spacing: 0px; opacity: 0.65; }
 }
