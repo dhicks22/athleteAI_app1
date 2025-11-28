@@ -930,17 +930,23 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
 #  Dash app
 # ============================================================
 
+from dash import Dash, html, dcc
+import dash_bootstrap_components as dbc
+
 app = Dash(
     __name__,
     external_stylesheets=[dbc.themes.BOOTSTRAP],
     suppress_callback_exceptions=True,
+    title="Adaptive Coaching Intelligence",
+    update_title=None,
 )
 
 server = app.server
 
-app.title = "Adaptive Coaching Intelligence"
-app.config.suppress_callback_exceptions = True
-
+# ----------------------------------------------------
+# FAVICON + iPHONE ICON SUPPORT
+# ----------------------------------------------------
+# Browser tab icon
 app._favicon = "favicon.png"
 
 
@@ -1330,25 +1336,31 @@ app.layout = html.Div(
             id="splash-screen",
             children=[
                 html.Div([
+                    # Spiral animation (NEW)
+                    html.Div(className="spiral-loader"),
+
+                    # App logo (smaller now; matches CSS fade-in)
                     html.Img(
-                        src="/assets/app_icon.png",
-                        style={"height": "120px", "marginBottom": "20px"}
+                        id="splash-logo",
+                        src="/assets/app_icon.png"
                     ),
-                    html.H2("Adaptive Coaching Intelligence", style={"color": "#333"}),
-                    html.P("Loading...", style={"fontSize": "18px", "color": "#666"}),
+
+                    # App name
+                    html.Div("Adaptive Coaching Intelligence", id="splash-text"),
                 ],
-                style={"textAlign": "center", "paddingTop": "120px"})
+                    style={"textAlign": "center", "paddingTop": "140px"})
             ]
         ),
 
         # Real content loads after splash
         html.Div(
             id="page-content",
-            children=build_login_layout(),   # initial layout so login-error etc exist
+            children=build_login_layout(),
             style={"display": "none"}
         ),
 
         dcc.Interval(id="splash-timer", interval=3200, n_intervals=0)
+
     ]
 )
 
