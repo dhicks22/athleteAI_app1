@@ -379,7 +379,7 @@ def send_email_payload(payload: dict):
 
 
 # ============================================================
-#  Plot builders
+#  Plot builders & Layout helpers
 # ============================================================
 
 def _legend_right_layout(base: dict | None = None) -> dict:
@@ -400,6 +400,137 @@ def _legend_right_layout(base: dict | None = None) -> dict:
 def _week_agg_date(d):
     """Convert dates to week-buckets starting Sat -> Fri."""
     return d.dt.to_period("W-SAT").apply(lambda r: r.start_time)
+
+
+# ---------- Apple-style radial dials ----------
+# CSS expects:
+# .dial-wrapper, .dial-circle, .dial-text
+# with CSS variables:
+#   --dial-progress: 0–100
+#   --dial-color: ring colour
+
+
+def apple_sessions_ring(progress: int):
+    """
+    Radial dial for Weekly Training Exposure:
+    - progress: # of sessions logged in current Sat–Fri week (0–7).
+    - Colour map: red (low) → orange → green → blue (full week).
+    """
+    p = max(0, min(int(progress), 7))
+    percent = (p / 7) * 100
+
+    if p <= 2:
+        color = "#E53935"   # red - underdone
+    elif p <= 4:
+        color = "#FB8C00"   # orange - moderate
+    elif p <= 6:
+        color = "#4CAF50"   # green - strong
+    else:
+        color = "#1E88E5"   # blue - full week, elite
+
+    return html.Div(
+        className="dial-wrapper",
+        children=[
+            html.Div(
+                className="dial-circle",
+                style={
+                    "--dial-progress": f"{percent}",
+                    "--dial-color": color,
+                },
+                children=[
+                    html.Div(f"{p}/7", className="dial-text"),
+                ],
+            )
+        ],
+    )
+
+
+def apple_neuromuscular_ring(avg_score: float | None):
+    """
+    Radial dial for Neuromuscular State:
+    - avg_score: composite 1–5 from Fatigue & Mood.
+    - Colour map:
+        1–2   → red   (compromised)
+        2–3   → orange (caution)
+        3–4   → green (good)
+        4–5   → blue  (prime)
+    """
+    if avg_score is None or np.isnan(avg_score):
+        percent = 0
+        color = "#CFD8DC"
+        text = "—"
+    else:
+        v = max(1.0, min(float(avg_score), 5.0))
+        percent = (v / 5.0) * 100
+        if v < 2.0:
+            color = "#E53935"
+        elif v < 3.0:
+            color = "#FB8C00"
+        elif v < 4.0:
+            color = "#4CAF50"
+        else:
+            color = "#1E88E5"
+        text = f"{v:.1f}"
+
+    return html.Div(
+        className="dial-wrapper",
+        children=[
+            html.Div(
+                className="dial-circle",
+                style={
+                    "--dial-progress": f"{percent}",
+                    "--dial-color": color,
+                },
+                children=[
+                    html.Div(text, className="dial-text"),
+                ],
+            )
+        ],
+    )
+
+
+def apple_readiness_ring(readiness_score: float | None):
+    """
+    Radial dial for Training Readiness Index:
+    - readiness_score: 1–5 style value (higher = more ready).
+    - Colour map:
+        <2   → red
+        2–3  → orange
+        3–4  → green
+        >4   → blue
+    """
+    if readiness_score is None or np.isnan(readiness_score):
+        percent = 0
+        color = "#CFD8DC"
+        text = "—"
+    else:
+        v = max(1.0, min(float(readiness_score), 5.0))
+        percent = (v / 5.0) * 100
+        if v < 2.0:
+            color = "#E53935"
+        elif v < 3.0:
+            color = "#FB8C00"
+        elif v < 4.0:
+            color = "#4CAF50"
+        else:
+            color = "#1E88E5"
+        text = f"{v:.1f}"
+
+    return html.Div(
+        className="dial-wrapper",
+        children=[
+            html.Div(
+                className="dial-circle",
+                style={
+                    "--dial-progress": f"{percent}",
+                    "--dial-color": color,
+                },
+                children=[
+                    html.Div(text, className="dial-text"),
+                ],
+            )
+        ],
+    )
 
 
 # --------- NEW: Horizontal strip calendar with RPE chips ---------
@@ -1073,10 +1204,10 @@ def build_main_layout():
                             dcc.RadioItems(
                                 id="view-mode",
                                 options=[
-                                    {"label": "Daily", "value": "daily"},
                                     {"label": "Weekly", "value": "weekly"},
+                                    {"label": "Daily", "value": "daily"},
                                 ],
-                                value="daily",
+                                value="weekly",  # <-- default is now WEEKLY
                                 inline=True,
                             ),
                             dbc.Button(
@@ -1097,11 +1228,12 @@ def build_main_layout():
             # Summary cards
             dbc.Row(
                 [
+                    # Current Date
                     dbc.Col(
                         dbc.Card(
                             dbc.CardBody(
                                 [
-                                    html.Div("Today's Date", className="text-muted small"),
+                                    html.Div("Current Date", className="text-muted small"),
                                     html.H4(id="today-date", className="mb-0"),
                                 ]
                             ),
@@ -1109,36 +1241,39 @@ def build_main_layout():
                         ),
                         lg=3, md=6, width=12,
                     ),
+                    # Weekly Training Exposure Dial
                     dbc.Col(
                         dbc.Card(
                             dbc.CardBody(
                                 [
-                                    html.Div("Sessions Logged This Week", className="text-muted small"),
-                                    html.H4(id="weekly-count", className="mb-0 text-primary"),
+                                    html.Div("Weekly Training Exposure", className="text-muted small"),
+                                    html.Div(id="weekly-dial-container"),
                                 ]
                             ),
                             className="mb-3 shadow-sm",
                         ),
                         lg=3, md=6, width=12,
                     ),
+                    # Neuromuscular State Dial
                     dbc.Col(
                         dbc.Card(
                             dbc.CardBody(
                                 [
-                                    html.Div("Avg Fatigue / Mood", className="text-muted small"),
-                                    html.H4(id="avg-fatigue-mood", className="mb-0 text-success"),
+                                    html.Div("Neuromuscular State (Fatigue / Mood)", className="text-muted small"),
+                                    html.Div(id="neuromuscular-dial-container"),
                                 ]
                             ),
                             className="mb-3 shadow-sm",
                         ),
                         lg=3, md=6, width=12,
                     ),
+                    # Training Readiness Index Dial
                     dbc.Col(
                         dbc.Card(
                             dbc.CardBody(
                                 [
-                                    html.Div("Readiness Index", className="text-muted small"),
-                                    html.H4(id="readiness-index", className="mb-0 text-info"),
+                                    html.Div("Training Readiness Index", className="text-muted small"),
+                                    html.Div(id="readiness-dial-container"),
                                 ]
                             ),
                             className="mb-3 shadow-sm",
@@ -1149,7 +1284,7 @@ def build_main_layout():
                 className="g-3",
             ),
 
-            html.H4("4-Week Training Program", className="mt-4"),
+            html.H4("Training Program", className="mt-4"),
 
             # Navigation controls + calendar strip
             html.Div(
@@ -1367,7 +1502,7 @@ def build_main_layout():
     )
 
 
-# Root layout
+# Root layout with splash (CSS will auto-hide it)
 app.layout = html.Div(
     [
         dcc.Location(id="url", refresh=False),
@@ -1477,9 +1612,9 @@ def update_calendar(athlete_tab, window_start, selected_date):
 # --- Dashboard metrics & plots ---
 @app.callback(
     Output("today-date", "children"),
-    Output("weekly-count", "children"),
-    Output("avg-fatigue-mood", "children"),
-    Output("readiness-index", "children"),
+    Output("weekly-dial-container", "children"),
+    Output("neuromuscular-dial-container", "children"),
+    Output("readiness-dial-container", "children"),
     Output("load-plot", "figure"),
     Output("wellness-plot", "figure"),
     Output("speedtempo-plot", "figure"),
@@ -1491,11 +1626,17 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     """
     Dashboard updater:
     - today’s real date
-    - sessions this week via Athlete_Notes
+    - weekly sessions via Athlete_Notes (0–7 dial)
+    - neuromuscular state dial
+    - readiness dial
     - load, wellness, speed/tempo plots
     """
 
     df = load_tab(athlete_id)
+
+    # Today string (always real date)
+    today = dt.date.today()
+    today_date_str = today.strftime("%d %b %Y")
 
     # ------------------------
     # EMPTY DATAFRAME HANDLING
@@ -1503,7 +1644,15 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     if df is None or df.empty:
         empty = go.Figure()
         empty.update_layout(title="No Data")
-        return "—", "0 sessions", "—", "—", empty, empty, empty
+        return (
+            today_date_str,
+            apple_sessions_ring(0),
+            apple_neuromuscular_ring(None),
+            apple_readiness_ring(None),
+            empty,
+            empty,
+            empty,
+        )
 
     # ------------------------
     # BUILD PLOTS
@@ -1513,13 +1662,7 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     speed_fig = build_speed_tempo_plot(df, view_mode)
 
     # ------------------------
-    # TODAY’S DATE (REAL)
-    # ------------------------
-    today = dt.date.today()
-    today_date_str = today.strftime("%d %b %Y")
-
-    # ------------------------
-    # SESSIONS LOGGED THIS WEEK
+    # WEEKLY SESSIONS (for dial)
     # Based on Athlete_Notes column only
     # ------------------------
     if "Athlete_Notes" in df.columns:
@@ -1529,7 +1672,7 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
         df_sessions = df.copy()
 
     if df_sessions.empty:
-        weekly_count_str = "0 sessions"
+        weekly_count = 0
     else:
         df_sessions.loc[:, "Date"] = pd.to_datetime(df_sessions["Date"], errors="coerce").dt.date
 
@@ -1545,42 +1688,38 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
             (df_sessions["Date"] <= week_end)
         ].shape[0]
 
-        weekly_count_str = f"{weekly_count} sessions"
-
     # ------------------------
-    # AVG FATIGUE / MOOD
+    # AVG FATIGUE / MOOD  (for neuromuscular dial)
     # ------------------------
     fatigue = pd.to_numeric(df.get("Fatigue_1_5"), errors="coerce")
     mood = pd.to_numeric(df.get("Mood_1_5"), errors="coerce")
 
     if fatigue.dropna().empty or mood.dropna().empty:
-        avg_fm_str = "—"
+        avg_fm_val = None
     else:
-        avg_fm = (fatigue.mean() + mood.mean()) / 2
-        avg_fm_str = f"{avg_fm:.1f} / 5"
+        avg_fm_val = float((fatigue.mean() + mood.mean()) / 2)
 
     # ------------------------
-    # READINESS INDEX (simple)
+    # READINESS INDEX (simple) - numeric for dial
     # ------------------------
+    readiness_val = None
     try:
         load_vals = pd.to_numeric(df.get("Load"), errors="coerce").dropna()
-        if load_vals.empty:
-            readiness_index_str = "—"
-        else:
+        if not load_vals.empty:
             z = (load_vals - load_vals.mean()) / (load_vals.std() or 1)
-            readiness = 5 - z.clip(-2, 2)
-            readiness_index_str = f"{readiness.iloc[-1]:.1f}"
+            readiness_series = 5 - z.clip(-2, 2)
+            readiness_val = float(readiness_series.iloc[-1])
     except Exception:
-        readiness_index_str = "—"
+        readiness_val = None
 
     # ------------------------
     # RETURN EVERYTHING
     # ------------------------
     return (
         today_date_str,
-        weekly_count_str,
-        avg_fm_str,
-        readiness_index_str,
+        apple_sessions_ring(weekly_count),
+        apple_neuromuscular_ring(avg_fm_val),
+        apple_readiness_ring(readiness_val),
         load_fig,
         wellness_fig,
         speed_fig,
@@ -1743,15 +1882,13 @@ def on_day_click(n_clicks_list, athlete_name):
     clicked_date = triggered_id["date"]
     clicked_date_dt = pd.to_datetime(clicked_date).date()
 
-    # Lookup workout + RPE from selected athlete sheet
+    # Lookup workout, RPE, Venue from selected athlete sheet
     df = load_tab(athlete_name)
-    if not df.empty and "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
-    else:
-        df = pd.DataFrame(columns=["Date"])
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
 
     workout_txt = ""
     rpe_txt = ""
+    venue_txt = ""
 
     matches = df.index[df["Date"] == clicked_date_dt].tolist()
     if matches:
@@ -1759,14 +1896,17 @@ def on_day_click(n_clicks_list, athlete_name):
 
         workout = str(row.get("Workout", "")).strip()
         rpe = row.get("sRPE", "")
+        venue = str(row.get("Venue", "")).strip()
 
         if workout:
             workout_txt = f" / Workout: {workout}"
         if pd.notna(rpe) and str(rpe).strip():
             rpe_txt = f" / RPE: {rpe}"
+        if venue:
+            venue_txt = f" / Venue: {venue}"
 
     # Final header
-    header = f"Selected Date: {clicked_date}{workout_txt}{rpe_txt}"
+    header = f"Selected Date: {clicked_date}{workout_txt}{rpe_txt}{venue_txt}"
 
     return (
         {"display": "block"},   # show panel
