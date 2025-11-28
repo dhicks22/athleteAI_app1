@@ -1336,38 +1336,33 @@ app.layout = html.Div(
         dcc.Location(id="url", refresh=False),
         dcc.Store(id="auth-store", storage_type="session"),
 
-        # 🌟 SPLASH SCREEN (animated)
         html.Div(
             id="splash-screen",
+            style={"display": "flex"},
             children=[
                 html.Img(id="splash-logo", src="/assets/app_icon.png"),
-
                 html.Div("Adaptive Coaching Intelligence", id="splash-title"),
                 html.Div("AI-aligned athlete & coaching feedback", id="splash-subtitle"),
-
                 html.Div("Loading...", id="wave-loader"),
-            ]
-        )
-
-        ,
-
-        # 🌟 Main content (hidden at first)
-        html.Div(
-            id="page-content",
-            children=build_login_layout(),
-            style={"display": "none"}
+            ],
         ),
 
-        # Timer to hide splash (3.2 seconds)
-        dcc.Interval(id="splash-timer", interval=3200, n_intervals=0)
+        html.Div(
+            id="page-content",
+            style={"display": "none"},
+            children=build_login_layout(),
+        ),
+
+        dcc.Interval(id="splash-timer", interval=3200, n_intervals=0),
     ]
 )
 
-
-
-    # ============================================================
+# ============================================================
 #  Callbacks
 # ============================================================
+
+
+
 
 # --- Splash visibility ---
 @app.callback(
