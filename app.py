@@ -1149,7 +1149,7 @@ def build_main_layout():
                 className="g-3",
             ),
 
-            html.H4("4-Week Training Program", className="mt-4"),
+            html.H4("Training Program", className="mt-4"),
 
             # Navigation controls + calendar strip
             html.Div(
@@ -1744,14 +1744,13 @@ def on_day_click(n_clicks_list, athlete_name):
     clicked_date_dt = pd.to_datetime(clicked_date).date()
 
     # Lookup workout + RPE from selected athlete sheet
+    # Lookup workout, RPE, Venue from selected athlete sheet
     df = load_tab(athlete_name)
-    if not df.empty and "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
-    else:
-        df = pd.DataFrame(columns=["Date"])
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
 
     workout_txt = ""
     rpe_txt = ""
+    venue_txt = ""
 
     matches = df.index[df["Date"] == clicked_date_dt].tolist()
     if matches:
@@ -1759,14 +1758,17 @@ def on_day_click(n_clicks_list, athlete_name):
 
         workout = str(row.get("Workout", "")).strip()
         rpe = row.get("sRPE", "")
+        venue = str(row.get("Venue", "")).strip()
 
         if workout:
             workout_txt = f" / Workout: {workout}"
         if pd.notna(rpe) and str(rpe).strip():
             rpe_txt = f" / RPE: {rpe}"
+        if venue:
+            venue_txt = f" / Venue: {venue}"
 
     # Final header
-    header = f"Selected Date: {clicked_date}{workout_txt}{rpe_txt}"
+    header = f"Selected Date: {clicked_date}{workout_txt}{rpe_txt}{venue_txt}"
 
     return (
         {"display": "block"},   # show panel
