@@ -8,10 +8,15 @@ import pandas as pd
 import requests
 from dotenv import load_dotenv
 from google.oauth2.service_account import Credentials
-import os
-import json
-import gspread
-from google.oauth2.service_account import Credentials
+
+from dash import (
+    Dash, html, dcc, Input, Output, State, ALL,
+    callback_context, no_update
+)
+import dash_bootstrap_components as dbc
+import plotly.graph_objects as go
+from dash.exceptions import PreventUpdate
+
 # ============================================================
 #  Environment / Credentials
 # ============================================================
@@ -51,19 +56,6 @@ else:
         sh = None
 
 
-
-
-
-from dash import (
-    Dash, html, dcc, Input, Output, State, ALL,
-    callback_context, no_update
-)
-import dash_bootstrap_components as dbc
-import plotly.graph_objects as go
-from dash.exceptions import PreventUpdate
-
-
-
 # ============================================================
 #  Helpers: Sheets
 # ============================================================
@@ -77,7 +69,7 @@ def list_tabs():
 
 def load_tab(tab_name: str) -> pd.DataFrame:
     """Load worksheet to DataFrame with parsed Date."""
-    if sh is None:
+    if sh is None or not tab_name:
         return pd.DataFrame()
 
     try:
@@ -92,12 +84,14 @@ def load_tab(tab_name: str) -> pd.DataFrame:
     return df
 
 
-
 def write_row(tab_name: str, row_idx_0: int, payload: dict):
     """
     Update one row (0-based from df) with payload values.
     Only updates columns that already exist.
     """
+    if sh is None:
+        return
+
     ws = sh.worksheet(tab_name)
     sheet_vals = ws.get_all_values()
     if not sheet_vals:
@@ -388,148 +382,6 @@ def send_email_payload(payload: dict):
 #  Plot builders
 # ============================================================
 
-def build_calendar_cards(df: pd.DataFrame):
-    """
-    Return rows of calendar cards (4 weeks, Sat-start) with RPE-based colour shading
-    and clickable selection.
-    """
-    if df.empty or "Date" not in df.columns:
-        return "No data available."
-
-    today = dt.date.today()
-    # Saturday = 5
-    days_since_sat = (today.weekday() - 5) % 7
-    last_sat = today - dt.timedelta(days=days_since_sat)
-    start = last_sat - dt.timedelta(days=21)
-    dates = [start + dt.timedelta(days=i) for i in range(28)]
-
-    weekdays = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"]
-    header = dbc.Row(
-        [
-            dbc.Col(
-                html.Strong(day, className="text-center"),
-                xs=12,  # full width on iPhone
-                sm=6,  # 2 per row small screens
-                md=4,  # 3 per row medium screens
-                lg=1,  # 7 across on desktop
-                className="p-1",
-            )
-            for day in weekdays
-        ],
-        className="mb-1 justify-content-center"
-    )
-
-    cards = []
-    for d_ in dates:
-        day_df = df[df["Date"] == d_]
-        if not day_df.empty:
-            row = day_df.iloc[-1]
-            workout = str(row.get("Workout", "")).strip()
-            focus = str(row.get("Focus", "")).strip()
-            sRPE = pd.to_numeric(row.get("sRPE", np.nan), errors="coerce")
-        else:
-            workout = ""
-            focus = ""
-            sRPE = np.nan
-
-        # --- Dynamic RPE-based colour scale ---
-        if pd.isna(sRPE):
-            color = "#CFD8DC"  # grey
-            text_color = "black"
-        elif sRPE <= 2:
-            color = f"rgba(66, 133, 244, {0.5 + 0.05 * sRPE})"  # blue
-            text_color = "white"
-        elif 3 <= sRPE <= 5:
-            color = f"rgba(76, 175, 80, {0.5 + 0.1 * (sRPE - 3)})"  # green
-            text_color = "white"
-        elif 6 <= sRPE <= 7:
-            color = f"rgba(255, 152, 0, {0.7 + 0.1 * (sRPE - 6)})"  # orange
-            text_color = "white"
-        else:
-            color = f"rgba(244, 67, 54, {0.7 + 0.05 * (sRPE - 8)})"  # red (stronger)
-            text_color = "white"
-
-        tooltip_text = f"{d_.strftime('%b %d')}"
-        if not pd.isna(sRPE):
-            tooltip_text += f" | RPE: {sRPE}"
-        if workout:
-            tooltip_text += f" | {workout}"
-
-        cards.append(
-            dbc.Col(
-                html.Div(
-                    dbc.Card(
-                        dbc.CardBody(
-                            [
-                                html.Div(
-                                    d_.strftime("%b %d"),
-                                    className="fw-bold small text-center",
-                                ),
-                                html.Div(
-                                    focus,
-                                    className="small text-center",
-                                    style={"fontSize": "0.65rem", "fontWeight": "600"},
-                                ),
-                                html.Div(
-                                    workout,
-                                    className="small text-truncate",
-                                    style={"fontSize": "0.65rem"},
-                                ),
-                            ]
-                        ),
-                        style={
-                            "minHeight": "70px",
-                            "backgroundColor": color,
-                            "color": text_color,
-                            "border": "1px solid #ddd",
-                            "borderRadius": "6px",
-                            "boxShadow": "0 1px 3px rgba(0,0,0,0.1)",
-                            "cursor": "pointer",
-                        },
-                    ),
-                    id={"type": "calendar-day", "date": str(d_)},
-                    title=tooltip_text,
-                    n_clicks=0,
-                ),
-                xs=6,
-                sm=4,
-                md=3,
-                lg=1,
-                className="p-1",
-            )
-        )
-
-    rows = [
-        dbc.Row(cards[i:i + 7], className="g-1 justify-content-center")
-        for i in range(0, 28, 7)
-    ]
-
-    legend = html.Div(
-        [
-            html.Small("RPE Colour Scale:", className="fw-bold me-2"),
-            html.Span("1–2", style={
-                "background": "#4285F4", "color": "white",
-                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
-            }),
-            html.Span("3–5", style={
-                "background": "#4CAF50", "color": "white",
-                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
-            }),
-            html.Span("6–7", style={
-                "background": "#FF9800", "color": "white",
-                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
-            }),
-            html.Span("8–10", style={
-                "background": "#F44336", "color": "white",
-                "padding": "2px 8px", "borderRadius": "4px"
-            }),
-        ],
-        className="mb-3 text-center",
-    )
-
-    return [legend, header] + rows
-
-
 def _legend_right_layout(base: dict | None = None) -> dict:
     """Shared legend layout: vertical, right side."""
     base = base or {}
@@ -550,9 +402,152 @@ def _week_agg_date(d):
     return d.dt.to_period("W-SAT").apply(lambda r: r.start_time)
 
 
+# --------- NEW: Horizontal strip calendar with RPE chips ---------
+
+def build_calendar_strip(df: pd.DataFrame, window_start: dt.date | None, selected_date_str: str | None):
+    """
+    Horizontally scrollable strip of small RPE-coloured bricks (date chips).
+    - window_start: first date in strip (21-day window)
+    - selected_date_str: date string stored in selected-date-store
+    """
+    if df.empty or "Date" not in df.columns:
+        return "No data available."
+
+    today = dt.date.today()
+
+    # Default window: 10 days before today
+    if window_start is None:
+        window_start = today - dt.timedelta(days=10)
+    else:
+        # Ensure it's a date object
+        window_start = pd.to_datetime(window_start).date()
+
+    # 21-day window
+    dates = [window_start + dt.timedelta(days=i) for i in range(21)]
+
+    # For highlighting
+    selected_date = None
+    if selected_date_str:
+        try:
+            selected_date = pd.to_datetime(selected_date_str).date()
+        except Exception:
+            selected_date = None
+
+    chips = []
+    for d_ in dates:
+        day_df = df[df["Date"] == d_]
+        if not day_df.empty:
+            row = day_df.iloc[-1]
+            workout = str(row.get("Workout", "")).strip()
+            sRPE = pd.to_numeric(row.get("sRPE", np.nan), errors="coerce")
+        else:
+            workout = ""
+            sRPE = np.nan
+
+        # --- Dynamic RPE-based colour scale ---
+        if pd.isna(sRPE):
+            bg = "#CFD8DC"  # grey
+            text_color = "black"
+        elif sRPE <= 2:
+            bg = "#4285F4"  # blue
+            text_color = "white"
+        elif 3 <= sRPE <= 5:
+            bg = "#4CAF50"  # green
+            text_color = "white"
+        elif 6 <= sRPE <= 7:
+            bg = "#FF9800"  # orange
+            text_color = "white"
+        else:
+            bg = "#F44336"  # red
+            text_color = "white"
+
+        tooltip_text = d_.strftime("%a %d %b")
+        if not pd.isna(sRPE):
+            tooltip_text += f" | RPE: {sRPE}"
+        if workout:
+            tooltip_text += f" | {workout}"
+
+        # Base chip style
+        chip_style = {
+            "display": "flex",
+            "flexDirection": "column",
+            "alignItems": "center",
+            "justifyContent": "center",
+            "width": "46px",
+            "minWidth": "46px",
+            "height": "52px",
+            "borderRadius": "14px",
+            "fontSize": "0.7rem",
+            "cursor": "pointer",
+            "border": "1px solid rgba(0,0,0,0.08)",
+            "backgroundColor": bg,
+            "color": text_color,
+            "flex": "0 0 auto",
+            "boxShadow": "0 1px 2px rgba(0,0,0,0.1)",
+        }
+
+        # Highlight selected date with thicker border + subtle glow
+        if selected_date and d_ == selected_date:
+            chip_style["boxShadow"] = "0 0 0 2px #000000, 0 2px 6px rgba(0,0,0,0.3)"
+
+        chip = html.Div(
+            [
+                html.Div(d_.strftime("%d"), style={"fontWeight": "600", "lineHeight": "1"}),
+                html.Div(d_.strftime("%b"), style={"fontSize": "0.65rem", "lineHeight": "1"}),
+            ],
+            id={"type": "calendar-day", "date": str(d_)},
+            title=tooltip_text,
+            n_clicks=0,
+            style=chip_style,
+        )
+
+        chips.append(chip)
+
+    # Horizontally scrollable strip
+    strip = html.Div(
+        chips,
+        style={
+            "display": "flex",
+            "overflowX": "auto",
+            "gap": "6px",
+            "padding": "6px 4px",
+            "scrollbarWidth": "none",
+            "-msOverflowStyle": "none",
+        },
+        className="calendar-strip",
+    )
+
+    # RPE legend
+    legend = html.Div(
+        [
+            html.Small("RPE Colour Scale:", className="fw-bold me-2"),
+            html.Span("1–2", style={
+                "background": "#4285F4", "color": "white",
+                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
+            }),
+            html.Span("3–5", style={
+                "background": "#4CAF50", "color": "white",
+                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
+            }),
+            html.Span("6–7", style={
+                "background": "#FF9800", "color": "white",
+                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
+            }),
+            html.Span("8–10", style={
+                "background": "#F44336", "color": "white",
+                "padding": "2px 8px", "borderRadius": "4px"
+            }),
+        ],
+        className="mt-2 text-center",
+    )
+
+    return [strip, legend]
+
+
 # ============================================================
 #   TRAINING LOAD
 # ============================================================
+
 def build_load_plot(df: pd.DataFrame, view_mode: str):
     """
     Training Load plot (daily / weekly)
@@ -753,6 +748,7 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
 # ============================================================
 #   WELLNESS
 # ============================================================
+
 def build_wellness_plot(df: pd.DataFrame, view_mode: str):
     fig = go.Figure()
 
@@ -836,6 +832,7 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
 # ============================================================
 #   SPEED & TEMPO
 # ============================================================
+
 def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
     BLUE = "#1E88E5"
     ORANGE = "#FB8C00"
@@ -949,9 +946,6 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
 #  Dash app
 # ============================================================
 
-from dash import Dash, html, dcc
-import dash_bootstrap_components as dbc
-
 app = Dash(
     __name__,
     external_stylesheets=[dbc.themes.BOOTSTRAP],
@@ -962,11 +956,6 @@ app = Dash(
 
 server = app.server
 app._favicon = "favicon.png"
-# ----------------------------------------------------
-# FAVICON + iPHONE ICON SUPPORT
-# ----------------------------------------------------
-# Browser tab icon
-
 
 
 # --------------- UI Components ---------------
@@ -1056,24 +1045,12 @@ def build_main_layout():
     tabs = list_tabs()
     default_tab = tabs[0] if tabs else None
 
-    # If no tabs because sh is None or sheet empty, you can still render UI:
-    # the dropdown will just say "No sheets found".
-    dropdown_options = [{"label": t, "value": t} for t in tabs] if tabs else []
-    ...
-    dcc.Dropdown(
-        id="athlete-dropdown",
-        options=dropdown_options,
-        value=default_tab,
-        clearable=False,
-        placeholder="No sheets available" if not tabs else None,
-    ),
-
-
     return dbc.Container(
         [
             app_header(center=False),
 
             dcc.Store(id="selected-date-store"),
+            dcc.Store(id="calendar-window-start"),
 
             dbc.Row(
                 [
@@ -1085,6 +1062,7 @@ def build_main_layout():
                                 options=[{"label": t, "value": t} for t in tabs],
                                 value=default_tab,
                                 clearable=False,
+                                placeholder="No sheets available" if not tabs else None,
                             ),
                         ],
                         lg=6, width=12,
@@ -1172,7 +1150,39 @@ def build_main_layout():
             ),
 
             html.H4("4-Week Training Program", className="mt-4"),
-            html.Div(id="calendar-grid", className="mb-4"),
+
+            # Navigation controls + calendar strip
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            dbc.Button(
+                                "◀",
+                                id="calendar-prev",
+                                size="sm",
+                                color="secondary",
+                                outline=True,
+                                className="me-2",
+                            ),
+                            html.Div(
+                                id="calendar-window-label",
+                                className="flex-grow-1 text-center small text-muted",
+                                style={"minHeight": "24px"},
+                            ),
+                            dbc.Button(
+                                "▶",
+                                id="calendar-next",
+                                size="sm",
+                                color="secondary",
+                                outline=True,
+                                className="ms-2",
+                            ),
+                        ],
+                        className="d-flex align-items-center justify-content-between mb-2",
+                    ),
+                    html.Div(id="calendar-grid", className="mb-4"),
+                ]
+            ),
 
             html.Hr(),
 
@@ -1378,18 +1388,13 @@ app.layout = html.Div(
             style={"display": "block"},
             children=build_login_layout(),
         ),
-
-
-
     ]
 )
+
 
 # ============================================================
 #  Callbacks
 # ============================================================
-
-
-
 
 # --- Render page (login vs main) ---
 @app.callback(
@@ -1420,16 +1425,53 @@ def do_login(n_clicks, code):
     return {"authed": False}, "Incorrect access code."
 
 
-# --- Calendar grid ---
+# --- Calendar window start (prev / next week + reset on athlete change) ---
+@app.callback(
+    Output("calendar-window-start", "data"),
+    Output("calendar-window-label", "children"),
+    Input("athlete-dropdown", "value"),
+    Input("calendar-prev", "n_clicks"),
+    Input("calendar-next", "n_clicks"),
+    State("calendar-window-start", "data"),
+)
+def update_calendar_window(athlete_tab, prev_clicks, next_clicks, current_start):
+    today = dt.date.today()
+
+    # Default start if none
+    if current_start is None:
+        start_date = today - dt.timedelta(days=10)
+    else:
+        start_date = pd.to_datetime(current_start).date()
+
+    triggered = callback_context.triggered[0]["prop_id"].split(".")[0] if callback_context.triggered else None
+
+    if triggered == "calendar-prev":
+        start_date = start_date - dt.timedelta(days=7)
+    elif triggered == "calendar-next":
+        start_date = start_date + dt.timedelta(days=7)
+    elif triggered == "athlete-dropdown":
+        # reset window around today when athlete changes
+        start_date = today - dt.timedelta(days=10)
+
+    end_date = start_date + dt.timedelta(days=20)
+    label = f"{start_date.strftime('%d %b %Y')}  –  {end_date.strftime('%d %b %Y')}"
+
+    return str(start_date), label
+
+
+# --- Calendar grid (horizontal strip) ---
 @app.callback(
     Output("calendar-grid", "children"),
     Input("athlete-dropdown", "value"),
+    Input("calendar-window-start", "data"),
+    Input("selected-date-store", "data"),
 )
-def update_calendar(athlete_tab):
+def update_calendar(athlete_tab, window_start, selected_date):
     if not athlete_tab:
         return "Select athlete."
+
     df = load_tab(athlete_tab)
-    return build_calendar_cards(df)
+    return build_calendar_strip(df, window_start, selected_date)
 
 
 # --- Dashboard metrics & plots ---
@@ -1482,7 +1524,7 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     # ------------------------
     if "Athlete_Notes" in df.columns:
         df["Athlete_Notes"] = df["Athlete_Notes"].astype(str).str.strip()
-        df_sessions = df[df["Athlete_Notes"] != ""].copy()  # <--- FIXED
+        df_sessions = df[df["Athlete_Notes"] != ""].copy()
     else:
         df_sessions = df.copy()
 
@@ -1677,6 +1719,7 @@ def save_and_ai(
 # ============================================================
 #  Select calendar day → open session input panel
 # ============================================================
+
 @app.callback(
     Output("session-input-container", "style"),
     Output("selected-date-store", "data"),
@@ -1702,7 +1745,10 @@ def on_day_click(n_clicks_list, athlete_name):
 
     # Lookup workout + RPE from selected athlete sheet
     df = load_tab(athlete_name)
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
+    if not df.empty and "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
+    else:
+        df = pd.DataFrame(columns=["Date"])
 
     workout_txt = ""
     rpe_txt = ""
@@ -1743,5 +1789,6 @@ def close_session_panel(n_clicks):
 # ============================================================
 #  Run
 # ============================================================
+
 if __name__ == "__main__":
     app.run(debug=True)
