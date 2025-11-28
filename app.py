@@ -1326,43 +1326,30 @@ def build_main_layout():
 
 
 # Root layout
-app.layout = html.Div(
-    [
-        dcc.Location(id="url", refresh=False),
-        dcc.Store(id="auth-store", storage_type="session"),
+app.layout = html.Div([
+    dcc.Location(id="url", refresh=False),
+    dcc.Store(id="auth-store", storage_type="session"),
 
-        # Step 1: Temporary splash screen
-        html.Div(
-            id="splash-screen",
-            children=[
-                html.Div([
-                    # Spiral animation (NEW)
-                    html.Div(className="spiral-loader"),
+    # Splash FIRST so iPhone renders it centered
+    html.Div(
+        id="splash-screen",
+        children=[
+            html.Img(id="splash-logo", src="/assets/app_icon.png"),
+            html.Div("Adaptive Coaching Intelligence", id="splash-text"),
+            html.Div("Loading...", id="wave-loader")
+        ]
+    ),
 
-                    # App logo (smaller now; matches CSS fade-in)
-                    html.Img(
-                        id="splash-logo",
-                        src="/assets/app_icon.png"
-                    ),
+    # Main App Content Hidden at Start
+    html.Div(
+        id="page-content",
+        children=build_login_layout(),
+        style={"display": "none"}
+    ),
 
-                    # App name
-                    html.Div("Adaptive Coaching Intelligence", id="splash-text"),
-                ],
-                    style={"textAlign": "center", "paddingTop": "140px"})
-            ]
-        ),
+    dcc.Interval(id="splash-timer", interval=3200, n_intervals=0)
+])
 
-        # Real content loads after splash
-        html.Div(
-            id="page-content",
-            children=build_login_layout(),
-            style={"display": "none"}
-        ),
-
-        dcc.Interval(id="splash-timer", interval=3200, n_intervals=0)
-
-    ]
-)
 
 
 # ============================================================

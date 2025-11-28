@@ -1,4 +1,6 @@
-/* Full-page splash */
+/* --------------------------------------------
+   FULL-PAGE SPLASH WRAPPER
+--------------------------------------------- */
 #splash-screen {
     position: fixed;
     top: 0;
@@ -13,35 +15,61 @@
     justify-content: center;
     align-items: center;
 
-    font-family: 'Arial';
     text-align: center;
+    font-family: 'Arial', sans-serif;
 }
 
-/* Spiral Loader (NEW) */
-.spiral-loader {
-    width: 70px;
-    height: 70px;
-    border: 6px solid #1e88e5;
-    border-top-color: transparent;
-    border-radius: 50%;
-    animation: spiral-spin 0.95s linear infinite;
-    margin-bottom: 25px;
-}
-
-@keyframes spiral-spin {
-    0%   { transform: rotate(0deg) scale(1); }
-    50%  { transform: rotate(180deg) scale(1.12); }
-    100% { transform: rotate(360deg) scale(1); }
-}
-
-/* App icon under the spiral */
+/* --------------------------------------------
+   LOGO FADE + SWIRL
+--------------------------------------------- */
 #splash-logo {
-    height: 100px;
-    margin-bottom: 15px;
-    animation: fadein 1.5s ease-in-out;
+    height: 120px;
+    margin-bottom: 18px;
+    animation: logoSwirl 1.5s ease-out forwards;
 }
 
+@keyframes logoSwirl {
+    0%   { opacity: 0; transform: scale(0.8) rotate(-8deg); }
+    50%  { opacity: 1; transform: scale(1.07) rotate(3deg); }
+    100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+/* --------------------------------------------
+   APP TITLE TEXT
+--------------------------------------------- */
 #splash-text {
+    font-size: 24px;
+    font-weight: bold;
+    color: #1e88e5;
+    letter-spacing: 1px;
+    animation: titleFade 2.0s ease-in-out;
+    margin-bottom: 12px;
+}
+
+@keyframes titleFade {
+    0%   { opacity: 0; transform: translateY(10px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+/* --------------------------------------------
+   WAVY LOADING TEXT
+--------------------------------------------- */
+#wave-loader {
     font-size: 20px;
-    color: #444;
-    animation: fadein 2s ease
+    color: #555;
+    animation: wave 1.4s infinite ease-in-out;
+}
+
+@keyframes wave {
+    0%   { letter-spacing: 0px; opacity: 0.7; }
+    50%  { letter-spacing: 3px; opacity: 1; }
+    100% { letter-spacing: 0px; opacity: 0.7; }
+}
+
+/* --------------------------------------------
+   Generic fade-in used by other elements
+--------------------------------------------- */
+@keyframes fadein {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
