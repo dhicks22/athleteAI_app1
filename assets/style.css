@@ -1,3 +1,6 @@
+/* ============================================================
+   Your Existing Styles (unchanged)
+   ============================================================ */
 .day-col {
     width: 48px;
     height: 160px;
@@ -22,7 +25,6 @@
     width: 100%;
 }
 
-/* Mobile fix */
 @media only screen and (max-width: 600px) {
     .day-col {
         width: 40px;
@@ -33,4 +35,35 @@
     .week-row {
         gap: 2px;
     }
+}
+
+
+/* ============================================================
+   NEW — Impact Font for SPLASH + LOGIN ONLY
+   ============================================================ */
+
+#splash-screen,
+#splash-title,
+#splash-subtitle,
+#wave-loader,
+.login-card,
+#login-passcode,
+#login-button,
+#login-error {
+    font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif !important;
+}
+
+/* Make all text elements inside splash screen Impact */
+#splash-screen *,
+#splash-screen div {
+    font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif !important;
+}
+
+/* Make the login card title + all children Impact */
+.login-card *,
+.login-card h4,
+.login-card label,
+.login-card input,
+.login-card button {
+    font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif !important;
 }

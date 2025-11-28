@@ -1353,7 +1353,8 @@ app.layout = html.Div(
             children=build_login_layout(),
         ),
 
-        dcc.Interval(id="splash-timer", interval=3200, n_intervals=0),
+        dcc.Interval(id="splash-timer", interval=700, n_intervals=0, max_intervals=1),
+
     ]
 )
 
@@ -1369,14 +1370,13 @@ app.layout = html.Div(
     Output("splash-screen", "style"),
     Output("page-content", "style"),
     Input("splash-timer", "n_intervals"),
+    prevent_initial_call=True,  # <<< important
 )
 def toggle_splash(n):
     if n > 0:
-        # hide splash, show real app
         return {"display": "none"}, {"display": "block"}
-    else:
-        # show splash, hide real app
-        return {"display": "flex"}, {"display": "none"}
+    raise PreventUpdate
+
 
 
 
