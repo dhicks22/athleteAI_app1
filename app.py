@@ -66,6 +66,18 @@ def list_tabs():
         return []
     return [ws.title for ws in sh.worksheets()]
 
+def load_users_table():
+    """Load the 'Users' sheet containing username/password/athlete_sheet."""
+    if sh is None:
+        return pd.DataFrame()
+    try:
+        ws = sh.worksheet("Users")
+        df = pd.DataFrame(ws.get_all_records())
+        return df
+    except:
+        return pd.DataFrame()
+
+
 def get_day_status(df, date_obj):
     """
     Return structured info about whether a given date has:
@@ -1211,11 +1223,18 @@ def build_login_layout():
                                     style={"textAlign": "center"},
                                 ),
                                 dcc.Input(
-                                    id="login-passcode",
-                                    type="password",
-                                    placeholder="Enter access code",
+                                    id="login-username",
+                                    type="text",
+                                    placeholder="Username",
                                     className="form-control mb-3",
                                 ),
+                                dcc.Input(
+                                    id="login-password",
+                                    type="password",
+                                    placeholder="Password",
+                                    className="form-control mb-3",
+                                ),
+
                                 dbc.Button(
                                     "Login",
                                     id="login-button",
@@ -1243,9 +1262,12 @@ def build_login_layout():
     )
 
 
-def build_main_layout():
+def build_main_layout(auth_data):
     tabs = list_tabs()
-    default_tab = tabs[0] if tabs else None
+
+    # default from the user's assigned sheet
+    default_tab = auth_data.get("athlete_sheet") if auth_data else None
+
 
     return dbc.Container(
         [
@@ -1261,11 +1283,12 @@ def build_main_layout():
                             dbc.Label("Select athlete sheet"),
                             dcc.Dropdown(
                                 id="athlete-dropdown",
-                                options=[{"label": t, "value": t} for t in tabs],
+                                options=[{"label": default_tab, "value": default_tab}] if default_tab else [],
                                 value=default_tab,
                                 clearable=False,
-                                placeholder="No sheets available" if not tabs else None,
-                            ),
+                                disabled=True,  # lock to their own sheet
+                            )
+                            ,
                         ],
                         lg=6, width=12,
                     ),
@@ -1609,8 +1632,9 @@ app.layout = html.Div(
 )
 def render_page(auth_data):
     if auth_data and auth_data.get("authed"):
-        return build_main_layout()
+        return build_main_layout(auth_data)
     return build_login_layout()
+
 
 
 # --- Login ---
@@ -1618,17 +1642,38 @@ def render_page(auth_data):
     Output("auth-store", "data"),
     Output("login-error", "children"),
     Input("login-button", "n_clicks"),
-    State("login-passcode", "value"),
+    State("login-username", "value"),
+    State("login-password", "value"),
     prevent_initial_call=True,
 )
-def do_login(n_clicks, code):
+def do_login(n_clicks, username, password):
+
     if not n_clicks:
         raise PreventUpdate
-    if not code:
-        return {"authed": False}, "Please enter access code."
-    if code == APP_PASSCODE:
-        return {"authed": True}, ""
-    return {"authed": False}, "Incorrect access code."
+
+    users = load_users_table()
+
+    if users.empty:
+        return {"authed": False}, "❌ Users sheet missing."
+
+    # Locate username row
+    row = users[users["username"].str.lower() == str(username).lower()]
+
+    if row.empty:
+        return {"authed": False}, "❌ Username not found."
+
+    row = row.iloc[0]
+
+    # Check password
+    if str(password).strip() != str(row["password"]).strip():
+        return {"authed": False}, "❌ Incorrect password."
+
+    # Success → return athlete sheet in session store
+    return {
+        "authed": True,
+        "athlete_sheet": row["athlete_sheet"]
+    }, ""
+
 
 
 # --- Calendar window start (prev / next week + reset on athlete change) ---
