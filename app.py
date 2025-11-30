@@ -11,6 +11,13 @@ except Exception as e:
 
 
 import datetime as dt
+import pytz
+
+ADL_TZ = pytz.timezone("Australia/Adelaide")
+
+def today_adl():
+    return dt.datetime.now(ADL_TZ).date()
+
 
 import gspread
 import numpy as np
@@ -642,7 +649,8 @@ def build_month_calendar(df: pd.DataFrame, month_date: dt.date, selected_date_st
 
     # Build calendar cells
     cells = []
-    today = dt.date.today()
+    today = today_adl()
+
 
     for day in days:
         # Check entry in df
@@ -684,8 +692,13 @@ def build_month_calendar(df: pd.DataFrame, month_date: dt.date, selected_date_st
         }
 
         # Today glow
+        # Today glow (blue)
         if day == today:
             cell_style["boxShadow"] = "0 0 6px rgba(33,150,243,0.8)"
+
+        # Logged session glow (green)
+        elif not match.empty:
+            cell_style["boxShadow"] = "0 0 10px rgba(76,175,80,0.85)"  # green glow
 
         # Selected date border
         if selected_date and day == selected_date:
@@ -1695,7 +1708,8 @@ def do_login(n_clicks, username, password):
     State("calendar-window-start", "data"),
 )
 def update_calendar_window(athlete_tab, prev_clicks, next_clicks, current_month):
-    today = dt.date.today()
+    today = today_adl()
+
 
     # Default = first day of current month
     if current_month is None:
@@ -1775,7 +1789,7 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     df = load_tab(athlete_id)
 
     # Today string (always real date)
-    today = dt.date.today()
+    today = today_adl()
     today_date_str = today.strftime("%d %b %Y")
 
     # ------------------------
