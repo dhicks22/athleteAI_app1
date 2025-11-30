@@ -131,7 +131,15 @@
 
 /* ---------- MOBILE ---------- */
 @media (max-width: 768px) {
-    .dial-circle { --size: 110px; }
-    .dial-text { font-size: 1.4rem; }
-    .dial-icon { font-size: 1.5rem; }
+    .dial-circle {
+        --size: 165px;       /* Larger dials on phones */
+    }
+
+    .dial-text {
+        font-size: 1.9rem;   /* Bigger center number */
+    }
+
+    .dial-icon {
+        font-size: 2rem;     /* Bigger emoji/icon */
+    }
 }
