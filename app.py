@@ -696,9 +696,26 @@ def build_month_calendar(df: pd.DataFrame, month_date: dt.date, selected_date_st
         if day == today:
             cell_style["boxShadow"] = "0 0 6px rgba(33,150,243,0.8)"
 
-        # Logged session glow (green)
-        elif not match.empty:
-            cell_style["boxShadow"] = "0 0 10px rgba(76,175,80,0.85)"  # green glow
+        # Logged session glow (green) — only if Athlete_Notes exists and is non-empty
+
+        else:
+            logged_session = False
+
+            if not match.empty:
+                # Extract note for that day (latest row)
+                notes_val = str(match.iloc[-1].get("Athlete_Notes", "")).strip()
+
+                # Normalize for comparison
+                notes_lower = notes_val.lower()
+
+                # Treat these as "not logged"
+                empty_markers = ["", "nan", "none", "nil", "0"]
+
+                if notes_lower not in empty_markers:
+                    logged_session = True
+
+            if logged_session:
+                cell_style["boxShadow"] = "0 0 10px rgba(76,175,80,0.85)"  # green glow
 
         # Selected date border
         if selected_date and day == selected_date:
