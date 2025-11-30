@@ -541,6 +541,29 @@ def build_calendar_strip(df: pd.DataFrame, window_start: dt.date | None, selecte
     - window_start: first date in strip (21-day window)
     - selected_date_str: date string stored in selected-date-store
     """
+    # RPE legend
+    legend = html.Div(
+        [
+            html.Small("RPE Colour Scale:", className="fw-bold me-2"),
+            html.Span("1–2", style={
+                "background": "#4285F4", "color": "white",
+                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
+            }),
+            html.Span("3–5", style={
+                "background": "#4CAF50", "color": "white",
+                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
+            }),
+            html.Span("6–7", style={
+                "background": "#FF9800", "color": "white",
+                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
+            }),
+            html.Span("8–10", style={
+                "background": "#F44336", "color": "white",
+                "padding": "2px 8px", "borderRadius": "4px"
+            }),
+        ],
+        className="mt-2 text-center",
+    )
     if df.empty or "Date" not in df.columns:
         return "No data available."
 
@@ -548,13 +571,13 @@ def build_calendar_strip(df: pd.DataFrame, window_start: dt.date | None, selecte
 
     # Default window: 10 days before today
     if window_start is None:
-        window_start = today - dt.timedelta(days=10)
+        window_start = today - dt.timedelta(days=7)
     else:
         # Ensure it's a date object
         window_start = pd.to_datetime(window_start).date()
 
     # 21-day window
-    dates = [window_start + dt.timedelta(days=i) for i in range(21)]
+    dates = [window_start + dt.timedelta(days=i) for i in range(7)]
 
     # For highlighting
     selected_date = None
@@ -648,31 +671,9 @@ def build_calendar_strip(df: pd.DataFrame, window_start: dt.date | None, selecte
         className="calendar-strip",
     )
 
-    # RPE legend
-    legend = html.Div(
-        [
-            html.Small("RPE Colour Scale:", className="fw-bold me-2"),
-            html.Span("1–2", style={
-                "background": "#4285F4", "color": "white",
-                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
-            }),
-            html.Span("3–5", style={
-                "background": "#4CAF50", "color": "white",
-                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
-            }),
-            html.Span("6–7", style={
-                "background": "#FF9800", "color": "white",
-                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
-            }),
-            html.Span("8–10", style={
-                "background": "#F44336", "color": "white",
-                "padding": "2px 8px", "borderRadius": "4px"
-            }),
-        ],
-        className="mt-2 text-center",
-    )
 
-    return [strip, legend]
+
+    return [legend, strip]
 
 
 # ============================================================
@@ -1259,7 +1260,7 @@ def build_main_layout():
                         dbc.Card(
                             dbc.CardBody(
                                 [
-                                    html.Div("Neuromuscular State (Fatigue / Mood)", className="text-muted small"),
+                                    html.Div("Neuromuscular State", className="text-muted small"),
                                     html.Div(id="neuromuscular-dial-container"),
                                 ]
                             ),
