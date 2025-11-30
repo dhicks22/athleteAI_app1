@@ -1,5 +1,15 @@
 import os
 import json
+RAW_USER_LOGINS = os.getenv("USER_LOGINS", "{}")
+
+try:
+    USER_LOGINS = json.loads(RAW_USER_LOGINS)
+    print("User login config loaded:", USER_LOGINS)
+except Exception as e:
+    print("ERROR parsing USER_LOGINS:", e)
+    USER_LOGINS = {}
+
+
 import datetime as dt
 
 import gspread
@@ -1263,10 +1273,11 @@ def build_login_layout():
 
 
 def build_main_layout(auth_data):
+    athlete_sheet = auth_data.get("athlete_sheet")
     tabs = list_tabs()
 
-    # default from the user's assigned sheet
-    default_tab = auth_data.get("athlete_sheet") if auth_data else None
+    default_tab = athlete_sheet if athlete_sheet in tabs else tabs[0]
+
 
 
     return dbc.Container(
@@ -1644,35 +1655,33 @@ def render_page(auth_data):
     Input("login-button", "n_clicks"),
     State("login-username", "value"),
     State("login-password", "value"),
-    prevent_initial_call=True,
+    prevent_initial_call=True
 )
 def do_login(n_clicks, username, password):
-
     if not n_clicks:
         raise PreventUpdate
 
-    users = load_users_table()
+    if not username or not password:
+        return {"authed": False}, "Enter both username and password."
 
-    if users.empty:
-        return {"authed": False}, "❌ Users sheet missing."
+    # Check against USER_LOGINS loaded from Render
+    for athlete_name, info in USER_LOGINS.items():
+        if (
+            username.strip().lower() == str(info["username"]).strip().lower()
+            and password.strip() == str(info["password"]).strip()
+        ):
+            return (
+                {
+                    "authed": True,
+                    "athlete_name": athlete_name,
+                    "athlete_sheet": info.get("sheet")
+                },
+                ""
+            )
 
-    # Locate username row
-    row = users[users["username"].str.lower() == str(username).lower()]
+    return {"authed": False}, "Incorrect username or password."
 
-    if row.empty:
-        return {"authed": False}, "❌ Username not found."
 
-    row = row.iloc[0]
-
-    # Check password
-    if str(password).strip() != str(row["password"]).strip():
-        return {"authed": False}, "❌ Incorrect password."
-
-    # Success → return athlete sheet in session store
-    return {
-        "authed": True,
-        "athlete_sheet": row["athlete_sheet"]
-    }, ""
 
 
 
