@@ -1,0 +1,137 @@
+/* ============================================================
+   LEVEL 3 — ULTRA APPLE WATCH ACTIVITY RING DIALS
+   Triple-layer, animated gradients, pulsing glow, tick marks,
+   center icon, glass orb.
+   ============================================================ */
+
+.dial-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 12px;
+}
+
+/* ---------- MAIN DIAL ---------- */
+.dial-circle {
+    --size: 135px;
+    --track-color: #ECEFF1;
+    --dial-color: #4CAF50;      /* Primary ring colour */
+    --dial-gradient: #4CAF50;   /* Gradient end */
+    --dial-progress: 0;         /* % fill */
+    --icon: "🔥";
+
+    width: var(--size);
+    height: var(--size);
+    border-radius: 50%;
+    position: relative;
+
+    background:
+        radial-gradient(circle at center, rgba(255,255,255,0.9) 55%, transparent 56%),
+        conic-gradient(
+            var(--dial-color) 0deg,
+            var(--dial-gradient) calc(var(--dial-progress) * 1%),
+            var(--track-color) calc(var(--dial-progress) * 1%)
+        );
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    animation: sweep 1.2s cubic-bezier(.4, 0, .2, 1) forwards;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.12);
+    transition: background 0.6s ease, box-shadow 0.6s ease;
+}
+
+/* ---------- KEYFRAME: SWEEP ANIMATION ---------- */
+@keyframes sweep {
+    from { --dial-progress: 0; }
+    to   { /* final value already set by inline style */ }
+}
+
+/* ---------- INNER GLASS ORB ---------- */
+.dial-circle::before {
+    content: "";
+    position: absolute;
+    width: 72%;
+    height: 72%;
+    border-radius: 50%;
+    z-index: 2;
+
+    background: rgba(255,255,255,0.35);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+
+    box-shadow:
+        inset 0 4px 8px rgba(255,255,255,0.7),
+        inset 0 -6px 10px rgba(0,0,0,0.08);
+}
+
+/* ---------- TRIPLE-RING EFFECT ---------- */
+.dial-circle::after {
+    content: "";
+    position: absolute;
+    width: 92%;
+    height: 92%;
+    border-radius: 50%;
+    z-index: 1;
+
+    background:
+        repeating-conic-gradient(
+            rgba(0,0,0,0.12) 0deg,
+            rgba(0,0,0,0.12) 2deg,
+            transparent 2deg,
+            transparent 30deg
+        ),
+        radial-gradient(circle, rgba(255,255,255,0.05) 20%, transparent 60%);
+}
+
+/* ---------- CENTER ICON ---------- */
+.dial-icon {
+    position: absolute;
+    font-size: 1.8rem;
+    font-weight: 700;
+    z-index: 3;
+    top: 34%;
+    color: #263238;
+    opacity: 0.9;
+}
+
+/* ---------- CENTER TEXT ---------- */
+.dial-text {
+    position: absolute;
+    top: 58%;
+    transform: translateY(-50%);
+    font-size: 1.7rem;
+    font-weight: 700;
+    text-align: center;
+    color: #263238;
+    z-index: 4;
+}
+
+/* ---------- PULSE GLOWS ---------- */
+.dial-circle.glow-green {
+    animation: pulseGreen 2.6s infinite ease-in-out;
+}
+
+@keyframes pulseGreen {
+    0%   { box-shadow: 0 0 16px rgba(76,175,80,0.4), 0 0 32px rgba(76,175,80,0.18); }
+    50%  { box-shadow: 0 0 22px rgba(76,175,80,0.55), 0 0 42px rgba(76,175,80,0.28); }
+    100% { box-shadow: 0 0 16px rgba(76,175,80,0.4), 0 0 32px rgba(76,175,80,0.18); }
+}
+
+.dial-circle.glow-blue {
+    animation: pulseBlue 2.6s infinite ease-in-out;
+}
+
+@keyframes pulseBlue {
+    0%   { box-shadow: 0 0 16px rgba(33,150,243,0.4), 0 0 32px rgba(33,150,243,0.18); }
+    50%  { box-shadow: 0 0 24px rgba(33,150,243,0.55), 0 0 48px rgba(33,150,243,0.28); }
+    100% { box-shadow: 0 0 16px rgba(33,150,243,0.4), 0 0 32px rgba(33,150,243,0.18); }
+}
+
+/* ---------- MOBILE ---------- */
+@media (max-width: 768px) {
+    .dial-circle { --size: 110px; }
+    .dial-text { font-size: 1.4rem; }
+    .dial-icon { font-size: 1.5rem; }
+}

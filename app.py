@@ -1882,6 +1882,10 @@ def on_day_click(n_clicks_list, athlete_name):
     clicked_date = triggered_id["date"]
     clicked_date_dt = pd.to_datetime(clicked_date).date()
 
+<<<<<<< HEAD
+=======
+    # Lookup workout + RPE from selected athlete sheet
+>>>>>>> origin/main
     # Lookup workout, RPE, Venue from selected athlete sheet
     df = load_tab(athlete_name)
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
