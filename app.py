@@ -66,6 +66,49 @@ def list_tabs():
         return []
     return [ws.title for ws in sh.worksheets()]
 
+def get_day_status(df, date_obj):
+    """
+    Return structured info about whether a given date has:
+      - a logged session (notes / rpe / load)
+      - rpe value
+      - whether athlete notes exist
+      - whether load exists
+    """
+    if df.empty or "Date" not in df.columns:
+        return {
+            "logged": False,
+            "rpe": None,
+            "has_notes": False,
+            "has_load": False,
+        }
+
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
+
+    rows = df[df["Date"] == date_obj]
+    if rows.empty:
+        return {
+            "logged": False,
+            "rpe": None,
+            "has_notes": False,
+            "has_load": False,
+        }
+
+    row = rows.iloc[-1]
+
+    rpe = pd.to_numeric(row.get("sRPE", None), errors="coerce")
+    notes = str(row.get("Athlete_Notes", "")).strip()
+    load = pd.to_numeric(row.get("Load", None), errors="coerce")
+
+    logged = False
+    if (pd.notna(rpe) and rpe > 0) or notes not in ["", "nan", ""] or pd.notna(load):
+        logged = True
+
+    return {
+        "logged": logged,
+        "rpe": rpe if pd.notna(rpe) else None,
+        "has_notes": notes not in ["", "nan", ""],
+        "has_load": pd.notna(load),
+    }
 
 def load_tab(tab_name: str) -> pd.DataFrame:
     """Load worksheet to DataFrame with parsed Date."""
@@ -533,7 +576,7 @@ def apple_readiness_ring(readiness_score: float | None):
     )
 
 
-# --------- NEW: Horizontal strip calendar with RPE chips ---------
+
 
 # ============================================================
 #   NEW MONTH CALENDAR WITH RPE PILLS
@@ -564,7 +607,7 @@ def build_month_calendar(df: pd.DataFrame, month_date: dt.date, selected_date_st
     start_offset = (start_weekday + 1) % 7
 
     days = []
-    for i in range(28):
+    for i in range(42):
         day = first_day - dt.timedelta(days=start_offset) + dt.timedelta(days=i)
         days.append(day)
 
