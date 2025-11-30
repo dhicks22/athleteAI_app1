@@ -535,145 +535,172 @@ def apple_readiness_ring(readiness_score: float | None):
 
 # --------- NEW: Horizontal strip calendar with RPE chips ---------
 
-def build_calendar_strip(df: pd.DataFrame, window_start: dt.date | None, selected_date_str: str | None):
+# ============================================================
+#   NEW MONTH CALENDAR WITH RPE PILLS
+# ============================================================
+
+def build_month_calendar(df: pd.DataFrame, month_date: dt.date, selected_date_str: str | None):
     """
-    Horizontally scrollable strip of small RPE-coloured bricks (date chips).
-    - window_start: first date in strip (21-day window)
-    - selected_date_str: date string stored in selected-date-store
+    Renders a full month view calendar with coloured RPE pills.
+    Each day = click → opens session input.
     """
-    # RPE legend
-    legend = html.Div(
-        [
-            html.Small("RPE Colour Scale:", className="fw-bold me-2"),
-            html.Span("1–2", style={
-                "background": "#4285F4", "color": "white",
-                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
-            }),
-            html.Span("3–5", style={
-                "background": "#4CAF50", "color": "white",
-                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
-            }),
-            html.Span("6–7", style={
-                "background": "#FF9800", "color": "white",
-                "padding": "2px 8px", "borderRadius": "4px", "marginRight": "4px"
-            }),
-            html.Span("8–10", style={
-                "background": "#F44336", "color": "white",
-                "padding": "2px 8px", "borderRadius": "4px"
-            }),
-        ],
-        className="mt-2 text-center",
-    )
+
     if df.empty or "Date" not in df.columns:
-        return "No data available."
+        return html.Div("No data", className="text-muted")
 
-    today = dt.date.today()
+    # Convert dataframe date column
+    ddf = df.copy()
+    ddf["Date"] = pd.to_datetime(ddf["Date"], errors="coerce").dt.date
 
-    # Default window: 10 days before today
-    if window_start is None:
-        window_start = today - dt.timedelta(days=7)
-    else:
-        # Ensure it's a date object
-        window_start = pd.to_datetime(window_start).date()
+    # Determine month start/end
+    year = month_date.year
+    month = month_date.month
+    first_day = dt.date(year, month, 1)
+    last_day = (first_day.replace(day=28) + dt.timedelta(days=4)).replace(day=1) - dt.timedelta(days=1)
 
-    # 21-day window
-    dates = [window_start + dt.timedelta(days=i) for i in range(7)]
+    # Build grid: Always 6 rows × 7 columns (42 cells)
+    start_weekday = first_day.weekday()  # Monday=0…Sunday=6
+    # Convert to Sunday-start calendar
+    start_offset = (start_weekday + 1) % 7
 
-    # For highlighting
+    days = []
+    for i in range(28):
+        day = first_day - dt.timedelta(days=start_offset) + dt.timedelta(days=i)
+        days.append(day)
+
     selected_date = None
     if selected_date_str:
         try:
             selected_date = pd.to_datetime(selected_date_str).date()
-        except Exception:
+        except:
             selected_date = None
 
-    chips = []
-    for d_ in dates:
-        day_df = df[df["Date"] == d_]
-        if not day_df.empty:
-            row = day_df.iloc[-1]
-            workout = str(row.get("Workout", "")).strip()
-            sRPE = pd.to_numeric(row.get("sRPE", np.nan), errors="coerce")
+    # Build calendar cells
+    cells = []
+    today = dt.date.today()
+
+    for day in days:
+        # Check entry in df
+        match = ddf[ddf["Date"] == day]
+        if not match.empty:
+            row = match.iloc[-1]
+            rpe = pd.to_numeric(row.get("sRPE", np.nan), errors="coerce")
         else:
-            workout = ""
-            sRPE = np.nan
+            rpe = np.nan
 
-        # --- Dynamic RPE-based colour scale ---
-        if pd.isna(sRPE):
-            bg = "#CFD8DC"  # grey
-            text_color = "black"
-        elif sRPE <= 2:
-            bg = "#4285F4"  # blue
-            text_color = "white"
-        elif 3 <= sRPE <= 5:
-            bg = "#4CAF50"  # green
-            text_color = "white"
-        elif 6 <= sRPE <= 7:
-            bg = "#FF9800"  # orange
-            text_color = "white"
+        # Color logic
+        if pd.isna(rpe):
+            pill_color = "#CFD8DC"  # light grey
+        elif rpe <= 2:
+            pill_color = "#4285F4"  # blue
+        elif 3 <= rpe <= 5:
+            pill_color = "#4CAF50"  # green
+        elif 6 <= rpe <= 7:
+            pill_color = "#FF9800"  # orange
         else:
-            bg = "#F44336"  # red
-            text_color = "white"
+            pill_color = "#F44336"  # red
 
-        tooltip_text = d_.strftime("%a %d %b")
-        if not pd.isna(sRPE):
-            tooltip_text += f" | RPE: {sRPE}"
-        if workout:
-            tooltip_text += f" | {workout}"
-
-        # Base chip style
-        chip_style = {
-            "display": "flex",
-            "flexDirection": "column",
-            "alignItems": "center",
-            "justifyContent": "center",
-            "width": "46px",
-            "minWidth": "46px",
-            "height": "52px",
-            "borderRadius": "14px",
-            "fontSize": "0.7rem",
-            "cursor": "pointer",
-            "border": "1px solid rgba(0,0,0,0.08)",
-            "backgroundColor": bg,
-            "color": text_color,
-            "flex": "0 0 auto",
-            "boxShadow": "0 1px 2px rgba(0,0,0,0.1)",
+        # style for pill
+        pill_style = {
+            "width": "10px",
+            "height": "10px",
+            "borderRadius": "50%",
+            "margin": "4px auto 0 auto",
+            "backgroundColor": pill_color,
         }
 
-        # Highlight selected date with thicker border + subtle glow
-        if selected_date and d_ == selected_date:
-            chip_style["boxShadow"] = "0 0 0 2px #000000, 0 2px 6px rgba(0,0,0,0.3)"
+        # cell highlight
+        cell_style = {
+            "width": "100%",
+            "padding": "6px 0",
+            "textAlign": "center",
+            "borderRadius": "8px",
+            "cursor": "pointer"
+        }
 
-        chip = html.Div(
-            [
-                html.Div(d_.strftime("%d"), style={"fontWeight": "600", "lineHeight": "1"}),
-                html.Div(d_.strftime("%b"), style={"fontSize": "0.65rem", "lineHeight": "1"}),
-            ],
-            id={"type": "calendar-day", "date": str(d_)},
-            title=tooltip_text,
-            n_clicks=0,
-            style=chip_style,
+        # Today glow
+        if day == today:
+            cell_style["boxShadow"] = "0 0 6px rgba(33,150,243,0.8)"
+
+        # Selected date border
+        if selected_date and day == selected_date:
+            cell_style["border"] = "2px solid black"
+
+        # Text fade for out-of-month days
+        day_num_style = {
+            "fontSize": "14px",
+            "color": "#000" if (day.month == month) else "#B0BEC5"
+        }
+
+        cells.append(
+            html.Div(
+                [
+                    html.Div(str(day.day), style=day_num_style),
+                    html.Div(style=pill_style),
+                ],
+                id={"type": "calendar-day", "date": str(day)},
+                n_clicks=0,
+                style=cell_style,
+            )
         )
 
-        chips.append(chip)
-
-    # Horizontally scrollable strip
-    strip = html.Div(
-        chips,
+    # 7-column grid container
+    grid = html.Div(
+        cells,
         style={
-            "display": "flex",
-            "overflowX": "auto",
-            "gap": "6px",
-            "padding": "6px 4px",
-            "scrollbarWidth": "none",
-            "-msOverflowStyle": "none",
-        },
-        className="calendar-strip",
+            "display": "grid",
+            "gridTemplateColumns": "repeat(7, 1fr)",
+            "gap": "4px",
+            "padding": "6px"
+        }
     )
 
+    # Weekday labels
+    weekdays = html.Div(
+        [
+            html.Div(d, style={"textAlign": "center", "fontWeight": "600"})
+            for d in ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        ],
+        style={
+            "display": "grid",
+            "gridTemplateColumns": "repeat(7, 1fr)",
+            "marginBottom": "4px"
+        }
+    )
 
+    # RPE legend
+    legend = html.Div(
+        [
+            html.Small("RPE Colour Scale:", className="fw-bold me-2"),
 
-    return [legend, strip]
+            html.Span("1–2", style={
+                "background": "#4285F4", "color": "white",
+                "padding": "2px 8px", "borderRadius": "6px",
+                "marginRight": "6px", "fontSize": "12px"
+            }),
+
+            html.Span("3–5", style={
+                "background": "#4CAF50", "color": "white",
+                "padding": "2px 8px", "borderRadius": "6px",
+                "marginRight": "6px", "fontSize": "12px"
+            }),
+
+            html.Span("6–7", style={
+                "background": "#FF9800", "color": "white",
+                "padding": "2px 8px", "borderRadius": "6px",
+                "marginRight": "6px", "fontSize": "12px"
+            }),
+
+            html.Span("8–10", style={
+                "background": "#F44336", "color": "white",
+                "padding": "2px 8px", "borderRadius": "6px",
+                "fontSize": "12px"
+            }),
+        ],
+        style={"textAlign": "center", "marginTop": "8px"}
+    )
+
+    return html.Div([legend, weekdays, grid])
 
 
 # ============================================================
@@ -1570,29 +1597,38 @@ def do_login(n_clicks, code):
     Input("calendar-next", "n_clicks"),
     State("calendar-window-start", "data"),
 )
-def update_calendar_window(athlete_tab, prev_clicks, next_clicks, current_start):
+def update_calendar_window(athlete_tab, prev_clicks, next_clicks, current_month):
     today = dt.date.today()
 
-    # Default start if none
-    if current_start is None:
-        start_date = today - dt.timedelta(days=10)
+    # Default = first day of current month
+    if current_month is None:
+        month_date = today.replace(day=1)
     else:
-        start_date = pd.to_datetime(current_start).date()
+        month_date = pd.to_datetime(current_month).date()
 
-    triggered = callback_context.triggered[0]["prop_id"].split(".")[0] if callback_context.triggered else None
+    triggered = callback_context.triggered[0]["prop_id"].split(".")[0]
 
     if triggered == "calendar-prev":
-        start_date = start_date - dt.timedelta(days=7)
+        # subtract one month
+        year = month_date.year
+        month = month_date.month - 1
+        if month == 0:
+            month = 12
+            year -= 1
+        month_date = dt.date(year, month, 1)
+
     elif triggered == "calendar-next":
-        start_date = start_date + dt.timedelta(days=7)
-    elif triggered == "athlete-dropdown":
-        # reset window around today when athlete changes
-        start_date = today - dt.timedelta(days=10)
+        # add one month
+        year = month_date.year
+        month = month_date.month + 1
+        if month == 13:
+            month = 1
+            year += 1
+        month_date = dt.date(year, month, 1)
 
-    end_date = start_date + dt.timedelta(days=20)
-    label = f"{start_date.strftime('%d %b %Y')}  –  {end_date.strftime('%d %b %Y')}"
+    label = month_date.strftime("%B %Y")
+    return str(month_date), label
 
-    return str(start_date), label
 
 
 # --- Calendar grid (horizontal strip) ---
@@ -1607,7 +1643,13 @@ def update_calendar(athlete_tab, window_start, selected_date):
         return "Select athlete."
 
     df = load_tab(athlete_tab)
-    return build_calendar_strip(df, window_start, selected_date)
+    # Convert window_start to month anchor
+    if window_start:
+        month_date = pd.to_datetime(window_start).date().replace(day=1)
+    else:
+        month_date = dt.date.today().replace(day=1)
+
+    return build_month_calendar(df, month_date, selected_date)
 
 
 # --- Dashboard metrics & plots ---
