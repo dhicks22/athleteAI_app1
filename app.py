@@ -1209,7 +1209,41 @@ app = Dash(
 )
 
 server = app.server
-app._favicon = "favicon.png"
+
+# Serve favicon from assets/
+app._favicon = "icon-192.png"
+
+# Override the index to include manifest + apple icon
+app.index_string = """
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-title" content="AthleteAI">
+        <meta name="theme-color" content="#1e88e5">
+
+        <!-- Android/Chrome PWA -->
+        <link rel="manifest" href="/assets/manifest.json">
+
+        <!-- App Icons -->
+        <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
+        <link rel="apple-touch-icon" href="/assets/icon-192.png">
+
+        <title>Adaptive Coaching Intelligence</title>
+        {%css%}
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+"""
 
 
 # --------------- UI Components ---------------
