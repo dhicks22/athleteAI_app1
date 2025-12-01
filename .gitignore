@@ -1,4 +1,5 @@
 .env
 *.json
+!assets/manifest.json
 .venv/
 __pycache__/
