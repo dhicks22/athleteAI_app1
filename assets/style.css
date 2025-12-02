@@ -11,6 +11,7 @@ body {
     display: none;
 }
 
+
 /* ============================================
    SPLASH SCREEN
 ============================================ */
@@ -154,7 +155,7 @@ body {
 
 
 /* ============================================
-   CARDS (General Layout Cleanup)
+   CARD CLEANUP
 ============================================ */
 .card {
     border-radius: 12px !important;
@@ -166,20 +167,7 @@ body {
 
 
 /* ============================================
-   MOBILE SPACING FIXES
-============================================ */
-@media (max-width: 576px) {
-    .dial-circle {
-        --size: 70px;
-    }
-    .dial-text {
-        font-size: 1rem;
-    }
-}
-
-
-/* ============================================
-   INPUT PANEL
+   INPUT PANEL FORMATTING
 ============================================ */
 textarea {
     font-size: 0.9rem;
@@ -193,6 +181,10 @@ button, .btn {
     border-radius: 8px !important;
 }
 
+
+/* ============================================
+   TRAINING CALENDAR CELLS
+============================================ */
 .cal-row {
     display: flex;
     justify-content: space-around;
@@ -213,4 +205,47 @@ button, .btn {
 .cal-day-number {
     font-size: 14px;
     font-weight: 600;
+}
+
+
+/* ============================================
+   MOBILE OPTIMISATION — DIALS, CARDS, LAYOUT
+============================================ */
+@media (max-width: 576px) {
+
+    /* Bigger dials for phones */
+    .dial-circle {
+        --size: 110px !important;
+        margin: 6px auto !important;
+    }
+
+    .dial-wrapper {
+        padding: 4px 0 !important;
+    }
+
+    /* Bigger number inside the dial */
+    .dial-text {
+        font-size: 1.4rem !important;
+        font-weight: 700 !important;
+    }
+
+    /* Prevent card overflow on small screens */
+    .card-body {
+        padding: 10px !important;
+    }
+
+    /* Stops headings from wrapping weirdly */
+    .card-title, h4, h5 {
+        white-space: nowrap;
+        font-size: 1rem;
+    }
+}
+
+
+/* ============================================
+   MICRO-DEVICE FIX (Very Small Phones)
+============================================ */
+@media (max-width: 400px) {
+    .dial-circle { --size: 130px !important; }
+    .dial-text { font-size: 1.6rem !important; }
 }
