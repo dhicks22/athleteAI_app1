@@ -9,14 +9,31 @@ except Exception as e:
     print("ERROR parsing USER_LOGINS:", e)
     USER_LOGINS = {}
 
+# ------------------------------
+# LOCAL DEVELOPMENT FALLBACK
+# If USER_LOGINS is empty (environment variable not set),
+# use this default so local login always works.
+# ------------------------------
+if not USER_LOGINS:
+    USER_LOGINS = {
+        "dylan": {
+            "username": "dylan",
+            "password": "1234",
+            "sheet": "Dylan Hicks"
+        }
+    }
+    print("⚠️ USER_LOGINS not found — using local fallback login.")
+
 
 import datetime as dt
-import pytz
+from zoneinfo import ZoneInfo
 
-ADL_TZ = pytz.timezone("Australia/Adelaide")
+ADL_TZ = ZoneInfo("Australia/Adelaide")
+
 
 def today_adl():
     return dt.datetime.now(ADL_TZ).date()
+
 
 
 import gspread
@@ -1807,17 +1824,30 @@ def build_login_layout():
                                     style={"textAlign": "center"},
                                 ),
                                 dcc.Input(
-                                    id="login-username",
+                                    type="password",
+                                    style={"display": "none"},
+                                    autoComplete="new-password"
+                                ),
+
+                                dcc.Input(
+                                    id="user_input",
                                     type="text",
                                     placeholder="Username",
                                     className="form-control mb-3",
+                                    autoComplete="off",
+                                    name="fake-username"
                                 ),
+
                                 dcc.Input(
-                                    id="login-password",
+                                    id="pass_input",
                                     type="password",
                                     placeholder="Password",
                                     className="form-control mb-3",
-                                ),
+                                    autoComplete="new-password",
+                                    name="fake-password"
+                                )
+
+                                ,
 
                                 dbc.Button(
                                     "Login",
@@ -1933,6 +1963,21 @@ def build_main_layout(auth_data):
                         ),
                         lg=3, md=6, width=12,
                     ),
+
+                    # Training Streak Dial
+                    dbc.Col(
+                        dbc.Card(
+                            dbc.CardBody(
+                                [
+                                    html.Div("Training Streak", className="text-muted small"),
+                                    html.Div(id="streak-dial-container"),
+                                ]
+                            ),
+                            className="mb-3 shadow-sm",
+                        ),
+                        lg=3, md=6, width=12,
+                    ),
+
                     # Neuromuscular State Dial
                     dbc.Col(
                         dbc.Card(
@@ -2253,10 +2298,11 @@ def render_page(auth_data):
     Output("auth-store", "data"),
     Output("login-error", "children"),
     Input("login-button", "n_clicks"),
-    State("login-username", "value"),
-    State("login-password", "value"),
+    State("user_input", "value"),
+    State("pass_input", "value"),
     prevent_initial_call=True
 )
+
 def do_login(n_clicks, username, password):
     if not n_clicks:
         raise PreventUpdate
@@ -2364,6 +2410,7 @@ def update_calendar(athlete_tab, window_start, selected_date):
 @app.callback(
     Output("today-date", "children"),
     Output("weekly-dial-container", "children"),
+    Output("streak-dial-container", "children"),
     Output("neuromuscular-dial-container", "children"),
     Output("readiness-dial-container", "children"),
     Output("load-plot", "figure"),
@@ -2400,6 +2447,7 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
         return (
             today_date_str,
             apple_sessions_ring(0),
+            streak_dial(0),
             apple_neuromuscular_ring(None),
             apple_readiness_ring(None),
             empty,
@@ -2441,6 +2489,10 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
             (df_sessions["Date"] <= week_end)
         ].shape[0]
 
+    # Compute streak
+    streak, best = compute_streaks(df)
+    streak_dial_ui = streak_dial(streak)
+
     # ------------------------
     # AVG FATIGUE / MOOD  (for neuromuscular dial)
     # ------------------------
@@ -2471,6 +2523,7 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     return (
         today_date_str,
         apple_sessions_ring(weekly_count),
+        streak_dial_ui,
         apple_neuromuscular_ring(avg_fm_val),
         apple_readiness_ring(readiness_val),
         load_fig,

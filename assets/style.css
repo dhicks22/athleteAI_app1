@@ -100,7 +100,24 @@ body {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ============================================================
-   CARDS
+   GLOBAL
+============================================================ */
+body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    transition: background 0.25s ease, color 0.25s ease;
+}
+
+::-webkit-scrollbar {
+    display: none;
+}
+
+/* ============================================================
+   CARD BASE STYLE
 ============================================================ */
 .card,
 .card-body,
@@ -108,14 +125,24 @@ body {
     background: var(--card-bg) !important;
     color: var(--text) !important;
     border: 1px solid var(--border) !important;
-    border-radius: 12px !important;
-    box-shadow: 0 3px 6px var(--card-shadow) !important;
-    transition: 0.2s ease;
+    border-radius: 14px !important;
+    box-shadow: 0 3px 8px var(--card-shadow) !important;
+    transition: 0.2s ease-in-out;
 }
 
-.card:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 14px var(--card-shadow) !important;
+/* Lift-on-hover — desktop only */
+@media (min-width: 768px) {
+    .card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 16px var(--card-shadow) !important;
+    }
+}
+
+/* On small screens add spacing so cards don’t touch */
+@media (max-width: 768px) {
+    .card {
+        margin-bottom: 14px !important;
+    }
 }
 
 /* ============================================================
@@ -144,18 +171,13 @@ button, .btn {
 }
 
 /* ============================================================
-   INPUTS / TEXTAREAS
+   INPUTS
 ============================================================ */
 textarea, input, .form-control {
     background: var(--card-bg) !important;
     color: var(--text) !important;
     border: 1px solid var(--border) !important;
-    border-radius: 10px !important;
-}
-
-textarea {
-    font-size: 0.9rem;
-    resize: none;
+    border-radius: 12px !important;
 }
 
 /* ============================================================
@@ -184,7 +206,7 @@ textarea {
         var(--dial-bg) calc(var(--dial-progress) * 1%)
     );
 
-    transition: background 1.2s ease-in-out;
+    transition: background 0.8s ease-in-out, transform 0.5s ease;
     box-shadow: 0 0 8px var(--card-shadow) inset;
 }
 
@@ -194,13 +216,13 @@ textarea {
 
 @keyframes dialPulse {
     0% { transform: scale(1); }
-    50% { transform: scale(1.03); }
+    50% { transform: scale(1.04); }
     100% { transform: scale(1); }
 }
 
 .dial-text {
     position: absolute;
-    font-size: 1.2rem;
+    font-size: 1.25rem;
     font-weight: 700;
     color: var(--text);
 }
@@ -217,6 +239,7 @@ textarea {
         var(--dial-bg) calc(var(--percent) * 1%)
     );
     position: relative;
+
     display: flex;
     justify-content: center;
     align-items: center;
@@ -237,12 +260,9 @@ textarea {
 .streak-number {
     font-size: 2.2rem;
     font-weight: 700;
-    color: var(--text);
 }
 
-.streak-pulse {
-    animation: streakPulse 2s infinite ease-in-out;
-}
+.streak-pulse { animation: streakPulse 2s infinite ease-in-out; }
 
 @keyframes streakPulse {
     0% { box-shadow: 0 0 10px rgba(255,193,7,0.4); }
@@ -251,30 +271,90 @@ textarea {
 }
 
 /* ============================================================
-   MINI CARD (Current Date)
+   MOBILE — DIAL RESIZING & CENTERING
+============================================================ */
+@media (max-width: 768px) {
+    .dial-wrapper {
+        justify-content: center;
+        margin-top: 6px;
+        margin-bottom: 6px;
+    }
+}
+
+@media (max-width: 576px) {
+    .dial-circle { --size: 110px !important; }
+    .dial-text { font-size: 1.4rem !important; }
+}
+
+@media (max-width: 400px) {
+    .dial-circle { --size: 130px !important; }
+    .dial-text { font-size: 1.6rem !important; }
+}
+
+/* ============================================================
+   MINI-CARD (Current Date)
 ============================================================ */
 .mini-card {
-    padding: 4px 10px !important;
-    border-radius: 10px !important;
+    padding: 8px 14px !important;
+    border-radius: 12px !important;
     box-shadow: 0 2px 4px var(--card-shadow) !important;
-    height: 60px !important;
 
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .mini-card-label {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-muted);
 }
 
 .mini-card-value {
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 600;
 }
 
 /* ============================================================
-   COLLAPSIBLE SESSION HEADER (with icons)
+   CALENDAR (Apple Fitness Style)
+============================================================ */
+.calendar-day {
+    background: var(--card-bg);
+    box-shadow: 0 2px 5px var(--card-shadow);
+    padding: 12px 0;
+    border-radius: 14px;
+    text-align: center;
+
+    transition: 0.25s ease;
+    cursor: pointer;
+}
+
+.calendar-day:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px var(--card-shadow);
+}
+
+.calendar-day.today {
+    box-shadow: 0 0 0 3px rgba(30,136,229,0.45);
+}
+
+.calendar-day.logged {
+    box-shadow: 0 0 0 3px rgba(76,175,80,0.45);
+}
+
+.calendar-day.out-month .cal-day-number {
+    color: #b0bec5;
+}
+
+.rpe-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin: 4px auto 0 auto;
+    box-shadow: 0 0 4px rgba(0,0,0,0.25);
+}
+
+/* ============================================================
+   SESSION HEADER (Collapsible)
 ============================================================ */
 .session-header-toggle {
     width: 100%;
@@ -288,11 +368,6 @@ textarea {
     border-radius: 10px;
     margin-bottom: 8px;
     cursor: pointer;
-    transition: 0.25s ease;
-}
-
-.session-header-toggle:hover {
-    filter: brightness(1.1);
 }
 
 .session-header-card {
@@ -300,27 +375,19 @@ textarea {
     border: 1px solid var(--accent);
     border-radius: 12px;
     box-shadow: 0 2px 6px var(--card-shadow);
-
     padding: 16px;
-    margin-bottom: 12px;
 }
 
 .session-header-line {
     display: flex;
     align-items: center;
-    font-size: 15px;
+    gap: 6px;
     margin-bottom: 8px;
-    color: var(--text);
-}
-
-.session-header-label {
-    font-weight: 700;
-    margin-right: 6px;
+    font-size: 15px;
 }
 
 .session-icon {
     font-size: 18px;
-    margin-right: 6px;
     color: var(--accent);
 }
 
@@ -329,67 +396,5 @@ textarea {
         flex-direction: column;
         align-items: flex-start;
         font-size: 14px;
-        margin-bottom: 10px;
     }
-    .session-header-label {
-        margin-bottom: 2px;
-    }
-}
-
-/* ============================================================
-   MOBILE DIAL RESIZING
-============================================================ */
-@media (max-width: 576px) {
-    .dial-circle { --size: 110px !important; }
-    .dial-text { font-size: 1.4rem !important; }
-}
-
-@media (max-width: 400px) {
-    .dial-circle { --size: 130px !important; }
-    .dial-text { font-size: 1.6rem !important; }
-}
-
-@media (min-width: 992px) {
-    .dial-circle, .streak-circle { --size: 110px !important; }
-}
-
-/* ============================================================
-   MODERNISED CALENDAR UI (Apple Fitness Style)
-============================================================ */
-.calendar-day {
-    background: var(--card-bg);
-    box-shadow: 0 2px 5px var(--card-shadow);
-
-    padding: 12px 0;
-    text-align: center;
-    border-radius: 14px;
-
-    cursor: pointer;
-    transition: 0.25s ease;
-}
-
-.calendar-day:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 6px 12px var(--card-shadow);
-}
-
-.calendar-day.today {
-    box-shadow: 0 0 0 3px rgba(30,136,229,0.35);
-}
-
-.calendar-day.logged {
-    box-shadow: 0 0 0 3px rgba(76,175,80,0.35);
-}
-
-.calendar-day.out-month .cal-day-number {
-    color: #b0bec5;
-}
-
-/* RPE dot */
-.rpe-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    margin: 4px auto 0 auto;
-    box-shadow: 0 0 4px rgba(0,0,0,0.25);
 }
