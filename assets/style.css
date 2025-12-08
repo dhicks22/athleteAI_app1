@@ -1,5 +1,5 @@
 /* ============================================================
-   0. THEME VARIABLES — Light Mode (default)
+   0. THEME VARIABLES — Light Mode (Default)
 ============================================================ */
 :root {
     --bg: #f7f9fc;
@@ -8,7 +8,6 @@
 
     --card-bg: #ffffff;
     --card-shadow: rgba(0, 0, 0, 0.08);
-
     --border: #e1e5ea;
 
     --accent: #1e88e5;
@@ -24,7 +23,7 @@
 }
 
 /* ============================================================
-   DARK MODE — TrainHeroic Style
+   DARK MODE — TrainHeroic Inspired
 ============================================================ */
 [data-theme="dark"] {
     --bg: #0e0f11;
@@ -33,13 +32,10 @@
 
     --card-bg: #16181c;
     --card-shadow: rgba(0,0,0,0.6);
-
     --border: #2a2e33;
 
     --accent: #4dabf7;
     --accent-soft: rgba(77,171,247,0.15);
-
-    --pill-grey: #555;
 
     --dial-bg: #22252b;
 }
@@ -55,11 +51,10 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
     -webkit-font-smoothing: antialiased;
     transition: background 0.25s ease, color 0.25s ease;
+    padding-bottom: 80px; /* space for nav bar */
 }
 
-::-webkit-scrollbar {
-    display: none;
-}
+::-webkit-scrollbar { display: none; }
 
 /* ============================================================
    SPLASH SCREEN
@@ -68,22 +63,15 @@ body {
     position: fixed;
     inset: 0;
     background: var(--bg);
-    color: var(--text);
-
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-
-    z-index: 9999;
     animation: splashFade 1.3s ease-in-out forwards;
     animation-delay: 0.7s;
+    z-index: 9999;
 }
-
-@keyframes splashFade {
-    from { opacity: 1; }
-    to { opacity: 0; visibility: hidden; }
-}
+@keyframes splashFade { from{opacity:1;} to{opacity:0;visibility:hidden;} }
 
 .splash-logo { width: 120px; margin-bottom: 16px; }
 .splash-title { font-size: 24px; font-weight: 600; color: var(--accent); }
@@ -96,74 +84,37 @@ body {
     border-radius: 50%;
     animation: spin 0.9s linear infinite;
 }
-
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ============================================================
-   GLOBAL
+   CARDS
 ============================================================ */
-body {
-    margin: 0;
-    padding: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
-    -webkit-font-smoothing: antialiased;
-    transition: background 0.25s ease, color 0.25s ease;
-}
-
-::-webkit-scrollbar {
-    display: none;
-}
-
-/* ============================================================
-   CARD BASE STYLE
-============================================================ */
-.card,
-.card-body,
-.login-card {
+.card, .card-body, .login-card {
     background: var(--card-bg) !important;
     color: var(--text) !important;
     border: 1px solid var(--border) !important;
     border-radius: 14px !important;
     box-shadow: 0 3px 8px var(--card-shadow) !important;
-    transition: 0.2s ease-in-out;
+    transition: 0.2s ease;
 }
-
-/* Lift-on-hover — desktop only */
 @media (min-width: 768px) {
-    .card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 8px 16px var(--card-shadow) !important;
-    }
+    .card:hover { transform: translateY(-3px); box-shadow: 0 8px 16px var(--card-shadow) !important; }
 }
-
-/* On small screens add spacing so cards don’t touch */
 @media (max-width: 768px) {
-    .card {
-        margin-bottom: 14px !important;
-    }
+    .card { margin-bottom: 14px !important; }
 }
 
 /* ============================================================
    BUTTONS
 ============================================================ */
-button, .btn {
-    border-radius: 8px !important;
-    font-weight: 600;
-    cursor: pointer;
-}
-
 .btn-primary {
     background: var(--accent) !important;
     border-color: var(--accent) !important;
 }
-
 .btn-secondary {
     background: var(--border) !important;
     color: var(--text) !important;
 }
-
 .ai-save-btn {
     background-color: #35e359 !important;
     border-color: #35e359 !important;
@@ -183,218 +134,167 @@ textarea, input, .form-control {
 /* ============================================================
    APPLE-STYLE RING DIALS
 ============================================================ */
-.dial-wrapper {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 6px;
-}
+.dial-wrapper { display:flex; justify-content:center; align-items:center; padding:6px; }
 
 .dial-circle {
     --size: 90px;
-    width: var(--size);
-    height: var(--size);
+    width: var(--size); height: var(--size);
     border-radius: 50%;
     position: relative;
-
-    display: flex;
-    justify-content: center;
-    align-items: center;
-
-    background: conic-gradient(
-        var(--dial-color) calc(var(--dial-progress) * 1%),
-        var(--dial-bg) calc(var(--dial-progress) * 1%)
-    );
-
-    transition: background 0.8s ease-in-out, transform 0.5s ease;
-    box-shadow: 0 0 8px var(--card-shadow) inset;
+    display:flex; justify-content:center; align-items:center;
+    background: conic-gradient(var(--dial-color) calc(var(--dial-progress)*1%), var(--dial-bg) calc(var(--dial-progress)*1%));
+    transition: background 0.8s ease, transform 0.5s ease;
+    box-shadow: inset 0 0 8px var(--card-shadow);
 }
-
-.dial-circle.updated {
-    animation: dialPulse 1.4s ease-out;
-}
+.dial-circle.updated { animation: dialPulse 1.4s ease-out; }
 
 @keyframes dialPulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.04); }
-    100% { transform: scale(1); }
+    0% {transform:scale(1);}
+    50% {transform:scale(1.04);}
+    100%{transform:scale(1);}
 }
 
 .dial-text {
-    position: absolute;
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: var(--text);
+    position:absolute;
+    font-size:1.25rem;
+    font-weight:700;
+    color:var(--text);
 }
 
 /* ============================================================
    STREAK DIAL
 ============================================================ */
 .streak-circle {
-    width: 140px;
-    height: 140px;
-    border-radius: 50%;
-    background: conic-gradient(
-        var(--streak-color) calc(var(--percent) * 1%),
-        var(--dial-bg) calc(var(--percent) * 1%)
-    );
-    position: relative;
-
-    display: flex;
-    justify-content: center;
-    align-items: center;
-
-    box-shadow: 0 0 12px rgba(0,0,0,0.15);
+    width:140px; height:140px; border-radius:50%;
+    display:flex; justify-content:center; align-items:center;
+    background: conic-gradient(var(--streak-color) calc(var(--percent)*1%), var(--dial-bg) calc(var(--percent)*1%));
+    box-shadow:0 0 12px rgba(0,0,0,.15);
+    position:relative;
 }
-
 .streak-circle::before {
-    content: "";
-    position: absolute;
-    width: 78%;
-    height: 78%;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(255,255,255,0.65), rgba(255,255,255,0.1));
-    backdrop-filter: blur(6px);
+    content:""; position:absolute;
+    width:78%; height:78%; border-radius:50%;
+    backdrop-filter:blur(6px);
+    background: radial-gradient(circle, rgba(255,255,255,.65), rgba(255,255,255,.1));
 }
-
-.streak-number {
-    font-size: 2.2rem;
-    font-weight: 700;
-}
+.streak-number { font-size:2.2rem; font-weight:700; }
 
 .streak-pulse { animation: streakPulse 2s infinite ease-in-out; }
-
 @keyframes streakPulse {
-    0% { box-shadow: 0 0 10px rgba(255,193,7,0.4); }
-    50% { box-shadow: 0 0 24px rgba(255,193,7,0.9); }
-    100% { box-shadow: 0 0 10px rgba(255,193,7,0.4); }
+    0% {box-shadow:0 0 10px rgba(255,193,7,0.4);}
+    50% {box-shadow:0 0 24px rgba(255,193,7,0.9);}
+    100% {box-shadow:0 0 10px rgba(255,193,7,0.4);}
 }
 
 /* ============================================================
-   MOBILE — DIAL RESIZING & CENTERING
-============================================================ */
-@media (max-width: 768px) {
-    .dial-wrapper {
-        justify-content: center;
-        margin-top: 6px;
-        margin-bottom: 6px;
-    }
-}
-
-@media (max-width: 576px) {
-    .dial-circle { --size: 110px !important; }
-    .dial-text { font-size: 1.4rem !important; }
-}
-
-@media (max-width: 400px) {
-    .dial-circle { --size: 130px !important; }
-    .dial-text { font-size: 1.6rem !important; }
-}
-
-/* ============================================================
-   MINI-CARD (Current Date)
-============================================================ */
-.mini-card {
-    padding: 8px 14px !important;
-    border-radius: 12px !important;
-    box-shadow: 0 2px 4px var(--card-shadow) !important;
-
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
-
-.mini-card-label {
-    font-size: 13px;
-    color: var(--text-muted);
-}
-
-.mini-card-value {
-    font-size: 20px;
-    font-weight: 600;
-}
-
-/* ============================================================
-   CALENDAR (Apple Fitness Style)
+   CALENDAR
 ============================================================ */
 .calendar-day {
-    background: var(--card-bg);
-    box-shadow: 0 2px 5px var(--card-shadow);
-    padding: 12px 0;
-    border-radius: 14px;
-    text-align: center;
-
-    transition: 0.25s ease;
-    cursor: pointer;
+    background:var(--card-bg);
+    box-shadow:0 2px 5px var(--card-shadow);
+    border-radius:14px;
+    padding:12px 0;
+    text-align:center;
+    cursor:pointer;
+    transition:0.25s ease;
 }
-
-.calendar-day:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 6px 12px var(--card-shadow);
-}
-
-.calendar-day.today {
-    box-shadow: 0 0 0 3px rgba(30,136,229,0.45);
-}
-
-.calendar-day.logged {
-    box-shadow: 0 0 0 3px rgba(76,175,80,0.45);
-}
-
-.calendar-day.out-month .cal-day-number {
-    color: #b0bec5;
-}
+.calendar-day:hover { transform:translateY(-3px); }
+.calendar-day.today { box-shadow:0 0 0 3px rgba(30,136,229,0.45); }
+.calendar-day.logged { box-shadow:0 0 0 3px rgba(76,175,80,0.45); }
+.calendar-day.out-month .cal-day-number { color:#b0bec5; }
 
 .rpe-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    margin: 4px auto 0 auto;
-    box-shadow: 0 0 4px rgba(0,0,0,0.25);
+    width:10px; height:10px;
+    border-radius:50%;
+    margin:4px auto 0;
+    box-shadow:0 0 4px rgba(0,0,0,.25);
 }
 
 /* ============================================================
-   SESSION HEADER (Collapsible)
+   AI SESSION TEXT STYLE
 ============================================================ */
-.session-header-toggle {
-    width: 100%;
-    background: var(--accent);
-    color: white;
-    border: none;
-    padding: 10px 14px;
+.ai-plan-text {
+    font-family: Arial, sans-serif !important;
     font-size: 16px;
-    font-weight: 600;
-
-    border-radius: 10px;
-    margin-bottom: 8px;
-    cursor: pointer;
+    line-height: 1.45;
+    white-space: pre-wrap;
 }
 
-.session-header-card {
-    background: var(--card-bg);
-    border: 1px solid var(--accent);
-    border-radius: 12px;
-    box-shadow: 0 2px 6px var(--card-shadow);
-    padding: 16px;
+/* ============================================================
+   BOTTOM NAV (iOS / TrainHeroic Style)
+============================================================ */
+.bottom-nav {
+    position:fixed;
+    bottom:0; left:0; right:0;
+    height:65px;
+    background:var(--card-bg);
+    border-top:1px solid var(--border);
+    box-shadow:0 -2px 8px rgba(0,0,0,0.25);
+    z-index:9999;
 }
 
-.session-header-line {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 8px;
-    font-size: 15px;
+.nav-item {
+    text-align:center;
+    padding-top:4px;
+    cursor:pointer;
+    transition:0.25s ease;
 }
 
-.session-icon {
-    font-size: 18px;
-    color: var(--accent);
+.nav-icon {
+    font-size:22px;
+    color:#666;
+    transition:0.25s ease;
 }
 
-@media (max-width: 768px) {
-    .session-header-line {
-        flex-direction: column;
-        align-items: flex-start;
-        font-size: 14px;
-    }
+.nav-label {
+    font-size:12px;
+    color:#666;
+    font-weight:500;
+    transition:0.25s ease;
 }
+
+/* ---------- ACTIVE STATE ---------- */
+.nav-item.active .nav-icon {
+    color:#1e88e5 !important;
+    transform:scale(1.25);
+    text-shadow:
+        0 0 6px rgba(30,136,229,0.85),
+        0 0 12px rgba(30,136,229,0.55),
+        0 0 18px rgba(30,136,229,0.35);
+}
+
+.nav-item.active .nav-label {
+    color:#1e88e5;
+    font-weight:700;
+}
+
+/* ---------- Sliding underline ---------- */
+.nav-underline {
+    position:absolute;
+    bottom:0;
+    height:3px;
+    width:25%;
+    background:#1e88e5;
+    transition:transform 0.32s cubic-bezier(.25,.1,.25,1);
+}
+
+/* ---------- Icon bounce ---------- */
+@keyframes bounce {
+    0%{transform:scale(1);}
+    30%{transform:scale(1.32);}
+    55%{transform:scale(1.18);}
+    75%{transform:scale(1.26);}
+    100%{transform:scale(1);}
+}
+.bounce { animation:bounce 0.45s ease-out; }
+
+/* ---------- Icon wobble ---------- */
+@keyframes wobble {
+    0%{transform:rotate(0);}
+    20%{transform:rotate(-12deg);}
+    40%{transform:rotate(10deg);}
+    60%{transform:rotate(-8deg);}
+    80%{transform:rotate(6deg);}
+    100%{transform:rotate(0);}
+}
+.wobble { animation:wobble 0.45s ease-out; }

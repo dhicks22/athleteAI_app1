@@ -19,7 +19,8 @@ if not USER_LOGINS:
         "dylan": {
             "username": "dylan",
             "password": "1234",
-            "sheet": "Dylan Hicks"
+            "sheet": "Dylan Hicks",
+            "role": "coach",
         }
     }
     print("⚠️ USER_LOGINS not found — using local fallback login.")
@@ -557,12 +558,50 @@ def persona_prompt(mode: str) -> str:
     }
     return PERSONAS.get(mode, PERSONAS["General"])
 
+# ---------------------------------------------------------
+# AI SESSION DESIGN PERSONA PROFILES (for session generator)
+# ---------------------------------------------------------
+SESSION_COACH_PERSONAS = {
+    "Speed & Power Coach":
+        "You design sprint sessions emphasising projection, acceleration, and max-velocity quality. "
+        "You protect freshness and avoid junk reps.",
+
+    "Tempo & Endurance Coach":
+        "You design smooth aerobic tempo work that supports conditioning and recovery without creating undue fatigue.",
+
+    "Technical Sprint Coach":
+        "You design sessions focused on posture, stiffness, projection, rhythm and technical cues.",
+
+    "Strength & Power Coach":
+        "You design gym-based strength and power progressions that complement sprint qualities.",
+
+    "Holistic Readiness Coach":
+        "You design balanced sessions considering fatigue, readiness, mood, and life stressors.",
+}
 
 
 
 # ------------------------------------------------------------
 # Helper: generic trend description for a numeric series
 # ------------------------------------------------------------
+def build_upcoming_context(df, today):
+    try:
+        ddf = df.copy()
+        ddf["Date"] = pd.to_datetime(ddf["Date"], errors="coerce").dt.date
+        future = ddf[ddf["Date"] > today]
+        future = future[future["Workout"].astype(str).str.strip() != ""]
+
+        if future.empty:
+            return "No future planned sessions found."
+
+        lines = []
+        for _, r in future.head(5).iterrows():
+            lines.append(f"{r['Date']}: {r.get('Workout', '')}")
+        return "\n".join(lines)
+    except:
+        return "No upcoming data."
+
+
 def _describe_trend(series: pd.Series, label: str, window: int = 7) -> str:
     """
     Take last `window` values of a numeric series and describe trend.
@@ -1738,6 +1777,7 @@ app.index_string = """
         <link rel="manifest" href="/assets/manifest.json">
 
         <!-- App Icons -->
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
         <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
         <link rel="apple-touch-icon" href="/assets/icon-192.png">
 
@@ -1875,74 +1915,93 @@ def build_login_layout():
         className="pt-5",
     )
 
+def build_athlete_selector_row(is_coach, options, default_tab):
+    return dbc.Row(
+        [
+            dbc.Col(
+                [
+                    dbc.Label("Select athlete" if is_coach else "Athlete"),
+                    dcc.Dropdown(
+                        id="athlete-dropdown",
+                        options=options,
+                        value=default_tab,
+                        clearable=False,
+                        disabled=not is_coach,  # Athletes locked to their own sheet
+                    ),
+                ],
+                lg=6, width=12,
+            ),
+        ],
+        className="mb-3 g-3",
+    )
+
 
 def build_main_layout(auth_data):
     athlete_sheet = auth_data.get("athlete_sheet")
+    is_coach = auth_data.get("is_coach", False)
+    username = auth_data.get("username", "")
+
     tabs = list_tabs()
 
-    default_tab = athlete_sheet if athlete_sheet in tabs else tabs[0]
+    if athlete_sheet and athlete_sheet in tabs:
+        default_tab = athlete_sheet
+    elif tabs:
+        default_tab = tabs[0]
+    else:
+        default_tab = None
 
-    return dbc.Container(
+    # Build dropdown options
+    if is_coach:
+        options = []
+        for key, info in USER_LOGINS.items():
+            sheet_name = info.get("sheet", "")
+            if sheet_name and sheet_name in tabs:
+                options.append({"label": sheet_name, "value": sheet_name})
+        athlete_dropdown_disabled = False
+    else:
+        if athlete_sheet and athlete_sheet in tabs:
+            options = [{"label": athlete_sheet, "value": athlete_sheet}]
+        else:
+            options = []
+        athlete_dropdown_disabled = True
+
+    if default_tab is None and options:
+        default_tab = options[0]["value"]
+
+    # ✅ INSERT THIS FIXED ROW HERE
+    athlete_selector_row = dbc.Row(
         [
-            app_header(center=False),
-
-            logout_button,
-
-            dcc.Store(id="selected-date-store"),
-            dcc.Store(id="calendar-window-start"),
-
-            dbc.Row(
+            dbc.Col(
                 [
-                    dbc.Col(
-                        [
-                            dbc.Label("Select athlete sheet"),
-                            dcc.Dropdown(
-                                id="athlete-dropdown",
-                                options=[{"label": default_tab, "value": default_tab}] if default_tab else [],
-                                value=default_tab,
-                                clearable=False,
-                                disabled=True,  # lock to their own sheet
-                            )
-                            ,
-                        ],
-                        lg=6, width=12,
-                    ),
-                    dbc.Col(
-                        [
-                            dbc.Label("View mode"),
-                            dcc.RadioItems(
-                                id="view-mode",
-                                options=[
-                                    {"label": "Weekly", "value": "weekly"},
-                                    {"label": "Daily", "value": "daily"},
-                                ],
-                                value="weekly",  # <-- default is now WEEKLY
-                                inline=True,
-                            ),
-                            dbc.Button(
-                                "Refresh",
-                                id="refresh-btn",
-                                color="secondary",
-                                size="sm",
-                                className="mt-2",
-                            ),
-                        ],
-                        lg=3, width=12,
-                        className="mt-3 mt-lg-0",
+                    dbc.Label("Select athlete" if is_coach else "Athlete"),
+                    dcc.Dropdown(
+                        id="athlete-dropdown",
+                        options=options,
+                        value=default_tab,
+                        clearable=False,
+                        disabled=not is_coach,
                     ),
                 ],
-                className="mb-3 g-3",
-            ),
+                lg=6, width=12,
+            )
+        ],
+        className="mb-3 g-3",
+    )
 
-            # Summary cards
+    # --- Build sections (views) ---
+
+    # 1) HOME VIEW → today + dials
+    home_view = html.Div(
+        id="home-view",
+        children=[
             dbc.Row(
                 [
-                    # Current Date
+
                     dbc.Col(
                         dbc.Card(
                             dbc.CardBody(
                                 [
-                                    html.Div("Current Date", className="text-muted small"),
+                                    html.Div("Today", className="text-muted small"),
                                     html.H4(id="today-date", className="mb-0"),
                                 ]
                             ),
@@ -1950,7 +2009,6 @@ def build_main_layout(auth_data):
                         ),
                         lg=3, md=6, width=12,
                     ),
-                    # Weekly Training Exposure Dial
                     dbc.Col(
                         dbc.Card(
                             dbc.CardBody(
@@ -1963,8 +2021,6 @@ def build_main_layout(auth_data):
                         ),
                         lg=3, md=6, width=12,
                     ),
-
-                    # Training Streak Dial
                     dbc.Col(
                         dbc.Card(
                             dbc.CardBody(
@@ -1977,8 +2033,6 @@ def build_main_layout(auth_data):
                         ),
                         lg=3, md=6, width=12,
                     ),
-
-                    # Neuromuscular State Dial
                     dbc.Col(
                         dbc.Card(
                             dbc.CardBody(
@@ -1991,7 +2045,6 @@ def build_main_layout(auth_data):
                         ),
                         lg=3, md=6, width=12,
                     ),
-                    # Training Readiness Index Dial
                     dbc.Col(
                         dbc.Card(
                             dbc.CardBody(
@@ -2007,10 +2060,20 @@ def build_main_layout(auth_data):
                 ],
                 className="g-3",
             ),
+            html.P(
+                "Swipe between Calendar, Graphs and AI Session Builder using the bottom nav.",
+                className="text-muted mt-2",
+            ),
+        ],
+        style={"display": "block"},
+    )
 
-            html.H4("Training Program", className="mt-4"),
+    # 2) CALENDAR VIEW → Program, calendar, pills, session details + AI feedback
+    calendar_view = html.Div(
+        id="calendar-view",
+        children=[
+            html.H4("Training Program", className="mt-3"),
 
-            # Navigation controls + calendar strip
             html.Div(
                 [
                     html.Div(
@@ -2069,18 +2132,15 @@ def build_main_layout(auth_data):
 
                     html.H5(id="selected-date-header", className="mb-3"),
 
-
-
                     dbc.Row([
-                        # LEFT SIDE: Athlete Notes + Session Inputs
+                        # LEFT: athlete inputs
                         dbc.Col([
-
                             # Athlete Notes
                             html.Div([
                                 html.Label("Athlete Notes"),
                                 dcc.Textarea(
                                     id="athlete-notes",
-                                    placeholder="e.g., Last two reps were my best, powerful first step, strong projection, and better stiffness on ground contact",
+                                    placeholder="e.g., Last two reps were my best, powerful first step, strong projection, better stiffness on ground contact",
                                     style={
                                         "width": "100%", "height": "80px",
                                         "border": "none", "outline": "none",
@@ -2117,7 +2177,7 @@ def build_main_layout(auth_data):
                                 "background": "#fafafa",
                             }),
 
-                            # Track Reps & Times
+                            # Track reps & times
                             html.Div([
                                 html.Label("Track Reps & Times"),
                                 dcc.Textarea(
@@ -2177,15 +2237,14 @@ def build_main_layout(auth_data):
                             dbc.Button(
                                 "Save & Generate AI Suggestions",
                                 id="btn-generate-ai",
-                                color="secondary",  # doesn't matter — will be overridden
+                                color="secondary",
                                 className="mt-3 w-100 ai-save-btn",
-                            )
-                            ,
+                            ),
 
                             html.Div(id="save-status", className="mt-2 text-success"),
                         ], md=6),
 
-                        # RIGHT SIDE — AI Focus & AI Output
+                        # RIGHT: AI feedback
                         dbc.Col([
                             dbc.Row([
                                 dbc.Col([
@@ -2196,7 +2255,7 @@ def build_main_layout(auth_data):
                                             {"label": "Speed & Power Coach", "value": "Speed & Power Coach"},
                                             {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
                                             {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
-                                            {"label": "Strength & Conditioning Coach", "value": "Strength & Conditioning Coach"},
+                                            {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
                                             {"label": "Holistic Readiness Coach", "value": "Holistic Readiness Coach"},
                                         ],
                                         value=None,
@@ -2204,7 +2263,6 @@ def build_main_layout(auth_data):
                                         clearable=False,
                                     ),
                                 ], md=6),
-
                                 dbc.Col([
                                     dbc.Label("AI Suggestion 2 Focus"),
                                     dcc.Dropdown(
@@ -2213,7 +2271,7 @@ def build_main_layout(auth_data):
                                             {"label": "Speed & Power Coach", "value": "Speed & Power Coach"},
                                             {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
                                             {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
-                                            {"label": "Strength & Conditioning Coach", "value": "Strength & Conditioning Coach"},
+                                            {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
                                             {"label": "Holistic Readiness Coach", "value": "Holistic Readiness Coach"},
                                         ],
                                         value=None,
@@ -2230,22 +2288,206 @@ def build_main_layout(auth_data):
                                     html.Div(id="ai-suggestion-1", className="mt-3"),
                                     html.Div(id="ai-suggestion-2", className="mt-3"),
                                 ]
-                            )
+                            ),
                         ], md=6),
                     ]),
                 ]
             ),
+        ],
+        style={"display": "none"},
+    )
 
-            html.Hr(),
+    # 3) GRAPHS VIEW → load, wellness, speed/tempo
+    graphs_view = html.Div(
+        id="graphs-view",
+        style={"display": "none"},  # shown only when nav selects it
+        children=[
 
-            html.H3("Training Load / Readiness", className="mt-3"),
-            dcc.Graph(id="load-plot", figure=go.Figure()),
+            html.Div(
+                [
+                    html.H3("Training Load, Wellness & Speed/Tempo", className="mb-3"),
 
-            html.H3("Wellness (Session / RPE / Fatigue / Mood)", className="mt-4"),
-            dcc.Graph(id="wellness-plot", figure=go.Figure()),
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                [
+                                    dbc.Label("View mode"),
+                                    dcc.RadioItems(
+                                        id="view-mode",
+                                        options=[
+                                            {"label": "Weekly", "value": "weekly"},
+                                            {"label": "Daily", "value": "daily"},
+                                        ],
+                                        value="weekly",
+                                        inline=True,
+                                    ),
+                                ],
+                                width="auto",
+                            ),
+                            dbc.Col(
+                                dbc.Button(
+                                    "Refresh",
+                                    id="refresh-btn",
+                                    color="secondary",
+                                    size="sm",
+                                    className="mt-4",
+                                ),
+                                width="auto",
+                            ),
+                        ],
+                        className="align-items-end mb-4",
+                    ),
 
-            html.H3("Speed & Tempo Volumes", className="mt-4"),
-            dcc.Graph(id="speedtempo-plot", figure=go.Figure()),
+                    dcc.Graph(id="load-plot"),
+                    dcc.Graph(id="wellness-plot"),
+                    dcc.Graph(id="speedtempo-plot"),
+                ]
+            )
+        ]
+    )
+
+    # 4) AI SESSION VIEW → session design generator
+    ai_view = html.Div(
+        id="ai-view",
+        children=[
+            html.H3("AI Session Builder", className="mt-3"),
+            html.P(
+                "Use this to generate a draft training session based on your coach style, "
+                "recent trends, and upcoming load.",
+                className="text-muted",
+            ),
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label("Coach Style"),
+                    dcc.Dropdown(
+                        id="ai-plan-coach",
+                        options=[
+                            {"label": "Speed & Power Coach", "value": "Speed & Power Coach"},
+                            {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
+                            {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
+                            {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
+                            {"label": "Holistic Readiness Coach", "value": "Holistic Readiness Coach"},
+                        ],
+                        placeholder="Choose coach persona",
+                        clearable=False,
+                    ),
+                    html.Br(),
+                    dbc.Label("Main session goal / focus"),
+                    dcc.Textarea(
+                        id="ai-plan-goal",
+                        placeholder="e.g., Quality 60–80m accel work with low fatigue; keep hamstrings happy before Saturday comp.",
+                        style={"width": "100%", "height": "80px"},
+                    ),
+                    html.Br(),
+                    dbc.Label("Approx. session duration (min)"),
+                    dcc.Input(
+                        id="ai-plan-duration",
+                        type="number",
+                        min=10,
+                        max=120,
+                        step=5,
+                        value=45,
+                        className="form-control",
+                    ),
+                    html.Br(),
+                    dbc.Button(
+                        "Generate Session Plan",
+                        id="btn-generate-plan",
+                        color="primary",
+                        className="w-100 mt-2",
+                    ),
+                    html.Div(id="ai-plan-status", className="mt-2 text-danger"),
+                ], md=5),
+                dbc.Col([
+                    html.H5("Suggested Session Plan", className="mt-2"),
+                    dcc.Loading(
+                        children=html.Div(id="ai-plan-output", className="mt-2"),
+                        type="circle",
+                    ),
+                ], md=7),
+            ], className="g-3"),
+        ],
+        style={"display": "none"},
+    )
+
+
+    # Bottom nav (fixed)
+    bottom_nav = html.Div(
+        [
+            # sliding underline (must come first so it sits behind icons)
+            html.Div(id="nav-underline", className="nav-underline"),
+
+            dbc.Row(
+                [
+                    dbc.Col(
+                        html.Div(
+                            [
+                                html.I(id="icon-home", className="bi bi-house nav-icon"),
+                                html.Div("Home", className="nav-label"),
+                            ],
+                            id="nav-home",
+                            n_clicks=0,
+                            className="nav-item",
+                        )
+                    ),
+                    dbc.Col(
+                        html.Div(
+                            [
+                                html.I(id="icon-calendar", className="bi bi-calendar-event nav-icon"),
+                                html.Div("Calendar", className="nav-label"),
+                            ],
+                            id="nav-calendar",
+                            n_clicks=0,
+                            className="nav-item",
+                        )
+                    ),
+                    dbc.Col(
+                        html.Div(
+                            [
+                                html.I(id="icon-graphs", className="bi bi-bar-chart-line nav-icon"),
+                                html.Div("Graphs", className="nav-label"),
+                            ],
+                            id="nav-graphs",
+                            n_clicks=0,
+                            className="nav-item",
+                        )
+                    ),
+                    dbc.Col(
+                        html.Div(
+                            [
+                                html.I(id="icon-ai", className="bi bi-cpu nav-icon"),
+                                html.Div("AI", className="nav-label"),
+                            ],
+                            id="nav-ai",
+                            n_clicks=0,
+                            className="nav-item",
+                        )
+                    ),
+                ],
+                className="g-0",
+            ),
+        ],
+        className="bottom-nav",
+    )
+
+    return dbc.Container(
+        [
+            app_header(center=False),
+            logout_button,
+
+            dcc.Store(id="selected-date-store"),
+            dcc.Store(id="calendar-window-start"),
+
+            # Athlete selector (only for coach)
+            athlete_selector_row,
+
+            # ---- YOUR FOUR SECTIONS MUST BE LIST ITEMS ↓↓↓ ----
+            home_view,
+            calendar_view,
+            graphs_view,
+            ai_view,
+
+            bottom_nav,
         ],
         fluid=True,
         className="pb-5",
@@ -2257,6 +2499,10 @@ app.layout = html.Div(
     [
         dcc.Location(id="url", refresh=False),
         dcc.Store(id="auth-store", storage_type="session"),
+        dcc.Store(id="active-nav", data="home"),
+        dcc.Store(id="active-tab-store", data="home"),
+        dcc.Store(id="bottom-nav-click", data="home"),
+        # 👈 add this
 
         html.Div(
             id="splash-screen",
@@ -2264,7 +2510,7 @@ app.layout = html.Div(
                 html.Img(src="/assets/app_icon.png", className="splash-logo"),
                 html.H2("Adaptive Coaching Intelligence", className="splash-title"),
                 html.P("AI-aligned athlete & coaching feedback", className="splash-subtitle"),
-                html.Div(className="spinner")  # spiral loader
+                html.Div(className="spinner")
             ]
         ),
 
@@ -2277,9 +2523,268 @@ app.layout = html.Div(
 )
 
 
+
 # ============================================================
 #  Callbacks
 # ============================================================
+
+# ---------------------------------------------------------
+# BOTTOM NAVIGATION CALLBACK
+# ---------------------------------------------------------
+
+bottom_nav = html.Div(
+    [
+        html.Div(id="nav-underline", className="nav-underline"),
+
+        dbc.Row(
+            [
+                dbc.Col(
+                    html.Div([
+                        html.I(id="icon-home", className="bi bi-house nav-icon"),
+                        html.Div("Home", className="nav-label")
+                    ], id="nav-home", n_clicks=0, className="nav-item"),
+                ),
+                dbc.Col(
+                    html.Div([
+                        html.I(id="icon-calendar", className="bi bi-calendar-check nav-icon"),
+                        html.Div("Calendar", className="nav-label")
+                    ], id="nav-calendar", n_clicks=0, className="nav-item"),
+                ),
+                dbc.Col(
+                    html.Div([
+                        html.I(id="icon-graphs", className="bi bi-graph-up-arrow nav-icon"),
+                        html.Div("Graphs", className="nav-label")
+                    ], id="nav-graphs", n_clicks=0, className="nav-item"),
+                ),
+                dbc.Col(
+                    html.Div([
+                        html.I(id="icon-ai", className="bi bi-cpu nav-icon"),
+                        html.Div("AI", className="nav-label")
+                    ], id="nav-ai", n_clicks=0, className="nav-item"),
+                ),
+            ],
+            className="g-0",
+        ),
+    ],
+    className="bottom-nav"
+)
+
+
+
+@app.callback(
+    [
+        Output("home-view", "style"),
+        Output("calendar-view", "style"),
+        Output("graphs-view", "style"),
+        Output("ai-view", "style"),
+        Output("bottom-nav-click", "data"),
+    ],
+    [
+        Input("nav-home", "n_clicks"),
+        Input("nav-calendar", "n_clicks"),
+        Input("nav-graphs", "n_clicks"),
+        Input("nav-ai", "n_clicks"),
+    ],
+)
+def show_section(h, c, g, a):
+    ctx = callback_context
+    if not ctx.triggered:
+        tab = "home"
+    else:
+        tab = ctx.triggered[0]["prop_id"].split(".")[0].replace("nav-", "")
+
+    styles = {
+        "home": {"display": "block"},
+        "calendar": {"display": "block"},
+        "graphs": {"display": "block"},
+        "ai": {"display": "block"},
+    }
+
+    # hide all except target
+    out = []
+    for key in ["home", "calendar", "graphs", "ai"]:
+        out.append(styles[key] if key == tab else {"display": "none"})
+
+    out.append(tab)  # last output for bottom-nav-click
+    return out
+
+
+
+@app.callback(
+    [
+        Output("ai-plan-output", "children", allow_duplicate=True),
+        Output("ai-plan-status", "children", allow_duplicate=True),
+    ],
+    Input("btn-generate-plan", "n_clicks"),
+    [
+        State("athlete-dropdown", "value"),
+        State("ai-plan-coach", "value"),
+        State("ai-plan-goal", "value"),
+        State("ai-plan-duration", "value"),
+    ],
+    prevent_initial_call=True
+)
+def generate_ai_session_plan(n_clicks, athlete_name, coach_mode, goal, duration):
+
+    if not n_clicks:
+        raise PreventUpdate
+
+    if not athlete_name:
+        return no_update, "Select an athlete first."
+
+    if not coach_mode:
+        return no_update, "Choose a coach style."
+
+    goal = (goal or "").strip()
+    if not goal:
+        return no_update, "Add a main goal/focus for the session."
+
+    try:
+        dur = int(duration) if duration is not None else 45
+    except Exception:
+        dur = 45
+
+    df = load_tab(athlete_name)
+    trend_context = build_trend_context(df, days=14)
+    history_text = build_text_history(df, max_rows=7)
+    persona = persona_prompt(coach_mode)
+
+    system_msg = (
+        persona
+        + " You are now designing a single practical training session. "
+          "It must be realistic for a track & field / field-sport athlete, "
+          "appropriate to recent load and wellness trends, and not exceed the suggested duration. "
+          "Do not diagnose injuries. Focus on structure: warm-up, main sets, and cool-down / recovery."
+    )
+
+    user_msg = (
+        f"Athlete sheet: {athlete_name}\n"
+        f"Session goal: {goal}\n"
+        f"Target duration: ~{dur} minutes.\n\n"
+        f"Recent trend summary:\n{trend_context}\n\n"
+        f"Recent notes and training history:\n{history_text}\n\n"
+        "TASK:\n"
+        "- Design one session that fits the goal and duration.\n"
+        "- Break it into clear sections (e.g., Warm-up, Main, Optional Top-up, Cool down).\n"
+        "- Use simple bullet points and volumes (sets × reps, distances, rest).\n"
+        "- Keep the language athlete-friendly and concise."
+    )
+
+    text = call_openai_chat(
+        [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_msg},
+        ]
+    )
+
+    plan_div = html.Div(
+        [
+            html.Div(
+                text,
+                style={
+                    "whiteSpace": "pre-wrap",
+                    "fontSize": "0.95rem",
+                },
+            )
+        ],
+        className="ai-session-plan-card",
+    )
+
+    return plan_div, ""
+
+@app.callback(
+    Output("ai-plan-output", "children"),
+    Input("btn-generate-ai-plan", "n_clicks"),
+    State("athlete-dropdown", "value"),
+    State("ai-plan-persona", "value"),
+    State("ai-plan-focus", "value"),
+    State("ai-plan-target", "value"),
+    prevent_initial_call=True
+)
+def generate_ai_training_session(n, athlete_name, persona, focus, target_day):
+
+    if not n:
+        raise PreventUpdate
+
+    # --- Load athlete data ---
+    df = load_tab(athlete_name)
+    today = today_adl()
+
+    # --- Build contextual info ---
+    trend_text = build_trend_context(df, 14)
+    history_text = build_text_history(df, 7)
+    upcoming_text = build_upcoming_context(df, today)
+
+    # --- Determine the target date ---
+    if target_day == "today":
+        target_date = today
+    else:
+        d = df.copy()
+        d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
+
+        fut = d[d["Date"] >= today]
+        fut = fut[fut["Workout"].astype(str).str.strip() != ""]  # upcoming programmed sessions
+
+        target_date = fut["Date"].min() if not fut.empty else today
+
+    # --- Persona selection ---
+    persona_prompt = SESSION_COACH_PERSONAS.get(persona, "")
+    if not persona_prompt:
+        persona_prompt = (
+            "You are a supportive, evidence-informed performance coach who creates "
+            "safe, high-quality sprint / conditioning / gym training sessions."
+        )
+
+    # --- System message (rules for the AI) ---
+    system_msg = (
+        persona_prompt +
+        " You design complete training sessions including warmup, main block, "
+        "and optional gym. Keep recommendations realistic, safe, clear, "
+        "and never diagnose injuries or medical issues."
+    )
+
+    # --- User message (input info for the AI) ---
+    user_msg = (
+        f"Athlete: {athlete_name}\n"
+        f"Target Date: {target_date}\n"
+        f"Focus Area: {focus}\n\n"
+        f"Recent Trends:\n{trend_text}\n\n"
+        f"Recent Notes:\n{history_text}\n\n"
+        f"Upcoming Sessions:\n{upcoming_text}\n\n"
+        "TASK:\n"
+        "- Design a complete training session.\n"
+        "- Include WARMUP, MAIN BLOCK, and optional GYM WORK.\n"
+        "- Specify distances, sets × reps, rest intervals, intensities.\n"
+        "- Respect fatigue, mood, readiness, and upcoming loads.\n"
+        "- Provide 2–3 coaching cues that fit the session.\n"
+        "- Keep the structure clean, readable, and athlete friendly.\n"
+    )
+
+    # --- Call AI ---
+    response = call_openai_chat([
+        {"role": "system", "content": system_msg},
+        {"role": "user", "content": user_msg},
+    ])
+
+    # --- HTML Return (Arial font + formatted card) ---
+    return html.Div(
+        [
+            html.Div("🤖 AI Session Plan", className="ai-title"),
+            html.Div(
+                response,
+                className="ai-plan-text",
+                style={
+                    "fontFamily": "Arial, sans-serif",
+                    "whiteSpace": "pre-wrap",
+                    "lineHeight": "1.45",
+                    "fontSize": "15px"
+                },
+            ),
+        ],
+        className="ai-card ai-card-blue",
+        style={"fontFamily": "Arial, sans-serif"}
+    )
+
 
 # --- Render page (login vs main) ---
 @app.callback(
@@ -2302,7 +2807,6 @@ def render_page(auth_data):
     State("pass_input", "value"),
     prevent_initial_call=True
 )
-
 def do_login(n_clicks, username, password):
     if not n_clicks:
         raise PreventUpdate
@@ -2310,22 +2814,29 @@ def do_login(n_clicks, username, password):
     if not username or not password:
         return {"authed": False}, "Enter both username and password."
 
-    # Check against USER_LOGINS loaded from Render
-    for athlete_name, info in USER_LOGINS.items():
-        if (
-            username.strip().lower() == str(info["username"]).strip().lower()
-            and password.strip() == str(info["password"]).strip()
-        ):
+    # Check against USER_LOGINS loaded from env
+    for athlete_key, info in USER_LOGINS.items():
+        u = str(info.get("username", "")).strip().lower()
+        p = str(info.get("password", "")).strip()
+        role = str(info.get("role", "athlete")).lower()
+        sheet = info.get("sheet", "")
+
+        if username.strip().lower() == u and password.strip() == p:
+            is_coach = (role == "coach")
+
             return (
                 {
                     "authed": True,
-                    "athlete_name": athlete_name,
-                    "athlete_sheet": info.get("sheet")
+                    "username": username.strip(),
+                    "athlete_name": athlete_key,
+                    "athlete_sheet": sheet,
+                    "is_coach": is_coach,
                 },
                 ""
             )
 
     return {"authed": False}, "Incorrect username or password."
+
 
 @app.callback(
     Output("auth-store", "data", allow_duplicate=True),
@@ -2825,6 +3336,43 @@ def reset_session_inputs(n):
         "", "", "",       # AI 1, AI 2, save-status resets
     )
 
+app.clientside_callback(
+    """
+    function(activeTab){
+        // remove active class from all
+        const tabs = ["home", "calendar", "graphs", "ai"];
+        tabs.forEach(t => {
+            document.getElementById("nav-" + t).classList.remove("active");
+            document.getElementById("icon-" + t).classList.remove("bounce");
+            document.getElementById("icon-" + t).classList.remove("wobble");
+        });
+
+        // add active class
+        const active = document.getElementById("nav-" + activeTab);
+        const icon = document.getElementById("icon-" + activeTab);
+
+        if(active){
+            active.classList.add("active");
+
+            // bounce + wobble animation
+            icon.classList.add("bounce");
+            setTimeout(() => icon.classList.add("wobble"), 120);
+
+            // underline movement
+            const underline = document.getElementById("nav-underline");
+            const index = tabs.indexOf(activeTab);
+            if(underline){
+                underline.style.transform = `translateX(${index * 100}%)`;
+            }
+        }
+
+        return activeTab;
+
+    }
+    """,
+    Output("active-tab-store", "data"),
+    Input("bottom-nav-click", "data"),
+)
 
 # ============================================================
 #  Run
