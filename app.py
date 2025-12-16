@@ -547,7 +547,7 @@ def persona_prompt(mode: str) -> str:
             "You emphasise smart adjustments to load, jumps, and exercise selection to keep power high without unnecessary fatigue."
         ),
         "Holistic Readiness Coach": (
-            "You are a holistic readiness coach. "
+            "You are a recovery and readiness coach. "
             "You integrate physical load, fatigue, soreness, mood, and life stress. "
             "You help the athlete balance training, sleep, and recovery, and you keep the message supportive but honest."
         ),
@@ -575,7 +575,7 @@ SESSION_COACH_PERSONAS = {
     "Strength & Power Coach":
         "You design gym-based strength and power progressions that complement sprint qualities.",
 
-    "Holistic Readiness Coach":
+    "Recovery & Readiness Coach":
         "You design balanced sessions considering fatigue, readiness, mood, and life stressors.",
 }
 
@@ -2235,7 +2235,7 @@ def build_main_layout(auth_data):
                             ),
 
                             dbc.Button(
-                                "Save & Generate AI Suggestions",
+                                "Log Session & Generate AI Coaching Feedback",
                                 id="btn-generate-ai",
                                 color="secondary",
                                 className="mt-3 w-100 ai-save-btn",
@@ -2248,7 +2248,7 @@ def build_main_layout(auth_data):
                         dbc.Col([
                             dbc.Row([
                                 dbc.Col([
-                                    dbc.Label("AI Suggestion 1 Focus"),
+                                    dbc.Label("Primary Coaching Feedback"),
                                     dcc.Dropdown(
                                         id="ai-mode-1",
                                         options=[
@@ -2256,15 +2256,17 @@ def build_main_layout(auth_data):
                                             {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
                                             {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
                                             {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
-                                            {"label": "Holistic Readiness Coach", "value": "Holistic Readiness Coach"},
+                                            {"label": "Recovery & Readiness Coach", "value": "Holistic Readiness Coach"},
                                         ],
                                         value=None,
-                                        placeholder="Select Primary Coach Feedback",
+                                        placeholder="Select Coach Feedback",
+                                        searchable=False,  # ✅ removes the caret mark
                                         clearable=False,
+                                        className="aw-dropdown"
                                     ),
                                 ], md=6),
                                 dbc.Col([
-                                    dbc.Label("AI Suggestion 2 Focus"),
+                                    dbc.Label("Secondary Coaching Feedback"),
                                     dcc.Dropdown(
                                         id="ai-mode-2",
                                         options=[
@@ -2272,11 +2274,13 @@ def build_main_layout(auth_data):
                                             {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
                                             {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
                                             {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
-                                            {"label": "Holistic Readiness Coach", "value": "Holistic Readiness Coach"},
+                                            {"label": "Recovery & Readiness Coach", "value": "Holistic Readiness Coach"},
                                         ],
                                         value=None,
-                                        placeholder="Select Secondary Coach Feedback",
+                                        placeholder="Select Coach Feedback",
+                                        searchable=False,  # ✅ removes the caret mark
                                         clearable=False,
+                                        className="aw-dropdown"
                                     ),
                                 ], md=6),
                             ], className="g-3"),
@@ -2350,15 +2354,15 @@ def build_main_layout(auth_data):
     ai_view = html.Div(
         id="ai-view",
         children=[
-            html.H3("AI Session Builder", className="mt-3"),
+            html.H3("AI Training Session Builder", className="mt-3"),
             html.P(
-                "Use this to generate a draft training session based on your coach style, "
+                "Use this to generate a training session based on your current focus, "
                 "recent trends, and upcoming load.",
                 className="text-muted",
             ),
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("Coach Style"),
+                    dbc.Label("Coaching Focus"),
                     dcc.Dropdown(
                         id="ai-plan-coach",
                         options=[
@@ -2366,9 +2370,9 @@ def build_main_layout(auth_data):
                             {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
                             {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
                             {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
-                            {"label": "Holistic Readiness Coach", "value": "Holistic Readiness Coach"},
+                            {"label": "Recovery & Readiness Coach", "value": "Recovery & Readiness Coach"},
                         ],
-                        placeholder="Choose coach persona",
+                        placeholder="Select your Coach",
                         clearable=False,
                     ),
                     html.Br(),
@@ -3235,11 +3239,12 @@ def on_day_click(n_clicks_list, athlete_name):
     header = html.Div([
         # Toggle Button
         html.Button(
-            "Session Details ▼",
+            "Session Details",
             id="session-header-toggle",
             n_clicks=0,
             className="session-header-toggle"
-        ),
+        )
+,
 
         # Collapsible Content
         dbc.Collapse(
@@ -3366,8 +3371,7 @@ app.clientside_callback(
             }
         }
 
-        return activeTab;
-
+        return window.dash_clientside.no_update;
     }
     """,
     Output("active-tab-store", "data"),
