@@ -525,9 +525,9 @@ def persona_prompt(mode: str) -> str:
     """
     Coaching personas tuned to be evidence-informed, SHORT, and clearly distinct.
     """
-    PERSONAS = {
-        "Speed & Power Coach": (
-            "You are a speed and power coach who thinks like a track sprint coach. "
+    PERSONA_PROMPTS = {
+        "Acceleration & Speed Coach": (
+            "You are an acceleration and speed coach who thinks like a track sprint coach. "
             "You focus on acceleration, max velocity, high-quality explosive reps, and fresh, snappy contacts. "
             "You give very direct, practical cues about intensity, contact time, and how many fast reps to keep."
         ),
@@ -546,7 +546,7 @@ def persona_prompt(mode: str) -> str:
             "You think in sets × reps × load, jump quality, bar speed, and gym/plyometric progressions. "
             "You emphasise smart adjustments to load, jumps, and exercise selection to keep power high without unnecessary fatigue."
         ),
-        "Holistic Readiness Coach": (
+        "Recovery & Readiness Coach": (
             "You are a recovery and readiness coach. "
             "You integrate physical load, fatigue, soreness, mood, and life stress. "
             "You help the athlete balance training, sleep, and recovery, and you keep the message supportive but honest."
@@ -556,13 +556,31 @@ def persona_prompt(mode: str) -> str:
             "You summarise what the trends suggest and give one or two concrete action steps."
         ),
     }
-    return PERSONAS.get(mode, PERSONAS["General"])
+    return PERSONA_PROMPTS.get(mode, PERSONA_PROMPTS["General"])
+
+PERSONA_KEYWORDS = {
+    "Acceleration & Speed Coach": [
+        "acceleration", "speed", "max velocity", "explosive", "contact time", "fast reps"
+    ],
+    "Tempo & Endurance Coach": [
+        "tempo", "aerobic", "endurance", "pacing", "conditioning"
+    ],
+    "Technical Sprint Coach": [
+        "posture", "angles", "mechanics", "arm action", "technique", "rhythm"
+    ],
+    "Strength & Power Coach": [
+        "strength", "load", "gym", "sets", "reps", "bar speed", "plyometric"
+    ],
+    "Recovery & Readiness Coach": [
+        "fatigue", "recovery", "sleep", "soreness", "readiness", "stress"
+    ],
+}
 
 # ---------------------------------------------------------
 # AI SESSION DESIGN PERSONA PROFILES (for session generator)
 # ---------------------------------------------------------
 SESSION_COACH_PERSONAS = {
-    "Speed & Power Coach":
+    "Acceleration & Speed Coach":
         "You design sprint sessions emphasising projection, acceleration, and max-velocity quality. "
         "You protect freshness and avoid junk reps.",
 
@@ -929,26 +947,27 @@ def make_ai_suggestions(
     ai_mode_2: str,
 ):
     """
-    Unified AI engine (v3):
-      - Uses trend analysis (14-day)
-      - Uses recent text history (notes + sets/reps + track + AI)
-      - Uses current session metrics
-      - Persona-based coaching suggestions
-      - Each output starts with "<FirstName>,"
-      - Output: 2–3 natural coaching sentences (not robotic)
+    Unified AI engine (v3)
+    Returns:
+        (ai_suggestion_1: str, ai_suggestion_2: str)
+    IMPORTANT: This function is called inside a Dash callback and
+    MUST always return exactly two strings.
     """
 
+    # -------------------------------
+    # Load athlete data
+    # -------------------------------
     df = load_tab(athlete_name)
 
-    # Extract first name ONLY
-    first_name = athlete_name.split()[0]
+    # Extract first name
+    first_name = athlete_name.split()[0] if athlete_name else "Athlete"
 
-    # Trend summary
+    # Build shared context
     summary = build_context_summary(df)
     trend_context = build_trend_context(df)
     history_text = build_text_history(df)
 
-    # Build session snapshot
+    # Session snapshot
     session_block = (
         f"Current session — {selected_date}\n"
         f"RPE (1–10): {session_rpe}\n"
@@ -960,31 +979,31 @@ def make_ai_suggestions(
         f"Track reps & times: {track_reps_times}\n"
     )
 
-    # Helper to construct messages for each persona
+    # -------------------------------
+    # Helper to build persona messages
+    # -------------------------------
     def build_messages(mode: str):
         persona = persona_prompt(mode)
 
         system_msg = (
             persona
-            + "\nYou are providing short, specific, natural coaching advice."
-              "Avoid guessing injuries or medical issues. Avoid generic advice."
-              "Your tone should match the persona style."
-              "Output must be 3-4 sentences (~100-150 words)."
-              f"\nAlways begin your response with: '{first_name},'"
+            + "\nYou are providing short, specific, natural coaching advice. "
+              "Avoid guessing injuries or medical issues. "
+              "Avoid generic advice. "
+              "Your tone must match the persona style. "
+              f"Always begin your response with: '{first_name},'"
         )
 
         user_msg = (
-            f"ATHLETE FIRST NAME: {first_name}\n\n"
             f"Recent trend summary:\n{summary}\n\n"
             f"Detailed trend context:\n{trend_context}\n\n"
-            f"Recent note + training history:\n{history_text}\n\n"
-            f"Current session data:\n{session_block}\n\n"
-            "TASK:\n"
+            f"Recent history:\n{history_text}\n\n"
+            f"{session_block}\n"
+            f"TASK:\n"
             f"- Write coaching feedback as the {mode} persona.\n"
-            "- Start with: '<FirstName>,'\n"
-            "- Make the tone natural, like a real coach speaking.\n"
-            "- Keep it concise but meaningful (2–3 sentences).\n"
-            "- Give 3-4 clear, actionable recommendations for the next 24–48 hours.\n"
+            f"- Start with '{first_name},'\n"
+            f"- Keep it concise (2–3 sentences).\n"
+            f"- Give 3–4 clear, actionable recommendations for the next 24–48 hours.\n"
         )
 
         return [
@@ -992,14 +1011,55 @@ def make_ai_suggestions(
             {"role": "user", "content": user_msg},
         ]
 
-    # Generate both AI suggestions
-    ai1 = call_openai_chat(build_messages(ai_mode_1))
-    ai2 = call_openai_chat(build_messages(ai_mode_2))
+    # -------------------------------
+    # PRIMARY AI
+    # -------------------------------
+    primary_messages = build_messages(ai_mode_1)
+    primary_messages[0]["content"] += (
+        "\nROLE: PRIMARY COACH\n"
+        "Set the main training priority. Be decisive and focused. Listen to the athlete information. Use 3-4 sentences"
+    )
+
+    ai1 = call_openai_chat(primary_messages)
+
+    # -------------------------------
+    # SECONDARY AI
+    # -------------------------------
+    blocked_terms = PERSONA_KEYWORDS.get(ai_mode_1, [])
+
+    secondary_system_msg = (
+        persona_prompt(ai_mode_2)
+        + "\nROLE: SECONDARY COACH\n"
+          "Support or monitor the primary focus — do NOT compete with it.\n"
+          f"Avoid these concepts entirely: {', '.join(blocked_terms)}.\n"
+          "Offer awareness cues or recovery considerations only.\n\n"
+          f"PRIMARY COACH FEEDBACK:\n{ai1}\n\n"
+          f"Always begin with '{first_name},'"
+    )
+
+    secondary_user_msg = (
+        f"Recent trend summary:\n{summary}\n\n"
+        f"Detailed trend context:\n{trend_context}\n\n"
+        f"Recent history:\n{history_text}\n\n"
+        f"{session_block}\n"
+        "TASK:\n"
+        "- Add a complementary perspective ONLY.\n"
+        "- Provide 1–2 monitoring cues.\n"
+        "- End with ONE reflective question.\n"
+    )
+
+    ai2 = call_openai_chat([
+        {"role": "system", "content": secondary_system_msg},
+        {"role": "user", "content": secondary_user_msg},
+    ])
+
+    # -------------------------------
+    # FINAL SAFETY GUARANTEE
+    # -------------------------------
+    ai1 = ai1 or ""
+    ai2 = ai2 or ""
 
     return ai1, ai2
-
-
-
 
 
 # ============================================================
@@ -2252,7 +2312,7 @@ def build_main_layout(auth_data):
                                     dcc.Dropdown(
                                         id="ai-mode-1",
                                         options=[
-                                            {"label": "Speed & Power Coach", "value": "Speed & Power Coach"},
+                                            {"label": "Acceleration & Speed Coach", "value": "Acceleration & Speed Coach"},
                                             {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
                                             {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
                                             {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
@@ -2270,7 +2330,7 @@ def build_main_layout(auth_data):
                                     dcc.Dropdown(
                                         id="ai-mode-2",
                                         options=[
-                                            {"label": "Speed & Power Coach", "value": "Speed & Power Coach"},
+                                            {"label": "Acceleration & Speed Coach", "value": "Acceleration & Speed Coach"},
                                             {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
                                             {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
                                             {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
@@ -2366,7 +2426,7 @@ def build_main_layout(auth_data):
                     dcc.Dropdown(
                         id="ai-plan-coach",
                         options=[
-                            {"label": "Speed & Power Coach", "value": "Speed & Power Coach"},
+                            {"label": "Acceleration & Speed Coach", "value": "Acceleration & Speed Coach"},
                             {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
                             {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
                             {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
