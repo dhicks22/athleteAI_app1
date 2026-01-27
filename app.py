@@ -336,48 +336,37 @@ def load_users_table():
 
 
 def get_day_status(df, date_obj):
-    """
-    Return structured info about whether a given date has:
-      - a logged session (notes / rpe / load)
-      - rpe value
-      - whether athlete notes exist
-      - whether load exists
-    """
     if df.empty or "Date" not in df.columns:
-        return {
-            "logged": False,
-            "rpe": None,
-            "has_notes": False,
-            "has_load": False,
-        }
+        return {"logged": False, "rpe": None, "has_notes": False, "has_load": False}
 
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
+    d = df.copy()
+    d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
 
-    rows = df[df["Date"] == date_obj]
+    rows = d[d["Date"] == date_obj]
     if rows.empty:
-        return {
-            "logged": False,
-            "rpe": None,
-            "has_notes": False,
-            "has_load": False,
-        }
+        return {"logged": False, "rpe": None, "has_notes": False, "has_load": False}
 
     row = rows.iloc[-1]
 
-    rpe = pd.to_numeric(row.get("sRPE", None), errors="coerce")
-    notes = str(row.get("Athlete_Notes", "")).strip()
+    rpe = pd.to_numeric(row.get("RPE_Post_Session", row.get("sRPE", None)), errors="coerce")
     load = pd.to_numeric(row.get("Load", None), errors="coerce")
 
-    logged = False
-    if (pd.notna(rpe) and rpe > 0) or notes not in ["", "nan", ""] or pd.notna(load):
-        logged = True
+    notes = str(row.get("Athlete_Notes", "")).strip().lower()
+    invalid_notes = {"", "nan", "none", "nil", "0", "n/a", "na"}
+
+    has_notes = notes not in invalid_notes
+    has_rpe = pd.notna(rpe) and rpe > 0
+    has_load = pd.notna(load) and load > 0
+
+    logged = has_notes or has_rpe or has_load
 
     return {
         "logged": logged,
-        "rpe": rpe if pd.notna(rpe) else None,
-        "has_notes": notes not in ["", "nan", ""],
-        "has_load": pd.notna(load),
+        "rpe": float(rpe) if has_rpe else None,
+        "has_notes": has_notes,
+        "has_load": has_load,
     }
+
 
 def load_tab(tab_name: str) -> pd.DataFrame:
     """Load worksheet to DataFrame with parsed Date."""
