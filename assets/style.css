@@ -1,508 +1,1040 @@
 /* ============================================================
-   0. THEME VARIABLES — Light Mode (Default)
+   AthleteAI / Dashboard Theme (Revised + Consolidated v4)
+   - TOP ROW: Athlete + Today aligned in one row
+   - DIAL GRID: 4 metric cards in a clean row underneath (responsive wrap)
+   - DIAL SIZE: medium (between small + huge)
+   - FLIP BACK: uses FULL CARD area for writing (key fix)
+   - Keeps dropdown fixes, background, bottom nav, flip cards
 ============================================================ */
-:root {
-    --bg: #f7f9fc;
-    --text: #1a1a1a;
-    --text-muted: #6e6e6e;
 
-    --card-bg: #ffffff;
-    --card-shadow: rgba(0, 0, 0, 0.08);
-    --border: #e1e5ea;
+/* ============================================================
+   0) THEME TOKENS
+============================================================ */
+:root{
+  --bg:#f7f9fc;
+  --text:#1a1a1a;
+  --text-muted:#6e6e6e;
 
-    --accent: #1e88e5;
-    --accent-soft: rgba(30,136,229,0.15);
+  --card-bg:#ffffff;
+  --card-shadow:rgba(0,0,0,0.08);
+  --border:#e1e5ea;
 
-    --pill-grey: #CFD8DC;
-    --pill-blue: #4285F4;
-    --pill-green: #4CAF50;
-    --pill-orange: #FF9800;
-    --pill-red: #F44336;
+  --accent:#1e88e5;
+  --accent-soft:rgba(30,136,229,0.15);
 
-    --dial-bg: #eceff1;
+  --pill-grey:#CFD8DC;
+  --pill-blue:#4285F4;
+  --pill-green:#4CAF50;
+  --pill-orange:#FF9800;
+  --pill-red:#F44336;
+
+  --dial-bg:#eceff1;
+
+  /* Dashboard sizing */
+  --mini-card-h: 72px;
+
+  /* DIALS: medium (bigger than original, smaller than giant) */
+  --dial-size: 135px;        /* medium sweet spot */
+  --dial-thickness: 18px;
+
+  /* Metric cards: compact like your “good” screenshot */
+  --metric-card-h: 170px;    /* key: stops floaty layout */
+
+  /* Dial contrast tokens */
+  --dial-track: rgba(0,0,0,0.10);
+  --dial-stroke: rgba(0,0,0,0.14);
+  --dial-stroke-hi: rgba(255,255,255,0.75);
+  --dial-halo: rgba(255,255,255,0.45);
+
+  --dial-blue: #2f80ed;
+  --dial-green:#2fb344;
+  --dial-amber:#f5b301;
+  --dial-pink:#ff4fa3; /* weekly exposure */
+
+  /* Bottom nav height so padding stays in sync */
+  --bottom-nav-h: 65px;
+}
+
+[data-theme="dark"]{
+  --bg:#0e0f11;
+  --text:#f2f2f2;
+  --text-muted:#9ca3af;
+
+  --card-bg:#16181c;
+  --card-shadow:rgba(0,0,0,0.60);
+  --border:#2a2e33;
+
+  --accent:#4dabf7;
+  --accent-soft:rgba(77,171,247,0.15);
+
+  --dial-bg:#22252b;
+
+  --dial-track: rgba(255,255,255,0.10);
+  --dial-stroke: rgba(255,255,255,0.14);
+  --dial-stroke-hi: rgba(0,0,0,0.55);
+  --dial-halo: rgba(0,0,0,0.25);
 }
 
 /* ============================================================
-   DARK MODE — TrainHeroic Inspired
+   1) GLOBAL BASE
 ============================================================ */
-[data-theme="dark"] {
-    --bg: #0e0f11;
-    --text: #f2f2f2;
-    --text-muted: #9ca3af;
+*{ box-sizing:border-box; }
 
-    --card-bg: #16181c;
-    --card-shadow: rgba(0,0,0,0.6);
-    --border: #2a2e33;
+html, body{
+  width:100%;
+  min-height:100%;
+  margin:0;
+  padding:0;
+  overflow-x:hidden;
+}
 
-    --accent: #4dabf7;
-    --accent-soft: rgba(77,171,247,0.15);
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:-apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+  -webkit-font-smoothing:antialiased;
+  transition:background .25s ease, color .25s ease;
 
-    --dial-bg: #22252b;
+  /* Reserve space for fixed bottom nav */
+  padding-bottom: calc(var(--bottom-nav-h) + 18px);
+}
+
+/* Hide scrollbars without breaking scroll */
+*::-webkit-scrollbar{ width:0; height:0; }
+*{ scrollbar-width:none; }
+
+@media (prefers-reduced-motion: reduce){
+  *{ animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+}
+
+/* Dash wrapper */
+.app-shell{
+  position:relative;
+  min-height:100vh;
+  overflow:visible;
+  isolation:isolate;
 }
 
 /* ============================================================
-   GLOBAL
+   2) SCIENCE BACKGROUND (subtle overlay)
 ============================================================ */
-body {
-    margin: 0;
-    padding: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
-    -webkit-font-smoothing: antialiased;
-    transition: background 0.25s ease, color 0.25s ease;
-    padding-bottom: 80px; /* space for nav bar */
+.app-shell::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  pointer-events:none;
+
+  background-image:url("/assets/science-bg.png");
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+
+  opacity:0.14;
+  filter:blur(0.4px) saturate(1.15);
 }
 
-::-webkit-scrollbar { display: none; }
+.app-shell::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  pointer-events:none;
 
-/* ============================================================
-   SPLASH SCREEN
-============================================================ */
-#splash-screen {
-    position: fixed;
-    inset: 0;
-    background: var(--bg);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    animation: splashFade 1.3s ease-in-out forwards;
-    animation-delay: 0.7s;
-    z-index: 9999;
+  background:
+    radial-gradient(900px 500px at 20% 0%, rgba(30,136,229,0.10), rgba(0,0,0,0)),
+    radial-gradient(800px 450px at 90% 15%, rgba(38,166,154,0.08), rgba(0,0,0,0));
 }
-@keyframes splashFade { from{opacity:1;} to{opacity:0;visibility:hidden;} }
 
-.splash-logo { width: 120px; margin-bottom: 16px; }
-.splash-title { font-size: 24px; font-weight: 600; color: var(--accent); }
-.splash-subtitle { font-size: 15px; color: var(--text-muted); }
+[data-theme="dark"] .app-shell::before{
+  opacity:0.06;
+  filter:blur(0.7px) saturate(1.05);
+}
 
-.spinner {
-    width: 70px; height: 70px;
-    border: 6px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.9s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ============================================================
-   CARDS
-============================================================ */
-.card, .card-body, .login-card {
-    background: var(--card-bg) !important;
-    color: var(--text) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 14px !important;
-    box-shadow: 0 3px 8px var(--card-shadow) !important;
-    transition: 0.2s ease;
-}
-@media (min-width: 768px) {
-    .card:hover { transform: translateY(-3px); box-shadow: 0 8px 16px var(--card-shadow) !important; }
-}
-@media (max-width: 768px) {
-    .card { margin-bottom: 14px !important; }
+[data-theme="dark"] .app-shell::after{
+  background:
+    radial-gradient(900px 600px at 25% 10%, rgba(77,171,247,0.14), rgba(0,0,0,0)),
+    radial-gradient(800px 520px at 85% 20%, rgba(38,166,154,0.10), rgba(0,0,0,0)),
+    linear-gradient(180deg, rgba(0,0,0,0.35), rgba(0,0,0,0.65));
 }
 
 /* ============================================================
-   BUTTONS
+   3) SPLASH SCREEN
 ============================================================ */
-.btn-primary {
-    background: var(--accent) !important;
-    border-color: var(--accent) !important;
+#splash-screen{
+  position:fixed;
+  inset:0;
+  background:var(--bg);
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  animation:splashFade 1.3s ease-in-out forwards;
+  animation-delay:.7s;
+  z-index:9999;
 }
-.btn-secondary {
-    background: var(--border) !important;
-    color: var(--text) !important;
+
+@keyframes splashFade{
+  from{ opacity:1; }
+  to{ opacity:0; visibility:hidden; pointer-events:none; }
 }
-.ai-save-btn {
-    background-color: #35e359 !important;
-    border-color: #35e359 !important;
-    color: white !important;
+
+.splash-logo{ width:120px; margin-bottom:16px; }
+.splash-title{ font-size:24px; font-weight:600; color:var(--accent); }
+.splash-subtitle{ font-size:15px; color:var(--text-muted); }
+
+.spinner{
+  width:70px; height:70px;
+  border:6px solid var(--border);
+  border-top-color:var(--accent);
+  border-radius:50%;
+  animation:spin .9s linear infinite;
+}
+@keyframes spin{ to{ transform:rotate(360deg); } }
+
+/* ============================================================
+   4) CARDS / BOOTSTRAP OVERRIDES
+============================================================ */
+.card, .login-card{
+  background:var(--card-bg) !important;
+  color:var(--text) !important;
+  border:1px solid var(--border) !important;
+  border-radius:14px !important;
+  box-shadow:0 3px 8px var(--card-shadow) !important;
+  transition:transform .2s ease, box-shadow .2s ease;
+}
+
+.card-body{
+  background:transparent !important;
+  color:inherit !important;
+}
+
+@media (min-width:768px){
+  .card:hover{
+    transform:translateY(-3px);
+    box-shadow:0 8px 16px var(--card-shadow) !important;
+  }
+}
+@media (max-width:768px){
+  .card{ margin-bottom:14px !important; }
 }
 
 /* ============================================================
-   INPUTS
+   4b) DASH HEADER: Athlete + Today (TOP ROW FIX)
 ============================================================ */
-textarea, input, .form-control {
-    background: var(--card-bg) !important;
-    color: var(--text) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 12px !important;
+.top-metrics{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:16px;
+  align-items:center;
+  margin-bottom:18px;
+  justify-content:center;
+}
+
+.top-metrics .mini-card{
+  width:100%;
+  min-width:0;
+  height:var(--mini-card-h);
+  padding:12px 14px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+}
+
+.mini-card .mini-label{
+  font-size:12px;
+  font-weight:800;
+  color:var(--text-muted);
+  margin:0 0 6px 0;
+  letter-spacing:-0.01em;
+}
+
+.mini-card .mini-value{
+  font-size:18px;
+  font-weight:900;
+  color:var(--text);
+  margin:0;
+  line-height:1.05;
+  letter-spacing:-0.02em;
+}
+
+/* keep inputs/dropdowns inside card */
+.mini-card input,
+.mini-card .form-control,
+.mini-card .mini-input,
+.mini-card .Select-control{
+  height:36px !important;
+  border-radius:10px !important;
+  border:1px solid var(--border) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.75);
+  padding:6px 10px !important;
+  font-weight:650 !important;
+}
+
+@media (max-width:768px){
+  .top-metrics{ grid-template-columns: 1fr; }
 }
 
 /* ============================================================
-   APPLE-STYLE RING DIALS
+   4c) DIAL GRID (4 cards in a tight row like your “good” screenshot)
+   Wrapper must be class="dial-grid"
 ============================================================ */
-.dial-wrapper { display:flex; justify-content:center; align-items:center; padding:6px; }
-
-.dial-circle {
-    --size: 90px;
-    width: var(--size); height: var(--size);
-    border-radius: 50%;
-    position: relative;
-    display:flex; justify-content:center; align-items:center;
-    background: conic-gradient(var(--dial-color) calc(var(--dial-progress)*1%), var(--dial-bg) calc(var(--dial-progress)*1%));
-    transition: background 0.8s ease, transform 0.5s ease;
-    box-shadow: inset 0 0 8px var(--card-shadow);
-}
-.dial-circle.updated { animation: dialPulse 1.4s ease-out; }
-
-@keyframes dialPulse {
-    0% {transform:scale(1);}
-    50% {transform:scale(1.04);}
-    100%{transform:scale(1);}
+.dial-grid{
+  display:grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap:16px;
+  align-items:stretch;
+  margin-top:2px;
 }
 
-.dial-text {
-    position:absolute;
-    font-size:1.25rem;
-    font-weight:700;
-    color:var(--text);
+.dial-grid > *{ min-width:0; }
+
+@media (max-width:1100px){
+  .dial-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width:576px){
+  .dial-grid{ grid-template-columns: 1fr; }
 }
 
 /* ============================================================
-   STREAK DIAL
+   4d) METRIC CARDS: compact height + centered dial
 ============================================================ */
-.streak-circle {
-    width:140px; height:140px; border-radius:50%;
-    display:flex; justify-content:center; align-items:center;
-    background: conic-gradient(var(--streak-color) calc(var(--percent)*1%), var(--dial-bg) calc(var(--percent)*1%));
-    box-shadow:0 0 12px rgba(0,0,0,.15);
-    position:relative;
+.metric-card{
+  height:var(--metric-card-h);
+  display:flex;
+  flex-direction:column;
 }
-.streak-circle::before {
-    content:""; position:absolute;
-    width:78%; height:78%; border-radius:50%;
-    backdrop-filter:blur(6px);
-    background: radial-gradient(circle, rgba(255,255,255,.65), rgba(255,255,255,.1));
-}
-.streak-number { font-size:2.2rem; font-weight:700; }
 
-.streak-pulse { animation: streakPulse 2s infinite ease-in-out; }
-@keyframes streakPulse {
-    0% {box-shadow:0 0 10px rgba(255,193,7,0.4);}
-    50% {box-shadow:0 0 24px rgba(255,193,7,0.9);}
-    100% {box-shadow:0 0 10px rgba(255,193,7,0.4);}
+.metric-card .card-body{
+  height:100%;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-start;
+  padding:12px 14px !important;
+  gap:10px;
+}
+
+.metric-card .metric-title{
+  font-size:12px;
+  font-weight:850;
+  color:var(--text-muted);
+  margin:0;
+  letter-spacing:-0.01em;
+}
+
+.metric-card .dial-wrapper{
+  flex:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:0;
+  min-height:0;
 }
 
 /* ============================================================
-   CALENDAR
+   5) BUTTONS
 ============================================================ */
-.calendar-day {
-    background:var(--card-bg);
-    box-shadow:0 2px 5px var(--card-shadow);
-    border-radius:14px;
-    padding:12px 0;
-    text-align:center;
-    cursor:pointer;
-    transition:0.25s ease;
+.btn-primary{
+  background:var(--accent) !important;
+  border-color:var(--accent) !important;
 }
-.calendar-day:hover { transform:translateY(-3px); }
-.calendar-day.today { box-shadow:0 0 0 3px rgba(30,136,229,0.45); }
-.calendar-day.logged { box-shadow:0 0 0 3px rgba(76,175,80,0.45); }
-.calendar-day.out-month .cal-day-number { color:#b0bec5; }
-
-.rpe-dot {
-    width:10px; height:10px;
-    border-radius:50%;
-    margin:4px auto 0;
-    box-shadow:0 0 4px rgba(0,0,0,.25);
+.btn-secondary{
+  background:var(--border) !important;
+  color:var(--text) !important;
+}
+.ai-save-btn{
+  background-color:#35e359 !important;
+  border-color:#35e359 !important;
+  color:#fff !important;
 }
 
 /* ============================================================
-   AI SESSION TEXT STYLE
+   6) INPUTS (base)
 ============================================================ */
-.ai-plan-text {
-    font-family: Arial, sans-serif !important;
-    font-size: 16px;
-    line-height: 1.45;
-    white-space: pre-wrap;
+textarea, input, .form-control{
+  background:var(--card-bg) !important;
+  color:var(--text) !important;
+  border:1px solid var(--border) !important;
+  border-radius:12px !important;
 }
 
 /* ============================================================
-   BOTTOM NAV (iOS / TrainHeroic Style)
+   7) DROPDOWN CORNER ARTEFACT FIX (Dash/React-Select/Bootstrap)
 ============================================================ */
-.bottom-nav {
-    position:fixed;
-    bottom:0; left:0; right:0;
-    height:65px;
-    background:var(--card-bg);
-    border-top:1px solid var(--border);
-    box-shadow:0 -2px 8px rgba(0,0,0,0.25);
-    z-index:9999;
-}
-
-.nav-item {
-    text-align:center;
-    padding-top:4px;
-    cursor:pointer;
-    transition:0.25s ease;
-}
-
-.nav-icon {
-    font-size:22px;
-    color:#666;
-    transition:0.25s ease;
-}
-
-.nav-label {
-    font-size:12px;
-    color:#666;
-    font-weight:500;
-    transition:0.25s ease;
-}
-
-/* ---------- ACTIVE STATE ---------- */
-.nav-item.active .nav-icon {
-    color:#1e88e5 !important;
-    transform:scale(1.25);
-    text-shadow:
-        0 0 6px rgba(30,136,229,0.85),
-        0 0 12px rgba(30,136,229,0.55),
-        0 0 18px rgba(30,136,229,0.35);
-}
-
-.nav-item.active .nav-label {
-    color:#1e88e5;
-    font-weight:700;
-}
-
-/* ---------- Sliding underline ---------- */
-.nav-underline {
-    position:absolute;
-    bottom:0;
-    height:3px;
-    width:25%;
-    background:#1e88e5;
-    transition:transform 0.32s cubic-bezier(.25,.1,.25,1);
-}
-
-/* ---------- Icon bounce ---------- */
-@keyframes bounce {
-    0%{transform:scale(1);}
-    30%{transform:scale(1.32);}
-    55%{transform:scale(1.18);}
-    75%{transform:scale(1.26);}
-    100%{transform:scale(1);}
-}
-.bounce { animation:bounce 0.45s ease-out; }
-
-/* ---------- Icon wobble ---------- */
-@keyframes wobble {
-    0%{transform:rotate(0);}
-    20%{transform:rotate(-12deg);}
-    40%{transform:rotate(10deg);}
-    60%{transform:rotate(-8deg);}
-    80%{transform:rotate(6deg);}
-    100%{transform:rotate(0);}
-}
-.wobble { animation:wobble 0.45s ease-out; }
-
-/* ===============================
-   FIX: Dropdown corner artefact
-================================ */
-
-/* Remove weird corner marks on Dash / Bootstrap dropdowns */
 .Select-control,
 .Select-menu-outer,
-.form-select,
+.Select-menu,
+.Select-value,
+.Select-placeholder,
+.Select-input,
+.Select-input > input{
+  background:var(--card-bg) !important;
+  color:var(--text) !important;
+  box-shadow:none !important;
+  outline:none !important;
+  background-image:none !important;
+}
+
 .dash-dropdown,
-.dash-dropdown * {
-    box-shadow: none !important;
-    outline: none !important;
-    background-image: none !important;
+.dash-dropdown *{
+  box-shadow:none !important;
+  outline:none !important;
+  background-image:none !important;
 }
 
-/* Specifically target AI suggestion dropdown containers */
+.form-select{
+  box-shadow:none !important;
+  background-image:none !important;
+}
+
 #ai-mode-1,
-#ai-mode-2 {
-    box-shadow: none !important;
-    background-image: none !important;
+#ai-mode-2{
+  box-shadow:none !important;
+  background-image:none !important;
 }
-
-/* Kill any pseudo-elements that sneak in */
 #ai-mode-1::before,
 #ai-mode-1::after,
 #ai-mode-2::before,
-#ai-mode-2::after {
-    content: none !important;
+#ai-mode-2::after{
+  content:none !important;
 }
-
-/* Ensure card clipping is clean */
-.ai-card,
-.session-card,
-.dash-card {
-    overflow: hidden;
-}
-
 #ai-mode-1 .Select-control,
-#ai-mode-2 .Select-control {
-    border-radius: 12px !important;
-    border: 1px solid var(--border) !important;
-    padding: 2px 6px;
+#ai-mode-2 .Select-control{
+  border-radius:12px !important;
+  border:1px solid var(--border) !important;
+  padding:2px 6px;
 }
 
-/* =========================================
-   BASE DAY CELL — CLEAN / NO BOX
-   ========================================= */
-.calendar-day {
-  background: transparent;
-  border: none;
-  box-shadow: none;
+/* ============================================================
+   8) APPLE-STYLE RING DIALS
+============================================================ */
+.dial-wrapper{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  position:relative;
+}
 
-  border-radius: 16px;
-  padding: 8px 0;
+/* ring */
+.dial-circle{
+  --size: var(--dial-size);
+  --thickness: var(--dial-thickness);
 
+  width:var(--size);
+  height:var(--size);
+  border-radius:50%;
+  position:relative;
+
+  background:
+    conic-gradient(
+      var(--dial-color) calc(clamp(0, var(--dial-progress), 100) * 1%),
+      var(--dial-track) 0
+    );
+
+  box-shadow:
+    0 10px 22px rgba(0,0,0,0.14),
+    inset 0 1px 0 rgba(255,255,255,0.55),
+    0 0 0 1px var(--dial-stroke),
+    0 0 0 2px var(--dial-stroke-hi),
+    0 0 0 7px var(--dial-halo);
+
+  transition: background 600ms ease, transform 250ms ease;
+}
+
+.dial-circle::before{
+  content:"";
+  position:absolute;
+  inset:var(--thickness);
+  border-radius:50%;
+  background:var(--card-bg);
+  box-shadow:
+    inset 0 12px 18px rgba(0,0,0,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.85),
+    0 0 0 1px rgba(0,0,0,0.10);
+}
+
+.dial-circle::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:50%;
+  pointer-events:none;
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255,255,255,0.55), rgba(255,255,255,0) 55%),
+    radial-gradient(circle at 70% 78%, rgba(0,0,0,0.06), rgba(0,0,0,0) 60%);
+  opacity:0.55;
+}
+
+.dial-text{
+  position:absolute;
+  inset:0;
+  z-index:2;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  font-weight:900;
+  letter-spacing:-0.03em;
+  color:var(--text);
+  transform: translateY(-1px);
+  line-height:1;
+  font-size: calc(var(--dial-size) * 0.26); /* ~39px at 150px */
+  text-shadow: 0 1px 0 rgba(255,255,255,0.65);
+}
+
+.dial-text .dial-sub{
+  display:block;
+  font-size: 12px;
+  font-weight:750;
+  color:var(--text-muted);
+  margin-top:6px;
+  text-shadow:none;
+}
+
+/* Dark mode depth */
+[data-theme="dark"] .dial-circle{
+  box-shadow:
+    0 16px 34px rgba(0,0,0,0.50),
+    inset 0 1px 0 rgba(255,255,255,0.12),
+    0 0 0 1px var(--dial-stroke),
+    0 0 0 2px var(--dial-stroke-hi),
+    0 0 0 7px var(--dial-halo);
+}
+[data-theme="dark"] .dial-circle::before{
+  box-shadow:
+    inset 0 16px 24px rgba(0,0,0,0.55),
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    0 0 0 1px rgba(255,255,255,0.12);
+}
+[data-theme="dark"] .dial-text{ text-shadow:none; }
+
+/* pulse */
+.dial-circle.updated{ animation:dialPulse 900ms ease-out; }
+@keyframes dialPulse{
+  0%{ transform:scale(1); }
+  45%{ transform:scale(1.03); }
+  100%{ transform:scale(1); }
+}
+
+/* colours */
+.dial-blue{  --dial-color: var(--dial-blue); }
+.dial-green{ --dial-color: var(--dial-green); }
+.dial-amber{ --dial-color: var(--dial-amber); }
+.dial-pink{  --dial-color: var(--dial-pink); }
+
+/* ============================================================
+   FLIP CARD WRAPPER (KEY FIX)
+   - Front: dial centered
+   - Back: FULL CARD area for writing
+============================================================ */
+.dial-flip{
+  width:100%;
+  height:100%;                 /* fill the metric-card */
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  user-select:none;
+  -webkit-tap-highlight-color: transparent;
+  perspective: 1000px;
+}
+
+/* inner fills the whole card */
+.dial-flip-inner{
+  position:relative;
+  width:100%;
+  height:100%;
+  transform-style: preserve-3d;
+  transition: transform 520ms cubic-bezier(.2,.8,.2,1);
+}
+
+.dial-flip.is-flipped .dial-flip-inner{
+  transform: rotateY(180deg);
+}
+
+.dial-face{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  backface-visibility:hidden;
+}
+
+/* front keeps the dial centered */
+.dial-front{ transform: rotateY(0deg); }
+
+/* back fills the whole card area */
+.dial-back{
+  transform: rotateY(180deg);
+  padding: 10px;              /* inner breathing room */
+}
+
+/* back content is now FULL SIZE of the card (not dial size) */
+.dial-back-content{
+  width: 100%;
+  height: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--card-bg);
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.10);
+  text-align:left;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-start;
+  overflow:hidden;
+}
+
+[data-theme="dark"] .dial-back-content{
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 18px 38px rgba(0,0,0,0.40);
+}
+
+.dial-back-title{
+  font-weight: 900;
+  letter-spacing:-0.02em;
+  margin: 0 0 10px 0;
+  font-size: 14px;
+}
+
+/* scroll inside if text is long */
+.dial-back-body{
+  flex:1;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow:auto;
+  padding-right: 6px;
+}
+.dial-back-body strong{ color: var(--text); }
+
+.dial-back-hint{
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+/* ============================================================
+   9) CALENDAR (unchanged)
+============================================================ */
+.calendar-day{
+  background:transparent;
+  border:none;
+  box-shadow:none;
+  border-radius:16px;
+  padding:8px 0;
+
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+
+  cursor:pointer;
+  transition:background .15s ease, transform .15s ease;
+}
+
+.cal-day-number{
+  font-size:13px;
+  font-weight:600;
+  color:rgba(0,0,0,0.85);
+  margin-bottom:4px;
+}
+[data-theme="dark"] .cal-day-number{ color:rgba(255,255,255,0.88); }
+
+.calendar-day.out-month .cal-day-number{ color:rgba(0,0,0,0.35); }
+[data-theme="dark"] .calendar-day.out-month .cal-day-number{ color:rgba(255,255,255,0.35); }
+
+.rpe-dot{
+  width:12px;
+  height:12px;
+  border-radius:50%;
+}
+
+.calendar-day.today{ background:rgba(59,130,246,0.12); }
+.calendar-day.logged{ background:rgba(34,197,94,0.14); }
+.calendar-day.selected{ background:rgba(0,0,0,0.06); }
+[data-theme="dark"] .calendar-day.selected{ background:rgba(255,255,255,0.07); }
+
+.calendar-day:hover:not(.today):not(.logged){
+  background:rgba(0,0,0,0.04);
+  transform:translateY(-1px);
+}
+[data-theme="dark"] .calendar-day:hover:not(.today):not(.logged){
+  background:rgba(255,255,255,0.06);
+}
+
+/* ============================================================
+   10) AI SESSION TEXT
+============================================================ */
+.ai-plan-text{
+  font-family:Arial, sans-serif !important;
+  font-size:16px;
+  line-height:1.45;
+  white-space:pre-wrap;
+}
+
+/* ============================================================
+   11) SESSION HEADER (unchanged)
+============================================================ */
+.session-header-toggle{
+  appearance:none;
+  border:none;
+  outline:none;
+  padding:8px 14px;
+  min-height:38px;
+  border-radius:999px;
+  background:rgba(0,0,0,0.05);
+  font-size:15px;
+  font-weight:700;
+  color:rgba(0,0,0,0.85);
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  cursor:pointer;
+  transition:background .15s ease, box-shadow .15s ease;
+}
+
+.session-header-toggle::after{
+  content:"▾";
+  font-size:12px;
+  opacity:0.65;
+  transform:translateY(1px);
+}
+
+.session-header-toggle:hover{ background:rgba(0,0,0,0.08); }
+.session-header-toggle:focus,
+.session-header-toggle:active{
+  background:rgba(0,0,0,0.10);
+  box-shadow:0 0 0 2px rgba(0,0,0,0.06);
+}
+
+[data-theme="dark"] .session-header-toggle{
+  background:rgba(255,255,255,0.08);
+  color:rgba(255,255,255,0.88);
+}
+[data-theme="dark"] .session-header-toggle:hover{ background:rgba(255,255,255,0.12); }
+[data-theme="dark"] .session-header-toggle:focus,
+[data-theme="dark"] .session-header-toggle:active{
+  background:rgba(255,255,255,0.14);
+  box-shadow:0 0 0 2px rgba(255,255,255,0.08);
+}
+
+.session-header-card{
+  border-radius:16px !important;
+  overflow:hidden;
+}
+
+/* ============================================================
+   12) AI “PREMIUM v2” PAGE (unchanged)
+============================================================ */
+.page-wrap{
+  width:100% !important;
+  max-width:none !important;
+  margin:0 !important;
+  padding:0 16px 96px !important;
+}
+
+.ai-hero{
+  border-radius:22px;
+  padding:18px 18px;
+  background:linear-gradient(135deg, #0b1220 0%, #0f1b34 55%, #122449 100%);
+  border:1px solid rgba(255,255,255,0.10);
+  box-shadow:0 18px 46px rgba(15,23,42,0.24);
+  margin-bottom:14px;
+  color:#fff;
+}
+
+.ai-hero-title{
+  font-size:30px;
+  font-weight:850;
+  letter-spacing:-0.03em;
+  margin:0;
+}
+
+.ai-hero-sub{
+  margin:8px 0 0 0;
+  color:rgba(255,255,255,0.72);
+  font-size:14px;
+  line-height:1.4;
+}
+
+/* ============================================================
+   13) BOTTOM NAV
+============================================================ */
+.bottom-nav{
+  position:fixed;
+  bottom:0; left:0; right:0;
+  height:var(--bottom-nav-h);
+  background:var(--card-bg);
+  border-top:1px solid var(--border);
+  box-shadow:0 -2px 8px rgba(0,0,0,0.25);
+  z-index:9999;
+}
+
+.nav-item{
+  text-align:center;
+  padding-top:4px;
+  cursor:pointer;
+  transition:.25s ease;
+}
+
+.nav-icon{
+  font-size:22px;
+  color:#666;
+  transition:.25s ease;
+}
+
+.nav-label{
+  font-size:12px;
+  color:#666;
+  font-weight:500;
+  transition:.25s ease;
+}
+
+.nav-item.active .nav-icon{
+  color:var(--accent) !important;
+  transform:scale(1.25);
+  text-shadow:
+    0 0 6px rgba(30,136,229,0.85),
+    0 0 12px rgba(30,136,229,0.55),
+    0 0 18px rgba(30,136,229,0.35);
+}
+
+.nav-item.active .nav-label{
+  color:var(--accent);
+  font-weight:700;
+}
+
+.nav-underline{
+  position:absolute;
+  bottom:0;
+  height:3px;
+  width:25%;
+  background:var(--accent);
+  transition:transform .32s cubic-bezier(.25,.1,.25,1);
+}
+
+@keyframes bounce{
+  0%{ transform:scale(1); }
+  30%{ transform:scale(1.32); }
+  55%{ transform:scale(1.18); }
+  75%{ transform:scale(1.26); }
+  100%{ transform:scale(1); }
+}
+.bounce{ animation:bounce .45s ease-out; }
+
+@keyframes wobble{
+  0%{ transform:rotate(0); }
+  20%{ transform:rotate(-12deg); }
+  40%{ transform:rotate(10deg); }
+  60%{ transform:rotate(-8deg); }
+  80%{ transform:rotate(6deg); }
+  100%{ transform:rotate(0); }
+}
+.wobble{ animation:wobble .45s ease-out; }
+
+/* ============================================================
+   MOBILE TUNING (keep it neat)
+============================================================ */
+@media (max-width:576px){
+  :root{
+    --dial-size: 140px;
+    --dial-thickness: 16px;
+    --metric-card-h: 180px;
+  }
+}
+
+/* --- compact labels above Athlete/Today --- */
+.mini-label{
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  margin: 0 0 4px 2px;
+  color: #222;
+}
+
+/* dropdown slightly shorter */
+.compact-dd .Select-control,
+.compact-dd .Select__control{
+  min-height: 36px !important;
+  height: 36px !important;
+}
+.compact-dd .Select-placeholder,
+.compact-dd .Select-value-label,
+.compact-dd .Select__single-value{
+  line-height: 34px !important;
+  font-size: 14px;
+}
+
+/* Today "card" shorter + smaller */
+.compact-today{
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dcdcdc;
+  border-radius: 8px;
+  background: rgba(248,249,250,0.85);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* push dials lower so headings don't collide with row-1 */
+.dials-row{
+  padding-top: 10px;
+}
+
+/* dial headings */
+.dial-label{
+  text-align: center;
+  font-weight: 800;
+  font-size: 20px;
+  margin-bottom: 6px;
+  color: #222;
+}
+
+.dial-center{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+/* ensure each dial is centered in its col */
+.dial-center{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* --- FLIP CARD: make the back readable --- */
+.dial-flip{
+  display: inline-block;
+}
+
+/* Give the flip face a bigger “reading surface” than the dial */
+.dial-flip-inner{
+  width: 200px;
+  height: 200px;
+}
+
+/* Keep the dial itself centered inside the larger face */
+.dial-front .dial-wrapper{
+  transform: scale(1.0);
+  transform-origin: center;
+}
+
+/* Back face typography */
+.dial-back-content{
+  padding: 12px 12px;
+  font-size: 13px;
+  line-height: 1.25;
+  text-align: left;
+}
+
+/* Make title stronger */
+.dial-back-title{
+  font-weight: 800;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+/* Allow body text to scroll if long */
+.dial-back-body{
+  font-size: 13px;
+  overflow: auto;
+  max-height: 110px;
+}
+
+/* Hint smaller */
+.dial-back-hint{
+  margin-top: 6px;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+/* Support both old and new row class names */
+.dial-row, .dials-row{
+  margin-top: 24px;
+  margin-bottom: 12px;
+  align-items: stretch !important;
+}
+
+.dial-row > [class*="col"], .dials-row > [class*="col"]{
+  display: flex !important;
+}
+
+.dial-block{
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+.dial-label{
+  width: 100%;
+  text-align: center;
+  font-weight: 800;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.dial-center{
+  width: 100%;
+  height: 220px;
+  display: flex;
+  align-items: center;
   justify-content: center;
-
-  cursor: pointer;
 }
 
-/* =========================================
-   DAY NUMBER
-   ========================================= */
-.cal-day-number {
-  font-size: 13px;
-  font-weight: 500;
-  color: rgba(0, 0, 0, 0.85);
-  margin-bottom: 4px;
+/* ===== HARD OVERRIDES: force true centring ===== */
+
+/* Make sure the dial zone is a real box */
+.dial-center{
+  width: 100% !important;
+  height: 220px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
-/* Fade out-of-month days */
-.calendar-day.out-month .cal-day-number {
-  color: rgba(0, 0, 0, 0.35);
+/* Flip container must fill the dial-center */
+.dial-center .dial-flip{
+  width: 50% !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
-/* =========================================
-   RPE DOT
-   ========================================= */
-.rpe-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
+/* Inner must fill too */
+.dial-center .dial-flip-inner{
+  width: 100% !important;
+  height: 100% !important;
 }
 
-/* =========================================
-   TODAY — BLUE SHADED PILL
-   ========================================= */
-.calendar-day.today {
-  background: rgba(59, 130, 246, 0.12);  /* blue */
+/* Each face must fill and centre contents */
+.dial-center .dial-face{
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
-/* =========================================
-   LOGGED SESSION — GREEN SHADED PILL
-   ========================================= */
-.calendar-day.logged {
-  background: rgba(34, 197, 94, 0.14);  /* green */
+/* Front face: centre the dial wrapper */
+.dial-center .dial-front{
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
-/* =========================================
-   SELECTED DATE (optional emphasis)
-   ========================================= */
-.calendar-day.selected {
-  background: rgba(0, 0, 0, 0.06);
+/* Remove any accidental offsets */
+.dial-wrapper{
+  margin: 0 !important;
+  transform: none !important;
 }
 
-/* =========================================
-   HOVER (very subtle)
-   ========================================= */
-.calendar-day:hover:not(.today):not(.logged) {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-/* ===============================
-   Session Details – Apple Pill
-   =============================== */
-
-.session-details-btn {
-  appearance: none;
-  border: none;
-  outline: none;
-
-  padding: 8px 14px 8px 14px;
-  min-height: 38px;
-
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.05);
-
-  font-size: 13px;
-  font-weight: 600;
-  color: rgba(0, 0, 0, 0.85);
-
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-
-  cursor: pointer;
-  transition: background 0.15s ease, box-shadow 0.15s ease;
-}
-
-/* Caret */
-.session-details-btn::after {
-  content: "▾";
-  font-size: 12px;
-  opacity: 0.7;
-}
-
-/* Hover */
-.session-details-btn:hover {
-  background: rgba(0, 0, 0, 0.08);
-}
-
-/* Active / focus */
-.session-details-btn:focus,
-.session-details-btn:active {
-  background: rgba(0, 0, 0, 0.10);
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.06);
-}
-
-/* =====================================
-   Session Header Toggle – Apple Style
-   ===================================== */
-
-.session-header-toggle {
-  appearance: none;
-  border: none;
-  outline: none;
-
-  padding: 8px 14px;
-  min-height: 38px;
-
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.05);
-
-  font-size: 15px;
-  font-weight: 600;
-  color: rgba(0, 0, 0, 0.85);
-
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-
-  cursor: pointer;
-  transition: background 0.15s ease, box-shadow 0.15s ease;
-}
-
-/* Arrow */
-.session-header-toggle::after {
-  content: "▾";
-  font-size: 12px;
-  opacity: 0.65;
-  transform: translateY(1px);
-}
-
-/* Hover */
-.session-header-toggle:hover {
-  background: rgba(0, 0, 0, 0.08);
-}
-
-/* Focus / active */
-.session-header-toggle:focus,
-.session-header-toggle:active {
-  background: rgba(0, 0, 0, 0.10);
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.06);
-}
