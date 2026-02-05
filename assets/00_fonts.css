@@ -1,0 +1,51 @@
+/* -----------------------------
+   GLOBAL FONT: BARLOW CONDENSED
+------------------------------ */
+
+/* Load font */
+@import url("https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700&display=swap");
+
+/* Define once */
+:root {
+  --app-font: "Barlow Condensed", -apple-system, BlinkMacSystemFont,
+              "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+/* Apply globally */
+html, body {
+  font-family: var(--app-font) !important;
+  letter-spacing: 0.2px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Dash root containers */
+#_dash-app-content,
+#react-entry-point {
+  font-family: var(--app-font) !important;
+}
+
+/* Text + controls */
+div, span, p, label,
+h1, h2, h3, h4, h5, h6,
+input, textarea, select, button {
+  font-family: var(--app-font) !important;
+}
+
+/* Dash core components */
+.Select-control,
+.Select-menu-outer,
+.Select-value,
+.Select-placeholder,
+.DateInput,
+.DateInput_input,
+.dash-table-container,
+.dash-spreadsheet {
+  font-family: var(--app-font) !important;
+}
+
+/* Plotly charts (very important) */
+.js-plotly-plot,
+.js-plotly-plot * {
+  font-family: var(--app-font) !important;
+}
