@@ -1026,10 +1026,10 @@ def make_ai_suggestions(
 #  Email webhook
 # ============================================================
 
-def send_email_payload(payload):
-    global EMAIL_WEBHOOK_URL
+import os, json, requests
 
-    url = EMAIL_WEBHOOK_URL
+def send_email_payload(payload):
+    url = os.getenv("EMAIL_WEBHOOK_URL", "")
     print("🔗 USING EMAIL_WEBHOOK_URL =", url)
 
     if not url.startswith("https://script.google.com/macros/s/"):
@@ -1040,7 +1040,6 @@ def send_email_payload(payload):
     print("✅ WEBHOOK STATUS =", r.status_code)
     print("✅ WEBHOOK RESPONSE =", r.text[:400])
     r.raise_for_status()
-
 
 # ============================================================
 #  Plot builders
