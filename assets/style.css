@@ -1067,6 +1067,20 @@ textarea, input, .form-control{
 /* Push header content down from browser edge */
 .app-header{
   padding: 26px 26px 10px 16px;
+
+@media (max-width: 576px){
+  .dial-circle{
+    box-shadow:
+      0 6px 14px rgba(0,0,0,0.18),
+      inset 0 1px 0 rgba(255,255,255,0.35),
+      0 0 0 1px var(--dial-stroke);
+  }
+
+  .dial-circle::after{
+    opacity: 0.25;
+  }
+}
+
 }
 
 /* Optional: make title area a touch nicer */
