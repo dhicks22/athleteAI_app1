@@ -1035,10 +1035,15 @@ textarea, input, .form-control{
 }
 
 @media (max-width: 576px) {
-  .dial-text {
-    font-size: 15px;
+  .dial-text{
+    font-size: calc(var(--dial-size) * 0.34);
+  }
+
+  .dial-text .dial-sub{
+    font-size: 13px;
   }
 }
+
 
 .logout-container {
   position: fixed;
@@ -1178,7 +1183,7 @@ textarea, input, .form-control{
 }
 
 .ctx-sub > div {
-  margin-top: 2.1px;
+  margin-top: 2px;
   line-height: 1.35;
 }
 
