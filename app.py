@@ -1846,7 +1846,7 @@ def build_main_layout(auth_data):
                                 id="slider-session-rpe",
                                 min=1,
                                 max=5,
-                                step=0.5,
+                                step=1,
                                 value=3,
                             ),
 
@@ -1855,7 +1855,7 @@ def build_main_layout(auth_data):
                                 id="slider-session-quality",
                                 min=1,
                                 max=5,
-                                step=0.5,
+                                step=1,
                                 value=3,
                             ),
 
@@ -1864,7 +1864,7 @@ def build_main_layout(auth_data):
                                 id="slider-sleep",
                                 min=1,
                                 max=5,
-                                step=0.5,
+                                step=1,
                                 value=3,
                             ),
 
@@ -1873,7 +1873,7 @@ def build_main_layout(auth_data):
                                 id="slider-mood",
                                 min=1,
                                 max=5,
-                                step=0.5,
+                                step=1,
                                 value=3,
                             ),
 
@@ -1882,7 +1882,7 @@ def build_main_layout(auth_data):
                                 id="slider-fatigue",
                                 min=1,
                                 max=5,
-                                step=0.5,
+                                step=1,
                                 value=3,
                             ),
 
@@ -1891,20 +1891,11 @@ def build_main_layout(auth_data):
                                 id="slider-soreness",
                                 min=1,
                                 max=5,
-                                step=0.5,
+                                step=1,
                                 value=3,
                             ),
 
-                            dbc.Button(
-                                "Log Session & Generate AI Coaching Feedback",
-                                id="btn-generate-ai",
-                                className="mt-3 w-100 ai-save-btn",
-                            ),
-
-                            html.Div(id="save-status", className="mt-2"),
-
-
-                        ], md=6),
+                                                    ], md=6),
 
                         # ================= RIGHT: Coaching feedback + AI =================
                         dbc.Col([
@@ -1965,6 +1956,16 @@ def build_main_layout(auth_data):
                                     ),
                                 ],
                                 className="g-3",
+                            ),
+                            dbc.Button(
+                                "Log Session & Generate AI Coaching Feedback",
+                                id="btn-generate-ai",
+                                className="mt-4 w-100 ai-save-btn",
+                            ),
+
+                            html.Div(
+                                id="save-status",
+                                className="mt-2",
                             ),
 
                             dcc.Loading(
