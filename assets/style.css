@@ -125,12 +125,12 @@ body{
   z-index:-2;
   pointer-events:none;
 
-  background-image:url("/assets/science-bg.png");
+  background-image:url("/assets/30440-14.jpg");
   background-size:cover;
   background-position:center;
   background-repeat:no-repeat;
 
-  opacity:0.14;
+  opacity:0.15;
   filter:blur(0.4px) saturate(1.15);
 }
 
@@ -436,7 +436,7 @@ textarea, input, .form-control{
     inset 0 1px 0 rgba(255,255,255,0.55),
     0 0 0 1px var(--dial-stroke),
     0 0 0 2px var(--dial-stroke-hi),
-    0 0 0 7px var(--dial-halo);
+    0 0 0 3px var(--dial-halo);
 
   transition: background 600ms ease, transform 250ms ease;
 }
@@ -559,6 +559,10 @@ textarea, input, .form-control{
   align-items:center;
   justify-content:center;
   backface-visibility:hidden;
+}
+.dial-back{
+  align-items: stretch;
+  justify-content: stretch;
 }
 
 /* front keeps the dial centered */
@@ -997,7 +1001,7 @@ textarea, input, .form-control{
 
 /* Flip container must fill the dial-center */
 .dial-center .dial-flip{
-  width: 50% !important;
+  width: 100% !important;
   height: 100% !important;
   display: flex !important;
   align-items: center !important;
@@ -1224,4 +1228,12 @@ textarea, input, .form-control{
 /* missing / not available */
 .dial-grey{
   --dial-color:rgba(0,0,0,0.18);
+}
+
+@media (max-width: 576px){
+  .dial-circle::before{
+    box-shadow:
+      inset 0 6px 10px rgba(0,0,0,0.06),
+      inset 0 1px 0 rgba(255,255,255,0.65);
+  }
 }
