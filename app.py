@@ -1212,7 +1212,7 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
     )
 
     fig.update_layout(
-        title="Training Load (Daily)",
+        title="Daily Training Load & Balance",
         xaxis_title="Date",
         yaxis=dict(title="Load"),
         yaxis2=dict(
@@ -1252,11 +1252,19 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
         if col in d.columns:
             d[col] = pd.to_numeric(d[col], errors="coerce")
 
+    # =====================================================
+    # WEEKLY VIEW
+    # =====================================================
     if view_mode == "weekly":
         d["Week"] = _week_agg_date(d["Date"])
-        g = d.groupby("Week", as_index=False).mean(numeric_only=True)
+
+        g = (
+            d.groupby("Week", as_index=False)
+             .mean(numeric_only=True)
+        )
+
         x = g["Week"]
-        window = 3   # short smoothing, weekly state
+        window = 3
 
         for col, (label, color) in metrics.items():
             if col not in g.columns:
@@ -1268,14 +1276,14 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
 
             roll = y.rolling(window, min_periods=1).mean()
 
-            # --- SHADED ---
+            # --- SHADED AREA ---
             fig.add_trace(go.Scatter(
                 x=x,
                 y=roll,
                 mode="lines",
                 line=dict(width=0),
                 fill="tozeroy",
-                fillcolor=f"rgba{tuple(int(color[i:i + 2], 16) for i in (1, 3, 5)) + (0.12,)}",
+                fillcolor=f"rgba{tuple(int(color[i:i+2],16) for i in (1,3,5)) + (0.12,)}",
                 hoverinfo="skip",
                 showlegend=False,
             ))
@@ -1289,6 +1297,7 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
                 line=dict(color=color, width=2.6),
                 line_shape="spline",
                 line_smoothing=0.7,
+                hovertemplate=f"{label}: %{{y:.2f}}<extra></extra>",
             ))
 
         fig.update_layout(
@@ -1303,17 +1312,19 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
             **_legend_right_layout()
         )
 
+        # 🔑 FORCE X-AXIS TO MATCH OTHER WEEKLY CHARTS
+        fig.update_xaxes(
+            range=[d["Week"].min(), d["Week"].max()]
+        )
+
         fig.update_layout(**MOBILE_PLOT_LAYOUT)
         return fig
 
-    # =====================
+    # =====================================================
     # DAILY VIEW
-    # =====================
-    # =====================
-    # DAILY VIEW (FIXED)
-    # =====================
+    # =====================================================
     x = d["Date"]
-    window = 3  # short smoothing for daily reflection
+    window = 3
 
     for col, (label, color) in metrics.items():
         if col not in d.columns:
@@ -1325,29 +1336,29 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
 
         roll = y.rolling(window, min_periods=1).mean()
 
-        # --- BASELINE (invisible, required for proper fill) ---
+        # --- BASELINE (required for correct fill behaviour) ---
         fig.add_trace(go.Scatter(
             x=x,
             y=[0] * len(x),
             mode="lines",
             line=dict(width=0),
-            showlegend=False,
             hoverinfo="skip",
+            showlegend=False,
         ))
 
-        # --- SHADED AREA (fills to baseline, NOT zero per metric) ---
+        # --- SHADED AREA ---
         fig.add_trace(go.Scatter(
             x=x,
             y=roll,
             mode="lines",
             line=dict(width=0),
             fill="tonexty",
-            fillcolor=f"rgba{tuple(int(color[i:i + 2], 16) for i in (1, 3, 5)) + (0.12,)}",
+            fillcolor=f"rgba{tuple(int(color[i:i+2],16) for i in (1,3,5)) + (0.15,)}",
             hoverinfo="skip",
             showlegend=False,
         ))
 
-        # --- DARK SMOOTH LINE (on top) ---
+        # --- LINE ---
         fig.add_trace(go.Scatter(
             x=x,
             y=roll,
@@ -1361,7 +1372,7 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
         ))
 
     fig.update_layout(
-        title="Daily Wellness",
+        title="Daily Wellness Trends",
         xaxis_title="Date",
         yaxis=dict(
             title="Scale (1–5)",
@@ -1374,6 +1385,7 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
 
     fig.update_layout(**MOBILE_PLOT_LAYOUT)
     return fig
+
 
 
 def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
@@ -1472,7 +1484,7 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
         ))
 
         fig.update_layout(
-            title="Speed & Tempo Volumes (Daily)",
+            title="Daily Speed & Tempo Volumes",
             xaxis_title="Date",
             yaxis_title="Metres",
             barmode="stack",
@@ -1561,7 +1573,7 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
     ))
 
     fig.update_layout(
-        title="Speed & Tempo Volumes (Weekly)",
+        title="Weekly Speed & Tempo Volumes",
         xaxis_title="Week",
         yaxis_title="Metres",
         barmode="stack",
@@ -1791,7 +1803,7 @@ def app_header(center=False):
             html.Div(
                 [
                     html.H2("Adaptive Coaching Intelligence", style={"margin": 0, "fontWeight": 600, "textAlign": align}),
-                    html.Small("AI-aligned athlete & coaching feedback",
+                    html.Small("Elevating performance through athlete insight",
                                style={"color": "#555", "textAlign": align, "display": "block"}),
                 ],
                 style={"display": "inline-block", "verticalAlign": "middle"},
@@ -2339,7 +2351,7 @@ app.layout = html.Div(
             children=[
                 html.Img(src="/assets/app_icon.png", className="splash-logo"),
                 html.H2("Adaptive Coaching Intelligence", className="splash-title"),
-                html.P("AI-aligned athlete & coaching feedback", className="splash-subtitle"),
+                html.P("Empowering performance through athlete insight", className="splash-subtitle"),
                 html.Div(className="spinner")
             ]
         ),

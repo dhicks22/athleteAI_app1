@@ -431,12 +431,12 @@ textarea, input, .form-control{
       var(--dial-track) 0
     );
 
+  .dial-circle{
   box-shadow:
-    0 10px 22px rgba(0,0,0,0.14),
-    inset 0 1px 0 rgba(255,255,255,0.55),
-    0 0 0 1px var(--dial-stroke),
-    0 0 0 2px var(--dial-stroke-hi),
-    0 0 0 3px var(--dial-halo);
+    0 4px 10px rgba(0,0,0,0.14),
+    0 0 0 1px var(--dial-stroke);
+}
+
 
   transition: background 600ms ease, transform 250ms ease;
 }
@@ -1230,10 +1230,19 @@ textarea, input, .form-control{
   --dial-color:rgba(0,0,0,0.18);
 }
 
-@media (max-width: 576px){
-  .dial-circle::before{
-    box-shadow:
-      inset 0 6px 10px rgba(0,0,0,0.06),
-      inset 0 1px 0 rgba(255,255,255,0.65);
+.dial-circle::before{
+  box-shadow:
+    inset 0 4px 8px rgba(0,0,0,0.08);
+}
+
+.dial-circle{
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+
+@media (max-width: 768px){
+  .dial-circle::after{
+    display: none !important;
   }
 }
