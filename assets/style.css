@@ -431,39 +431,16 @@ textarea, input, .form-control{
       var(--dial-track) 0
     );
 
-  .dial-circle{
-  box-shadow:
-    0 4px 10px rgba(0,0,0,0.14),
-    0 0 0 1px var(--dial-stroke);
-}
-
-
   transition: background 600ms ease, transform 250ms ease;
 }
 
+
 .dial-circle::before{
-  content:"";
-  position:absolute;
-  inset:var(--thickness);
-  border-radius:50%;
-  background:var(--card-bg);
-  box-shadow:
-    inset 0 12px 18px rgba(0,0,0,0.08),
-    inset 0 1px 0 rgba(255,255,255,0.85),
-    0 0 0 1px rgba(0,0,0,0.10);
+  box-shadow: none !important;
 }
 
-.dial-circle::after{
-  content:"";
-  position:absolute;
-  inset:0;
-  border-radius:50%;
-  pointer-events:none;
-  background:
-    radial-gradient(circle at 28% 22%, rgba(255,255,255,0.55), rgba(255,255,255,0) 55%),
-    radial-gradient(circle at 70% 78%, rgba(0,0,0,0.06), rgba(0,0,0,0) 60%);
-  opacity:0.55;
-}
+
+
 
 .dial-text{
   position:absolute;
@@ -492,14 +469,7 @@ textarea, input, .form-control{
 }
 
 /* Dark mode depth */
-[data-theme="dark"] .dial-circle{
-  box-shadow:
-    0 16px 34px rgba(0,0,0,0.50),
-    inset 0 1px 0 rgba(255,255,255,0.12),
-    0 0 0 1px var(--dial-stroke),
-    0 0 0 2px var(--dial-stroke-hi),
-    0 0 0 7px var(--dial-halo);
-}
+
 [data-theme="dark"] .dial-circle::before{
   box-shadow:
     inset 0 16px 24px rgba(0,0,0,0.55),
@@ -1071,21 +1041,21 @@ textarea, input, .form-control{
 /* Push header content down from browser edge */
 .app-header{
   padding: 26px 26px 10px 16px;
+}
 
 @media (max-width: 576px){
   .dial-circle{
-    box-shadow:
-      0 6px 14px rgba(0,0,0,0.18),
-      inset 0 1px 0 rgba(255,255,255,0.35),
-      0 0 0 1px var(--dial-stroke);
+    box-shadow:none !important;
   }
+}
+
 
   .dial-circle::after{
     opacity: 0.25;
   }
-}
 
-}
+
+
 
 /* Optional: make title area a touch nicer */
 .app-title{
@@ -1230,19 +1200,35 @@ textarea, input, .form-control{
   --dial-color:rgba(0,0,0,0.18);
 }
 
-.dial-circle::before{
-  box-shadow:
-    inset 0 4px 8px rgba(0,0,0,0.08);
+/* ============================================================
+   FINAL FIX — REMOVE DOUBLE HALO
+============================================================ */
+/* ============================================================
+   HARD STOP — KILL ALL BUBBLE / HALO EFFECTS (iOS SAFE)
+============================================================ */
+
+/* Neutralise halo token */
+:root{
+  --dial-halo: transparent;
+}
+[data-theme="dark"]{
+  --dial-halo: transparent;
 }
 
+/* Remove all glow layers */
 .dial-circle{
-  transform: translateZ(0);
-  will-change: transform;
+  box-shadow:none !important;
 }
 
+.dial-circle::after{
+  display:none !important;
+}
 
-@media (max-width: 768px){
-  .dial-circle::after{
-    display: none !important;
-  }
+.dial-circle::before{
+  box-shadow:none !important;
+}
+
+/* Ensure wrapper doesn't reintroduce depth */
+.dial-wrapper::before{
+  box-shadow:none !important;
 }
