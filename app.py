@@ -544,7 +544,6 @@ def get_day_status(df, date_obj):
 
     # ------------------------
     # Athlete sliders
-    # ------------------------
     slider_cols = [
         "RPE_Post_Session",
         "Session_1_5",
@@ -553,6 +552,7 @@ def get_day_status(df, date_obj):
         "Mood_1_5",
         "Soreness_1_5",
     ]
+
 
     has_slider = any(
         pd.notna(pd.to_numeric(row.get(c, np.nan), errors="coerce"))
