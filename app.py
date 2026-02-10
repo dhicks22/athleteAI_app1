@@ -2734,7 +2734,14 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
         errors="coerce"
     )
 
-    readiness_val = calc_daily_readiness(load_series, rpe_series)
+    quality_series = pd.to_numeric(df.get("Session_1_5"), errors="coerce")
+
+    readiness_val = calc_daily_readiness(
+        load_series=load_series,
+        rpe_series=rpe_series,
+        quality_series=quality_series,
+        span=7
+    )
 
     weekly_ui = dial_flip(
         apple_sessions_ring(weekly_exposure_pct),
