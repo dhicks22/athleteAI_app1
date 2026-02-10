@@ -44,7 +44,7 @@
   --dial-track: rgba(0,0,0,0.10);
   --dial-stroke: rgba(0,0,0,0.14);
   --dial-stroke-hi: rgba(255,255,255,0.75);
-  --dial-halo: rgba(255,255,255,0.45);
+  --dial-halo: rgba(255,255,255,0.1);
 
   --dial-blue: #2f80ed;
   --dial-green:#2fb344;
@@ -72,7 +72,7 @@
   --dial-track: rgba(255,255,255,0.10);
   --dial-stroke: rgba(255,255,255,0.14);
   --dial-stroke-hi: rgba(0,0,0,0.55);
-  --dial-halo: rgba(0,0,0,0.25);
+  --dial-halo: rgba(0,0,0,0.1);
 }
 
 /* ============================================================
