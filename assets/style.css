@@ -34,8 +34,8 @@
   --mini-card-h: 72px;
 
   /* DIALS: medium (bigger than original, smaller than giant) */
-  --dial-size: 135px;        /* medium sweet spot */
-  --dial-thickness: 18px;
+  --dial-size: 130px;        /* medium sweet spot */
+  --dial-thickness: 16px;
 
   /* Metric cards: compact like your “good” screenshot */
   --metric-card-h: 170px;    /* key: stops floaty layout */
@@ -43,7 +43,7 @@
   /* Dial contrast tokens */
   --dial-track: rgba(0,0,0,0.10);
   --dial-stroke: rgba(0,0,0,0.14);
-  --dial-stroke-hi: rgba(255,255,255,0.75);
+  --dial-stroke-hi: rgba(255,255,255,0.55);
   --dial-halo: rgba(255,255,255,0.15);
 
   --dial-blue: #2f80ed;
