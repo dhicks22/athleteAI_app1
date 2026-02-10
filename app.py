@@ -493,36 +493,91 @@ def safe(df: pd.DataFrame, row_idx: int, col: str, default: str = "") -> str:
 
 
 def get_day_status(df, date_obj):
+    """
+    A session is LOGGED only if the ATHLETE actively entered post-session data:
+    - Notes
+    - Sets/Reps/Load
+    - Track reps/times
+    - Any slider input (RPE, sleep, fatigue, mood, soreness, session quality)
+
+    Planned workouts or Load alone DO NOT count.
+    """
+
     if df.empty or "Date" not in df.columns:
-        return {"logged": False, "rpe": None, "has_notes": False, "has_load": False}
+        return {
+            "logged": False,
+            "rpe": None,
+            "has_notes": False,
+            "has_sets": False,
+            "has_track": False,
+            "has_slider": False,
+        }
 
     d = df.copy()
     d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
-
     rows = d[d["Date"] == date_obj]
+
     if rows.empty:
-        return {"logged": False, "rpe": None, "has_notes": False, "has_load": False}
+        return {
+            "logged": False,
+            "rpe": None,
+            "has_notes": False,
+            "has_sets": False,
+            "has_track": False,
+            "has_slider": False,
+        }
 
     row = rows.iloc[-1]
 
-    rpe = pd.to_numeric(row.get("RPE_Post_Session", row.get("sRPE", None)), errors="coerce")
-    load = pd.to_numeric(row.get("Load", None), errors="coerce")
+    INVALID = {"", "nan", "none", "nil", "0", "-", "—", "n/a", "na"}
 
+    # ------------------------
+    # Athlete text inputs
+    # ------------------------
     notes = str(row.get("Athlete_Notes", "")).strip().lower()
-    invalid_notes = {"", "nan", "none", "nil", "0", "n/a", "na"}
+    sets  = str(row.get("Sets_Reps_Load", "")).strip().lower()
+    track = str(row.get("Track_Reps_Times", "")).strip().lower()
 
-    has_notes = notes not in invalid_notes
-    has_rpe = pd.notna(rpe) and rpe > 0
-    has_load = pd.notna(load) and load > 0
+    has_notes = notes not in INVALID
+    has_sets  = sets not in INVALID
+    has_track = track not in INVALID
 
-    logged = has_notes or has_rpe or has_load
+    # ------------------------
+    # Athlete sliders
+    # ------------------------
+    slider_cols = [
+        "RPE_Post_Session",
+        "Session_1_5",
+        "Sleep_1_5",
+        "Fatigue_1_5",
+        "Mood_1_5",
+        "Soreness_1_5",
+    ]
+
+    has_slider = any(
+        pd.notna(pd.to_numeric(row.get(c, np.nan), errors="coerce"))
+        for c in slider_cols
+    )
+
+    # ------------------------
+    # LOGGED = athlete engagement ONLY
+    # ------------------------
+    logged = has_notes or has_sets or has_track or has_slider
+
+    rpe_val = pd.to_numeric(
+        row.get("RPE_Post_Session", row.get("sRPE", None)),
+        errors="coerce"
+    )
 
     return {
         "logged": logged,
-        "rpe": float(rpe) if has_rpe else None,
+        "rpe": float(rpe_val) if pd.notna(rpe_val) else None,
         "has_notes": has_notes,
-        "has_load": has_load,
+        "has_sets": has_sets,
+        "has_track": has_track,
+        "has_slider": has_slider,
     }
+
 
 
 def count_planned_sessions_in_week(df: pd.DataFrame, week_start: dt.date, week_end: dt.date) -> int:
