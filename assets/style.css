@@ -44,7 +44,7 @@
   --dial-track: rgba(0,0,0,0.10);
   --dial-stroke: rgba(0,0,0,0.14);
   --dial-stroke-hi: rgba(255,255,255,0.75);
-  --dial-halo: rgba(255,255,255,0.15);
+  --dial-halo: rgba(255,255,255,0.45);
 
   --dial-blue: #2f80ed;
   --dial-green:#2fb344;
@@ -148,7 +148,7 @@ body{
 
 [data-theme="dark"] .app-shell::before{
   opacity:0.06;
-  filter:blur(0.25px) saturate(1.1);
+  filter:blur(0.7px) saturate(1.05);
 }
 
 [data-theme="dark"] .app-shell::after{
@@ -415,6 +415,7 @@ textarea, input, .form-control{
   position:relative;
 }
 
+/* ring */
 .dial-circle{
   --size: var(--dial-size);
   --thickness: var(--dial-thickness);
@@ -430,13 +431,15 @@ textarea, input, .form-control{
       var(--dial-track) 0
     );
 
+  .dial-circle{
   box-shadow:
     0 4px 10px rgba(0,0,0,0.14),
     0 0 0 1px var(--dial-stroke);
+}
+
 
   transition: background 600ms ease, transform 250ms ease;
 }
-
 
 .dial-circle::before{
   content:"";
@@ -1238,60 +1241,8 @@ textarea, input, .form-control{
 }
 
 
-@media (max-width: 768px) {
-    .dial-circle::after {
-        display: none !important;
-    }
-
-
-    @media (max-width: 576px) {
-        .dial-circle {
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12),
-            inset 0 1px 0 rgba(255, 255, 255, 0.45),
-            0 0 0 1px rgba(0, 0, 0, 0.12);
-        }
-
-        @media (max-width: 576px) {
-            .dial-circle {
-                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12),
-                inset 0 1px 0 rgba(255, 255, 255, 0.45),
-                0 0 0 1px rgba(0, 0, 0, 0.12);
-            }
-
-            .dial-circle::after {
-                display: none;
-            }
-
-            /* ============================================================
-              FINAL DIAL DE-BUBBLE FIX (BACKGROUND ISOLATION)
-              This is the real fix.
-           ============================================================ */
-            .metric-card,
-            .dial-front {
-                background: transparent !important;
-            }
-
-            /* Create a flat surface plane behind the dial */
-            .dial-wrapper::before {
-                content: "";
-                position: absolute;
-                inset: -8px;
-                background: rgba(255, 255, 255, 0.92);
-                border-radius: 50%;
-                z-index: 0;
-            }
-
-            /* Dark mode version */
-            [data-theme="dark"] .dial-wrapper::before {
-                background: rgba(22, 24, 28, 0.94);
-            }
-
-            /* Dial must sit ABOVE the plane */
-            .dial-circle {
-                position: relative;
-                z-index: 1;
-            }
-
-        }
-    }
+@media (max-width: 768px){
+  .dial-circle::after{
+    display: none !important;
+  }
 }
