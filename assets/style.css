@@ -148,7 +148,7 @@ body{
 
 [data-theme="dark"] .app-shell::before{
   opacity:0.06;
-  filter:blur(0.7px) saturate(1.05);
+  filter:blur(0.25px) saturate(1.1);
 }
 
 [data-theme="dark"] .app-shell::after{
@@ -1261,7 +1261,37 @@ textarea, input, .form-control{
             .dial-circle::after {
                 display: none;
             }
+
+            /* ============================================================
+              FINAL DIAL DE-BUBBLE FIX (BACKGROUND ISOLATION)
+              This is the real fix.
+           ============================================================ */
+            .metric-card,
+            .dial-front {
+                background: transparent !important;
+            }
+
+            /* Create a flat surface plane behind the dial */
+            .dial-wrapper::before {
+                content: "";
+                position: absolute;
+                inset: -8px;
+                background: rgba(255, 255, 255, 0.92);
+                border-radius: 50%;
+                z-index: 0;
+            }
+
+            /* Dark mode version */
+            [data-theme="dark"] .dial-wrapper::before {
+                background: rgba(22, 24, 28, 0.94);
+            }
+
+            /* Dial must sit ABOVE the plane */
+            .dial-circle {
+                position: relative;
+                z-index: 1;
+            }
+
         }
     }
 }
-
