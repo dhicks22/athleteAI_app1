@@ -148,7 +148,7 @@ body{
 
 [data-theme="dark"] .app-shell::before{
   opacity:0.06;
-  filter:blur(0.7px) saturate(1.05);
+  filter:blur(0.25px) saturate(1.1);
 }
 
 [data-theme="dark"] .app-shell::after{
