@@ -346,32 +346,75 @@ def streak_colour_from_days(days: int):
         return "dial-red"
 
 
-def calc_daily_readiness(load_series, rpe_series, span=7):
-    if load_series.empty or rpe_series.empty:
-        return None
+def calc_daily_readiness(
+    load_series,
+    rpe_series,
+    quality_series,
+    span=7
+):
+    """
+    Daily readiness based on:
+    - Coach load
+    - Athlete RPE
+    - Session quality (execution)
+    - EWMA adaptation baseline
+    Returns readiness score (0–100), centred ~75
+    """
 
     df = pd.DataFrame({
         "load": pd.to_numeric(load_series, errors="coerce"),
-        "rpe":  pd.to_numeric(rpe_series, errors="coerce")
+        "rpe":  pd.to_numeric(rpe_series, errors="coerce"),
+        "qual": pd.to_numeric(quality_series, errors="coerce"),
     }).dropna()
 
-    if df.empty:
+    if len(df) < 4:
         return None
 
-    df["strain"] = df["load"] * df["rpe"]
-
-    # EWMA baseline
-    ewma = df["strain"].ewm(span=span, adjust=False).mean()
-    baseline = ewma.iloc[-2] if len(ewma) > 1 else ewma.iloc[-1]
-
-    if pd.isna(baseline) or baseline == 0:
+    # -------------------------
+    # Normalise inputs
+    # -------------------------
+    load_ref = df["load"].quantile(0.9)
+    if load_ref <= 0 or pd.isna(load_ref):
         return 75.0
 
-    ratio = df["strain"].iloc[-1] / baseline
+    load_n = df["load"] / load_ref
+    rpe_n  = (df["rpe"].clip(1, 5) - 1) / 4
+    qual_n = (df["qual"].clip(1, 5) - 1) / 4
 
-    # Map ratio → readiness
-    readiness = 100 - (ratio - 1) * 50
-    return float(max(0, min(readiness, 100)))
+    # -------------------------
+    # Composite session stress
+    # -------------------------
+    df["stress"] = (
+        load_n *
+        (0.6 * rpe_n + 0.4) *
+        (1.15 - 0.3 * qual_n)
+    )
+
+    # -------------------------
+    # EWMA baseline
+    # -------------------------
+    baseline = df["stress"].ewm(span=span, adjust=False).mean()
+    base_val = baseline.iloc[-2] if len(baseline) > 1 else baseline.iloc[-1]
+
+    if pd.isna(base_val) or base_val == 0:
+        return 75.0
+
+    # -------------------------
+    # Stability term
+    # -------------------------
+    error = (df["stress"] - baseline).abs()
+    error_ewma = error.ewm(span=span, adjust=False).mean().iloc[-1]
+
+    if error_ewma == 0 or pd.isna(error_ewma):
+        return 75.0
+
+    # -------------------------
+    # Readiness mapping
+    # -------------------------
+    z = (df["stress"].iloc[-1] - base_val) / error_ewma
+    readiness = 75 - (z * 15)
+
+    return float(np.clip(readiness, 0, 100))
 
 
 
@@ -379,6 +422,26 @@ def calc_neuro_readiness(
     sleep, fatigue, soreness, mood,
     history_df=None, span=3
 ):
+    """
+    Neuromuscular readiness (0–100) based on:
+    - Sleep (positive)
+    - Fatigue (inverse)
+    - Soreness (inverse)
+    - Mood (positive)
+    EWMA smoothed for stability
+    """
+
+    # -------------------------
+    # Input safety
+    # -------------------------
+    try:
+        sleep    = float(np.clip(sleep,    1, 5))
+        fatigue  = float(np.clip(fatigue,  1, 5))
+        soreness = float(np.clip(soreness, 1, 5))
+        mood     = float(np.clip(mood,     1, 5))
+    except Exception:
+        return None
+
     weights = {
         "sleep": 0.4,
         "fatigue": 0.25,
@@ -386,6 +449,9 @@ def calc_neuro_readiness(
         "mood": 0.15
     }
 
+    # -------------------------
+    # Raw neuromuscular state
+    # -------------------------
     today = (
         sleep * weights["sleep"]
         + (6 - fatigue) * weights["fatigue"]
@@ -395,14 +461,23 @@ def calc_neuro_readiness(
 
     score = today * 20  # 0–100
 
+    # -------------------------
+    # EWMA smoothing
+    # -------------------------
     if history_df is None or "Neuro" not in history_df:
-        return score
+        return float(np.clip(score, 0, 100))
 
     hist = pd.to_numeric(history_df["Neuro"], errors="coerce").dropna()
-    hist = pd.concat([hist, pd.Series([score])])
+
+    if hist.empty:
+        return float(np.clip(score, 0, 100))
+
+    hist = pd.concat([hist, pd.Series([score])], ignore_index=True)
 
     smooth = hist.ewm(span=span, adjust=False).mean()
-    return float(smooth.iloc[-1])
+
+    return float(np.clip(smooth.iloc[-1], 0, 100))
+
 
 
 def icon_row(icon, title, content):
@@ -493,90 +568,43 @@ def safe(df: pd.DataFrame, row_idx: int, col: str, default: str = "") -> str:
 
 
 def get_day_status(df, date_obj):
-    """
-    A session is LOGGED only if the ATHLETE actively entered post-session data:
-    - Notes
-    - Sets/Reps/Load
-    - Track reps/times
-    - Any slider input (RPE, sleep, fatigue, mood, soreness, session quality)
-
-    Planned workouts or Load alone DO NOT count.
-    """
-
     if df.empty or "Date" not in df.columns:
-        return {
-            "logged": False,
-            "rpe": None,
-            "has_notes": False,
-            "has_sets": False,
-            "has_track": False,
-            "has_slider": False,
-        }
+        return {"logged": False, "rpe": None}
 
     d = df.copy()
     d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
     rows = d[d["Date"] == date_obj]
 
     if rows.empty:
-        return {
-            "logged": False,
-            "rpe": None,
-            "has_notes": False,
-            "has_sets": False,
-            "has_track": False,
-            "has_slider": False,
-        }
+        return {"logged": False, "rpe": None}
 
     row = rows.iloc[-1]
 
-    INVALID = {"", "nan", "none", "nil", "0", "-", "—", "n/a", "na"}
-
-    # ------------------------
-    # Athlete text inputs
-    # ------------------------
+    # --- TRAINING-RELATED FIELDS ONLY ---
     notes = str(row.get("Athlete_Notes", "")).strip().lower()
-    sets  = str(row.get("Sets_Reps_Load", "")).strip().lower()
-    track = str(row.get("Track_Reps_Times", "")).strip().lower()
+    sets_reps = str(row.get("Sets_Reps_Load", "")).strip()
+    track_reps = str(row.get("Track_Reps_Time", "")).strip()
 
-    has_notes = notes not in INVALID
-    has_sets  = sets not in INVALID
-    has_track = track not in INVALID
-
-    # ------------------------
-    # Athlete sliders
-    slider_cols = [
-        "RPE_Post_Session",
-        "Session_1_5",
-        "Sleep_1_5",
-        "Fatigue_1_5",
-        "Mood_1_5",
-        "Soreness_1_5",
-    ]
-
-
-    has_slider = any(
-        pd.notna(pd.to_numeric(row.get(c, np.nan), errors="coerce"))
-        for c in slider_cols
-    )
-
-    # ------------------------
-    # LOGGED = athlete engagement ONLY
-    # ------------------------
-    logged = has_notes or has_sets or has_track or has_slider
-
-    rpe_val = pd.to_numeric(
+    rpe = pd.to_numeric(
         row.get("RPE_Post_Session", row.get("sRPE", None)),
         errors="coerce"
     )
 
+    invalid_notes = {"", "nan", "none", "nil", "0", "n/a", "na"}
+
+    has_notes = notes not in invalid_notes
+    has_sets = sets_reps not in {"", "nan", "none"}
+    has_track = track_reps not in {"", "nan", "none"}
+    has_rpe = pd.notna(rpe) and rpe > 0
+
+    # ✅ LOGGED SESSION = athlete actually trained
+    logged = has_notes or has_sets or has_track or has_rpe
+
     return {
         "logged": logged,
-        "rpe": float(rpe_val) if pd.notna(rpe_val) else None,
-        "has_notes": has_notes,
-        "has_sets": has_sets,
-        "has_track": has_track,
-        "has_slider": has_slider,
+        "rpe": float(rpe) if has_rpe else None
     }
+
 
 
 
@@ -2684,7 +2712,7 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
         neuro_val = None
     else:
         sleep_score = ((sleep_s.clip(1, 5).mean() - 1) / 4) * 100
-        fatigue_score = 100 - ((fatigue_s.clip(1, 5).mean() - 1) / 4) * 100
+        fatigue_score = ((fatigue_s.clip(1, 5).mean() - 1) / 4) * 100
         soreness_score = 100 - ((soreness_s.clip(1, 5).mean() - 1) / 4) * 100
         mood_score = ((mood_s.clip(1, 5).mean() - 1) / 4) * 100
 
@@ -2738,7 +2766,7 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     readiness_ui = dial_flip(
         apple_readiness_ring(readiness_val),
         " ",
-        "Daily Readiness reflects how well your body has recovered relative to recent training load and post-session exertion. Lower scores indicate accumulated load and reduced readiness."
+        "Daily Readiness Reflects how well you’re coping with recent training. Combines load, post-session effort, and session quality, compared against your recent baseline. Lower scores suggest accumulated fatigue."
     )
 
     return today_date_str, weekly_ui, streak_ui, neuro_ui, readiness_ui, load_fig, wellness_fig, speed_fig

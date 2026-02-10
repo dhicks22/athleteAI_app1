@@ -1241,3 +1241,20 @@ textarea, input, .form-control{
     display: none !important;
   }
 }
+
+/* ============================================================
+   iOS PORTRAIT ONLY — stop card shadow bleed behind dials
+============================================================ */
+
+@media (max-width: 576px) and (orientation: portrait) {
+
+  /* Remove shadow ONLY for dial cards */
+  .metric-card {
+    box-shadow: none !important;
+  }
+
+  /* Keep card border so it doesn't look flat */
+  .metric-card {
+    border: 1px solid var(--border) !important;
+  }
+}
