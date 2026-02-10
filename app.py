@@ -1099,6 +1099,8 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
             name="Short-term Load",
             mode="lines",
             line=dict(color=TEAL, width=2.6),
+            line_shape="spline",
+            line_smoothing=0.75,
         ))
 
         fig.add_trace(go.Scatter(
@@ -1106,6 +1108,8 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
             name="Long-term Load",
             mode="lines",
             line=dict(color=GREEN_DARK, width=2, dash="dot"),
+            line_shape="spline",
+            line_smoothing=0.75,
             opacity=0.5,
             visible="legendonly",
         ))
@@ -1116,6 +1120,8 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
             mode="lines",
             yaxis="y2",
             line=dict(color=PURPLE, width=1.6),
+            line_shape="spline",
+            line_smoothing=0.75,
             opacity=0.7,
         ))
 
@@ -1171,6 +1177,8 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
         name="Short-term Load",
         mode="lines",
         line=dict(color=TEAL, width=2.6),
+        line_shape="spline",
+        line_smoothing=0.75,
     ))
 
     fig.add_trace(go.Scatter(
@@ -1178,6 +1186,8 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
         name="Long-term Load",
         mode="lines",
         line=dict(color=GREEN_DARK, width=2, dash="dot"),
+        line_shape="spline",
+        line_smoothing=0.75,
         opacity=0.5,
         visible="legendonly",
     ))
@@ -1188,6 +1198,8 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
         mode="lines",
         yaxis="y2",
         line=dict(color=PURPLE, width=1.6),
+        line_shape="spline",
+        line_smoothing=0.75,
     ))
 
     fig.add_shape(
@@ -1200,7 +1212,7 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
     )
 
     fig.update_layout(
-        title="Training Load (Daily)",
+        title="Daily Training Load & Balance",
         xaxis_title="Date",
         yaxis=dict(title="Load"),
         yaxis2=dict(
@@ -1256,14 +1268,27 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
 
             roll = y.rolling(window, min_periods=1).mean()
 
+            # --- SHADED ---
+            fig.add_trace(go.Scatter(
+                x=x,
+                y=roll,
+                mode="lines",
+                line=dict(width=0),
+                fill="tozeroy",
+                fillcolor=f"rgba{tuple(int(color[i:i + 2], 16) for i in (1, 3, 5)) + (0.12,)}",
+                hoverinfo="skip",
+                showlegend=False,
+            ))
+
+            # --- LINE ---
             fig.add_trace(go.Scatter(
                 x=x,
                 y=roll,
                 name=label,
                 mode="lines",
-                line=dict(color=color, width=2.5),
-                opacity=0.85,
-                visible="legendonly" if label == "Mood" else True
+                line=dict(color=color, width=2.6),
+                line_shape="spline",
+                line_smoothing=0.7,
             ))
 
         fig.update_layout(
@@ -1284,6 +1309,9 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
     # =====================
     # DAILY VIEW
     # =====================
+    # =====================
+    # DAILY VIEW (FIXED)
+    # =====================
     x = d["Date"]
     window = 3  # short smoothing for daily reflection
 
@@ -1295,30 +1323,45 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
         if y.dropna().empty:
             continue
 
-        # Raw
+        roll = y.rolling(window, min_periods=1).mean()
+
+        # --- BASELINE (invisible, required for proper fill) ---
         fig.add_trace(go.Scatter(
             x=x,
-            y=y,
-            name=label,
-            mode="lines+markers",
-            line=dict(color=color, width=1),
-            marker=dict(size=4),
-            opacity=0.4,
-            visible="legendonly" if label == "Mood" else True
+            y=[0] * len(x),
+            mode="lines",
+            line=dict(width=0),
+            showlegend=False,
+            hoverinfo="skip",
         ))
 
-        # Smoothed
-        roll = y.rolling(window, min_periods=1).mean()
+        # --- SHADED AREA (fills to baseline, NOT zero per metric) ---
         fig.add_trace(go.Scatter(
             x=x,
             y=roll,
-            name=f"{label} (trend)",
             mode="lines",
-            line=dict(color=color, width=2.5),
+            line=dict(width=0),
+            fill="tonexty",
+            fillcolor=f"rgba{tuple(int(color[i:i + 2], 16) for i in (1, 3, 5)) + (0.12,)}",
+            hoverinfo="skip",
+            showlegend=False,
+        ))
+
+        # --- DARK SMOOTH LINE (on top) ---
+        fig.add_trace(go.Scatter(
+            x=x,
+            y=roll,
+            name=label,
+            mode="lines",
+            line=dict(color=color, width=2.6),
+            line_shape="spline",
+            line_smoothing=0.7,
+            hovertemplate=f"{label}: %{{y:.2f}}<extra></extra>",
+            visible="legendonly" if label == "Mood" else True,
         ))
 
     fig.update_layout(
-        title="Daily Wellness",
+        title="Daily Wellness Trends",
         xaxis_title="Date",
         yaxis=dict(
             title="Scale (1–5)",
@@ -1331,7 +1374,6 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
 
     fig.update_layout(**MOBILE_PLOT_LAYOUT)
     return fig
-
 
 
 def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
@@ -1360,7 +1402,7 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
         # --- SPEED BARS ---
         fig.add_bar(
             x=x,
-            y=speed,  # ✅ FIXED
+            y=speed,
             name="Speed exposure",
             marker=dict(
                 color="rgba(37,99,235,0.35)",
@@ -1372,7 +1414,7 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
         # --- TEMPO BARS ---
         fig.add_bar(
             x=x,
-            y=tempo,  # ✅ FIXED
+            y=tempo,
             name="Tempo exposure",
             marker=dict(
                 color="rgba(245,158,11,0.35)",
@@ -1381,13 +1423,16 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
             hovertemplate="Tempo: %{y:.2f} m<extra></extra>",
         )
 
-        # --- ROLLING LINES ---
+        # --- SPEED ROLLING LINES ---
         fig.add_trace(go.Scatter(
             x=x,
             y=speed.rolling(7, min_periods=1).mean(),
             name="Speed 7d",
             mode="lines",
             line=dict(color=BLUE, width=2.4, dash="dot"),
+            line_shape="spline",
+            line_smoothing=0.7,
+            hovertemplate="Speed 7d: %{y:.2f} m<extra></extra>",
         ))
 
         fig.add_trace(go.Scatter(
@@ -1396,14 +1441,22 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
             name="Speed 28d",
             mode="lines",
             line=dict(color=BLUE, width=2.4, dash="dash"),
+            line_shape="spline",
+            line_smoothing=0.7,
+            hovertemplate="Speed 28d: %{y:.2f} m<extra></extra>",
+            visible="legendonly",
         ))
 
+        # --- TEMPO ROLLING LINES ---
         fig.add_trace(go.Scatter(
             x=x,
             y=tempo.rolling(7, min_periods=1).mean(),
             name="Tempo 7d",
             mode="lines",
             line=dict(color=ORANGE, width=2.4, dash="dot"),
+            line_shape="spline",
+            line_smoothing=0.7,
+            hovertemplate="Tempo 7d: %{y:.2f} m<extra></extra>",
         ))
 
         fig.add_trace(go.Scatter(
@@ -1412,10 +1465,14 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
             name="Tempo 28d",
             mode="lines",
             line=dict(color=ORANGE, width=2.4, dash="dash"),
+            line_shape="spline",
+            line_smoothing=0.7,
+            hovertemplate="Tempo 28d: %{y:.2f} m<extra></extra>",
+            visible="legendonly",
         ))
 
         fig.update_layout(
-            title="Speed & Tempo Volumes (Daily)",
+            title="Daily Speed & Tempo Volumes",
             xaxis_title="Date",
             yaxis_title="Metres",
             barmode="stack",
@@ -1469,6 +1526,8 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
         name="Speed 7d",
         mode="lines",
         line=dict(color=BLUE, width=2.4, dash="dot"),
+        line_shape="spline",
+        line_smoothing=0.7,
     ))
 
     fig.add_trace(go.Scatter(
@@ -1477,6 +1536,8 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
         name="Speed 28d",
         mode="lines",
         line=dict(color=BLUE, width=2.4, dash="dash"),
+        line_shape="spline",
+        line_smoothing=0.7,
     ))
 
     fig.add_trace(go.Scatter(
@@ -1485,6 +1546,8 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
         name="Tempo 7d",
         mode="lines",
         line=dict(color=ORANGE, width=2.4, dash="dot"),
+        line_shape="spline",
+        line_smoothing=0.7,
     ))
 
     fig.add_trace(go.Scatter(
@@ -1493,10 +1556,12 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
         name="Tempo 28d",
         mode="lines",
         line=dict(color=ORANGE, width=2.4, dash="dash"),
+        line_shape="spline",
+        line_smoothing=0.7,
     ))
 
     fig.update_layout(
-        title="Speed & Tempo Volumes (Weekly)",
+        title="Weekly Speed & Tempo Volumes",
         xaxis_title="Week",
         yaxis_title="Metres",
         barmode="stack",
@@ -1726,7 +1791,7 @@ def app_header(center=False):
             html.Div(
                 [
                     html.H2("Adaptive Coaching Intelligence", style={"margin": 0, "fontWeight": 600, "textAlign": align}),
-                    html.Small("AI-aligned athlete & coaching feedback",
+                    html.Small("Empowering performance through athlete insight",
                                style={"color": "#555", "textAlign": align, "display": "block"}),
                 ],
                 style={"display": "inline-block", "verticalAlign": "middle"},
@@ -2274,7 +2339,7 @@ app.layout = html.Div(
             children=[
                 html.Img(src="/assets/app_icon.png", className="splash-logo"),
                 html.H2("Adaptive Coaching Intelligence", className="splash-title"),
-                html.P("AI-aligned athlete & coaching feedback", className="splash-subtitle"),
+                html.P("Empowering performance through athlete insight", className="splash-subtitle"),
                 html.Div(className="spinner")
             ]
         ),
