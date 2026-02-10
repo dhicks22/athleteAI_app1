@@ -566,7 +566,6 @@ def safe(df: pd.DataFrame, row_idx: int, col: str, default: str = "") -> str:
         pass
     return default
 
-
 def get_day_status(df, date_obj):
     if df.empty or "Date" not in df.columns:
         return {"logged": False, "rpe": None}
@@ -580,30 +579,34 @@ def get_day_status(df, date_obj):
 
     row = rows.iloc[-1]
 
-    # --- TRAINING-RELATED FIELDS ONLY ---
-    notes = str(row.get("Athlete_Notes", "")).strip().lower()
+    # ---------------------------
+    # Athlete-entered fields ONLY
+    # ---------------------------
+    notes = str(row.get("Athlete_Notes", "")).strip()
     sets_reps = str(row.get("Sets_Reps_Load", "")).strip()
-    track_reps = str(row.get("Track_Reps_Time", "")).strip()
+    track_reps = str(row.get("Track_Reps_Times", "")).strip()
 
     rpe = pd.to_numeric(
-        row.get("RPE_Post_Session", row.get("sRPE", None)),
+        row.get("RPE_Post_Session", row.get("sRPE", np.nan)),
         errors="coerce"
     )
 
-    invalid_notes = {"", "nan", "none", "nil", "0", "n/a", "na"}
+    invalid_text = {"", "nan", "none", "nil", "0", "n/a", "na"}
 
-    has_notes = notes not in invalid_notes
-    has_sets = sets_reps not in {"", "nan", "none"}
-    has_track = track_reps not in {"", "nan", "none"}
-    has_rpe = pd.notna(rpe) and rpe > 0
+    has_notes = notes.lower() not in invalid_text
+    has_sets = sets_reps.lower() not in invalid_text
+    has_track = track_reps.lower() not in invalid_text
+    has_rpe = pd.notna(rpe)
 
-    # ✅ LOGGED SESSION = athlete actually trained
+    # ✅ LOGGED SESSION = athlete confirmation
     logged = has_notes or has_sets or has_track or has_rpe
 
     return {
         "logged": logged,
         "rpe": float(rpe) if has_rpe else None
     }
+
+
 
 
 
@@ -1721,9 +1724,8 @@ def build_month_calendar(df: pd.DataFrame, month_date: dt.date, selected_date_st
         # Logged session logic
         # ------------------------
         logged_session = (
-            pd.notna(rpe)
-            or pd.notna(load)
-            or notes_val.lower() not in ["", "nan", "none", "nil", "0"]
+                pd.notna(rpe)
+                or notes_val.lower() not in ["", "nan", "none", "nil", "0"]
         )
 
         # ------------------------
