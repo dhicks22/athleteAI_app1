@@ -353,65 +353,81 @@ def calc_daily_readiness(
     span=7
 ):
     """
-    Daily readiness based on:
-    - Coach load
-    - Athlete RPE
-    - Session quality (execution)
-    - EWMA adaptation baseline
-    Returns readiness score (0–100), centred ~75
+    Daily readiness (0–100)
+    - Load (coach planned)
+    - RPE (athlete perceived effort)
+    - Session quality
+    - Time-aware EWMA decay
     """
 
+    # -----------------------------------
+    # Build dataframe with dates
+    # -----------------------------------
     df = pd.DataFrame({
         "load": pd.to_numeric(load_series, errors="coerce"),
         "rpe":  pd.to_numeric(rpe_series, errors="coerce"),
         "qual": pd.to_numeric(quality_series, errors="coerce"),
-    }).dropna()
+    })
 
-    if len(df) < 4:
+    if df.empty:
         return None
 
-    # -------------------------
-    # Normalise inputs
-    # -------------------------
+    # Require at least some real data
+    if df["load"].dropna().empty:
+        return None
+
+    # -----------------------------------
+    # Normalisation
+    # -----------------------------------
     load_ref = df["load"].quantile(0.9)
-    if load_ref <= 0 or pd.isna(load_ref):
+
+    if pd.isna(load_ref) or load_ref <= 0:
         return 75.0
 
-    load_n = df["load"] / load_ref
-    rpe_n  = (df["rpe"].clip(1, 5) - 1) / 4
-    qual_n = (df["qual"].clip(1, 5) - 1) / 4
+    load_n = df["load"].fillna(0) / load_ref
+    rpe_n  = (df["rpe"].fillna(0).clip(1, 5) - 1) / 4
+    qual_n = (df["qual"].fillna(0).clip(1, 5) - 1) / 4
 
-    # -------------------------
-    # Composite session stress
-    # -------------------------
+    # -----------------------------------
+    # Session stress model
+    # -----------------------------------
     df["stress"] = (
         load_n *
         (0.6 * rpe_n + 0.4) *
         (1.15 - 0.3 * qual_n)
     )
 
-    # -------------------------
-    # EWMA baseline
-    # -------------------------
+    # -----------------------------------
+    # Fill missing days with 0 stress
+    # (decay when no training logged)
+    # -----------------------------------
+    df["stress"] = df["stress"].fillna(0)
+
+    # -----------------------------------
+    # EWMA baseline (adaptive capacity)
+    # -----------------------------------
     baseline = df["stress"].ewm(span=span, adjust=False).mean()
-    base_val = baseline.iloc[-2] if len(baseline) > 1 else baseline.iloc[-1]
+
+    if baseline.empty:
+        return 75.0
+
+    acute = df["stress"].iloc[-1]
+    base_val = baseline.iloc[-1]
 
     if pd.isna(base_val) or base_val == 0:
         return 75.0
 
-    # -------------------------
-    # Stability term
-    # -------------------------
+    # -----------------------------------
+    # Z-style deviation from baseline
+    # -----------------------------------
     error = (df["stress"] - baseline).abs()
     error_ewma = error.ewm(span=span, adjust=False).mean().iloc[-1]
 
-    if error_ewma == 0 or pd.isna(error_ewma):
+    if pd.isna(error_ewma) or error_ewma == 0:
         return 75.0
 
-    # -------------------------
-    # Readiness mapping
-    # -------------------------
-    z = (df["stress"].iloc[-1] - base_val) / error_ewma
+    z = (acute - base_val) / error_ewma
+
     readiness = 75 - (z * 15)
 
     return float(np.clip(readiness, 0, 100))
@@ -420,20 +436,18 @@ def calc_daily_readiness(
 
 def calc_neuro_readiness(
     sleep, fatigue, soreness, mood,
-    history_df=None, span=3
+    history_df=None,
+    span=3
 ):
     """
-    Neuromuscular readiness (0–100) based on:
-    - Sleep (positive)
-    - Fatigue (inverse)
-    - Soreness (inverse)
-    - Mood (positive)
-    EWMA smoothed for stability
+    Neuromuscular readiness (0–100)
+    Sleep ↑
+    Fatigue ↓
+    Soreness ↓
+    Mood ↑
+    Time-aware smoothing
     """
 
-    # -------------------------
-    # Input safety
-    # -------------------------
     try:
         sleep    = float(np.clip(sleep,    1, 5))
         fatigue  = float(np.clip(fatigue,  1, 5))
@@ -443,40 +457,53 @@ def calc_neuro_readiness(
         return None
 
     weights = {
-        "sleep": 0.4,
+        "sleep": 0.40,
         "fatigue": 0.25,
-        "soreness": 0.2,
-        "mood": 0.15
+        "soreness": 0.20,
+        "mood": 0.15,
     }
 
-    # -------------------------
+    # -----------------------------------
     # Raw neuromuscular state
-    # -------------------------
-    today = (
-        sleep * weights["sleep"]
-        + (6 - fatigue) * weights["fatigue"]
-        + (6 - soreness) * weights["soreness"]
-        + mood * weights["mood"]
+    # -----------------------------------
+    raw = (
+        sleep * weights["sleep"] +
+        (6 - fatigue) * weights["fatigue"] +
+        (6 - soreness) * weights["soreness"] +
+        mood * weights["mood"]
     )
 
-    score = today * 20  # 0–100
+    score = raw * 20  # scale to 0–100
+    score = float(np.clip(score, 0, 100))
 
-    # -------------------------
-    # EWMA smoothing
-    # -------------------------
+    # -----------------------------------
+    # If no history → return current
+    # -----------------------------------
     if history_df is None or "Neuro" not in history_df:
-        return float(np.clip(score, 0, 100))
+        return score
 
     hist = pd.to_numeric(history_df["Neuro"], errors="coerce").dropna()
 
-    if hist.empty:
-        return float(np.clip(score, 0, 100))
+    # Use only last 7 entries (recent state)
+    hist = hist.tail(7)
 
+    if hist.empty:
+        return score
+
+    # Append today
     hist = pd.concat([hist, pd.Series([score])], ignore_index=True)
 
-    smooth = hist.ewm(span=span, adjust=False).mean()
+    smooth = hist.ewm(span=span, adjust=False).mean().iloc[-1]
 
-    return float(np.clip(smooth.iloc[-1], 0, 100))
+    # -----------------------------------
+    # Soft regression toward 75 baseline
+    # (prevents frozen dial if no updates)
+    # -----------------------------------
+    regression_strength = 0.05
+    smooth = smooth + regression_strength * (75 - smooth)
+
+    return float(np.clip(smooth, 0, 100))
+
 
 
 
@@ -586,8 +613,9 @@ def get_day_status(df, date_obj):
     sets_reps = str(row.get("Sets_Reps_Load", "")).strip()
     track_reps = str(row.get("Track_Reps_Times", "")).strip()
 
-    rpe = pd.to_numeric(
-        row.get("RPE_Post_Session", row.get("sRPE", np.nan)),
+    # 🚨 CRITICAL: ONLY post-session RPE counts
+    rpe_post = pd.to_numeric(
+        row.get("RPE_Post_Session", np.nan),
         errors="coerce"
     )
 
@@ -596,14 +624,13 @@ def get_day_status(df, date_obj):
     has_notes = notes.lower() not in invalid_text
     has_sets = sets_reps.lower() not in invalid_text
     has_track = track_reps.lower() not in invalid_text
-    has_rpe = pd.notna(rpe)
+    has_rpe = pd.notna(rpe_post)
 
-    # ✅ LOGGED SESSION = athlete confirmation
     logged = has_notes or has_sets or has_track or has_rpe
 
     return {
         "logged": logged,
-        "rpe": float(rpe) if has_rpe else None
+        "rpe": float(rpe_post) if has_rpe else None
     }
 
 
@@ -1099,7 +1126,7 @@ def make_ai_suggestions(
         "- Add a complementary perspective ONLY.\n"
         "- Provide 1–2 monitoring cues.\n"
         "- End with ONE reflective question.\n"
-        "- Keep it brief (2–3 sentences).\n"
+        "- Keep it brief (3-4 sentences).\n"
     )
 
     ai2 = call_openai_chat([
