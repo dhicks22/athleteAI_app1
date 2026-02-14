@@ -613,7 +613,7 @@ def get_day_status(df, date_obj):
     sets_reps = str(row.get("Sets_Reps_Load", "")).strip()
     track_reps = str(row.get("Track_Reps_Times", "")).strip()
 
-    # 🚨 CRITICAL: ONLY post-session RPE counts
+    # 🚨 STRICT: RPE must be > 0 AND not default
     rpe_post = pd.to_numeric(
         row.get("RPE_Post_Session", np.nan),
         errors="coerce"
@@ -624,8 +624,11 @@ def get_day_status(df, date_obj):
     has_notes = notes.lower() not in invalid_text
     has_sets = sets_reps.lower() not in invalid_text
     has_track = track_reps.lower() not in invalid_text
-    has_rpe = pd.notna(rpe_post)
 
+    # 🔒 Only count RPE if it's meaningful
+    has_rpe = pd.notna(rpe_post) and rpe_post > 0
+
+    # 🔥 LOGGED SESSION requires athlete confirmation
     logged = has_notes or has_sets or has_track or has_rpe
 
     return {
