@@ -353,34 +353,29 @@ def calc_daily_readiness(
     span=7
 ):
     """
-    Daily readiness (0–100)
-    - Load (coach planned)
-    - RPE (athlete perceived effort)
-    - Session quality
-    - Time-aware EWMA decay
+    Daily readiness (0–100).
+    Uses load, RPE (athlete post-session), and session quality.
+    Applies a time-decay penalty when the athlete has been silent:
+    - Each day without an RPE entry pulls readiness toward 50
+    - Penalty rate: ~4 pts/day, capped at -40 (floor ~30)
     """
 
-    # -----------------------------------
-    # Build dataframe with dates
-    # -----------------------------------
     df = pd.DataFrame({
         "load": pd.to_numeric(load_series, errors="coerce"),
-        "rpe":  pd.to_numeric(rpe_series, errors="coerce"),
+        "rpe":  pd.to_numeric(rpe_series,  errors="coerce"),
         "qual": pd.to_numeric(quality_series, errors="coerce"),
     })
 
-    if df.empty:
-        return None
+    # ------------------------------------------------------------------
+    # Need at least some athlete RPE data to compute anything meaningful
+    # ------------------------------------------------------------------
+    rpe_valid = df["rpe"].dropna()
+    if rpe_valid.empty:
+        return 75.0  # no data at all — neutral
 
-    # Require at least some real data
-    if df["load"].dropna().empty:
-        return None
-
-    # -----------------------------------
-    # Normalisation
-    # -----------------------------------
     load_ref = df["load"].quantile(0.9)
-
+    if pd.isna(load_ref) or load_ref <= 0:
+        load_ref = df["load"].max()
     if pd.isna(load_ref) or load_ref <= 0:
         return 75.0
 
@@ -388,49 +383,75 @@ def calc_daily_readiness(
     rpe_n  = (df["rpe"].fillna(0).clip(1, 5) - 1) / 4
     qual_n = (df["qual"].fillna(0).clip(1, 5) - 1) / 4
 
-    # -----------------------------------
-    # Session stress model
-    # -----------------------------------
     df["stress"] = (
         load_n *
         (0.6 * rpe_n + 0.4) *
         (1.15 - 0.3 * qual_n)
     )
-
-    # -----------------------------------
-    # Fill missing days with 0 stress
-    # (decay when no training logged)
-    # -----------------------------------
     df["stress"] = df["stress"].fillna(0)
 
-    # -----------------------------------
-    # EWMA baseline (adaptive capacity)
-    # -----------------------------------
     baseline = df["stress"].ewm(span=span, adjust=False).mean()
 
     if baseline.empty:
         return 75.0
 
-    acute = df["stress"].iloc[-1]
+    acute    = df["stress"].iloc[-1]
     base_val = baseline.iloc[-1]
 
     if pd.isna(base_val) or base_val == 0:
-        return 75.0
+        base_readiness = 75.0
+    else:
+        error      = (df["stress"] - baseline).abs()
+        error_ewma = error.ewm(span=span, adjust=False).mean().iloc[-1]
 
-    # -----------------------------------
-    # Z-style deviation from baseline
-    # -----------------------------------
-    error = (df["stress"] - baseline).abs()
-    error_ewma = error.ewm(span=span, adjust=False).mean().iloc[-1]
+        if pd.isna(error_ewma) or error_ewma == 0:
+            base_readiness = 75.0
+        else:
+            z = (acute - base_val) / error_ewma
+            base_readiness = float(np.clip(75 - (z * 15), 0, 100))
 
-    if pd.isna(error_ewma) or error_ewma == 0:
-        return 75.0
+    # ------------------------------------------------------------------
+    # ⏳ SILENCE PENALTY
+    # Find how many days since the athlete last entered an RPE value.
+    # Each silent day decays readiness toward 50 by DECAY_RATE pts/day.
+    # This replaces the old behaviour where 0-stress = no decay.
+    # ------------------------------------------------------------------
+    DECAY_RATE   = 4.0   # points per silent day
+    DECAY_TARGET = 50.0  # asymptote (athlete absent ≠ peak readiness)
+    MAX_PENALTY  = 40.0  # cap so floor ≈ 30-35
 
-    z = (acute - base_val) / error_ewma
+    # rpe_series index should be a DatetimeIndex (set by update_dashboard)
+    try:
+        rpe_dated = pd.to_numeric(rpe_series, errors="coerce")
+        last_entry_pos = rpe_dated.last_valid_index()
 
-    readiness = 75 - (z * 15)
+        if last_entry_pos is not None:
+            if hasattr(last_entry_pos, "date"):
+                # DatetimeIndex
+                from datetime import date as _date
+                today_dt = dt.datetime.now(ADL_TZ).date()
+                days_silent = (today_dt - last_entry_pos.date()).days
+            else:
+                # Integer positional index: count trailing NaNs
+                days_silent = len(rpe_dated) - 1 - rpe_dated.index.get_loc(last_entry_pos)
+        else:
+            days_silent = len(df)
 
-    return float(np.clip(readiness, 0, 100))
+    except Exception:
+        days_silent = 0
+
+    days_silent = max(0, int(days_silent))
+
+    if days_silent > 0:
+        penalty = min(DECAY_RATE * days_silent, MAX_PENALTY)
+        # Pull toward DECAY_TARGET, not straight down
+        direction = DECAY_TARGET - base_readiness
+        adjusted  = base_readiness + (direction * penalty / MAX_PENALTY)
+        readiness = float(np.clip(adjusted, 0, 100))
+    else:
+        readiness = base_readiness
+
+    return readiness
 
 
 
@@ -479,28 +500,30 @@ def calc_neuro_readiness(
     # -----------------------------------
     # If no history → return current
     # -----------------------------------
-    if history_df is None or "Neuro" not in history_df:
+    # If no history → return current score unsmoothed
+    if history_df is None or history_df.empty:
         return score
 
-    hist = pd.to_numeric(history_df["Neuro"], errors="coerce").dropna()
+    # Recompute neuro score per historical row and apply EWMA smoothing
+    def _row_score(r):
+        try:
+            s = float(np.clip(pd.to_numeric(r.get("Sleep_1_5"), errors="coerce"), 1, 5))
+            f = float(np.clip(pd.to_numeric(r.get("Fatigue_1_5"), errors="coerce"), 1, 5))
+            so = float(np.clip(pd.to_numeric(r.get("Soreness_1_5"), errors="coerce"), 1, 5))
+            m = float(np.clip(pd.to_numeric(r.get("Mood_1_5"), errors="coerce"), 1, 5))
+            raw = s * 0.40 + (6 - f) * 0.25 + (6 - so) * 0.20 + m * 0.15
+            return float(np.clip(raw * 20, 0, 100))
+        except Exception:
+            return np.nan
 
-    # Use only last 7 entries (recent state)
-    hist = hist.tail(7)
+    hist_scores = history_df.apply(_row_score, axis=1).dropna()
 
-    if hist.empty:
+    if hist_scores.empty:
         return score
 
-    # Append today
-    hist = pd.concat([hist, pd.Series([score])], ignore_index=True)
-
-    smooth = hist.ewm(span=span, adjust=False).mean().iloc[-1]
-
-    # -----------------------------------
-    # Soft regression toward 75 baseline
-    # (prevents frozen dial if no updates)
-    # -----------------------------------
-    regression_strength = 0.05
-    smooth = smooth + regression_strength * (75 - smooth)
+    hist_scores = pd.concat([hist_scores, pd.Series([score])], ignore_index=True)
+    smooth = hist_scores.ewm(span=span, adjust=False).mean().iloc[-1]
+    smooth = smooth + 0.05 * (75 - smooth)  # soft regression to baseline
 
     return float(np.clip(smooth, 0, 100))
 
@@ -594,6 +617,11 @@ def safe(df: pd.DataFrame, row_idx: int, col: str, default: str = "") -> str:
     return default
 
 def get_day_status(df, date_obj):
+    """
+    Returns logged=True ONLY when the athlete has entered at least one
+    of their own fields. Coach-planned columns (Workout, sRPE, Load,
+    Focus, Venue, Duration, Notes) are explicitly NOT checked here.
+    """
     if df.empty or "Date" not in df.columns:
         return {"logged": False, "rpe": None}
 
@@ -606,36 +634,40 @@ def get_day_status(df, date_obj):
 
     row = rows.iloc[-1]
 
-    # ---------------------------
-    # Athlete-entered fields ONLY
-    # ---------------------------
-    notes = str(row.get("Athlete_Notes", "")).strip()
-    sets_reps = str(row.get("Sets_Reps_Load", "")).strip()
-    track_reps = str(row.get("Track_Reps_Times", "")).strip()
+    # ------------------------------------------------------------------
+    # ATHLETE-ONLY input fields — coach cannot pre-fill these via sheet
+    # ------------------------------------------------------------------
+    invalid_text = {"", "nan", "none", "nil", "0", "n/a", "na", "-", "—"}
 
-    # 🚨 STRICT: RPE must be > 0 AND not default
-    rpe_post = pd.to_numeric(
-        row.get("RPE_Post_Session", np.nan),
-        errors="coerce"
+    def _has_value(col):
+        raw = str(row.get(col, "")).strip()
+        return raw.lower() not in invalid_text
+
+    has_notes = _has_value("Athlete_Notes")
+    has_sets  = _has_value("Sets_Reps_Load")
+    has_track = _has_value("Track_Reps_Times")
+
+    # RPE_Post_Session is written ONLY by the athlete via the app
+    # ⚠️  sRPE is the coach-planned field — do NOT use it here
+    rpe_post = pd.to_numeric(row.get("RPE_Post_Session", np.nan), errors="coerce")
+    has_rpe  = pd.notna(rpe_post) and rpe_post > 0
+
+    # Wellness sliders are written only when athlete hits "Log Session"
+    sleep_val    = pd.to_numeric(row.get("Sleep_1_5",    np.nan), errors="coerce")
+    fatigue_val  = pd.to_numeric(row.get("Fatigue_1_5",  np.nan), errors="coerce")
+    mood_val     = pd.to_numeric(row.get("Mood_1_5",     np.nan), errors="coerce")
+    soreness_val = pd.to_numeric(row.get("Soreness_1_5", np.nan), errors="coerce")
+    has_wellness = any(
+        pd.notna(v) and v > 0
+        for v in [sleep_val, fatigue_val, mood_val, soreness_val]
     )
 
-    invalid_text = {"", "nan", "none", "nil", "0", "n/a", "na"}
-
-    has_notes = notes.lower() not in invalid_text
-    has_sets = sets_reps.lower() not in invalid_text
-    has_track = track_reps.lower() not in invalid_text
-
-    # 🔒 Only count RPE if it's meaningful
-    has_rpe = pd.notna(rpe_post) and rpe_post > 0
-
-    # 🔥 LOGGED SESSION requires athlete confirmation
-    logged = has_notes or has_sets or has_track or has_rpe
+    logged = has_notes or has_sets or has_track or has_rpe or has_wellness
 
     return {
         "logged": logged,
-        "rpe": float(rpe_post) if has_rpe else None
+        "rpe": float(rpe_post) if has_rpe else None,
     }
-
 
 
 
@@ -682,13 +714,16 @@ def compute_streaks(df: pd.DataFrame):
     ddf["Date"] = pd.to_datetime(ddf["Date"], errors="coerce").dt.date
     ddf = ddf.dropna(subset=["Date"]).sort_values("Date")
 
-    if "Athlete_Notes" not in ddf.columns:
+    athlete_cols = ["Athlete_Notes", "RPE_Post_Session", "Sleep_1_5", "Fatigue_1_5"]
+    if not any(c in ddf.columns for c in athlete_cols):
         return 0, 0
 
-    notes_clean = ddf["Athlete_Notes"].fillna("").astype(str).str.strip().str.lower()
-    invalid = {"", "nan", "none", "nil", "0"}
+    logged_days = set()
 
-    logged_days = set(ddf.loc[~notes_clean.isin(invalid), "Date"].tolist())
+    for d in ddf["Date"].unique():
+        status = get_day_status(ddf, d)
+        if status.get("logged", False):
+            logged_days.add(d)
 
     today = today_adl()
 
@@ -1753,11 +1788,8 @@ def build_month_calendar(df: pd.DataFrame, month_date: dt.date, selected_date_st
         # ------------------------
         # Logged session logic
         # ------------------------
-        logged_session = (
-                pd.notna(rpe)
-                or notes_val.lower() not in ["", "nan", "none", "nil", "0"]
-        )
-
+        status = get_day_status(ddf, day)
+        logged_session = status.get("logged", False)
         # ------------------------
         # Cell classes
         # ------------------------
@@ -2712,16 +2744,10 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     weekly_exposure_pct = 0  # default fallback
 
     if planned_count > 0:
-        # normal planned exposure
         weekly_exposure_pct = int(round((completed_count / planned_count) * 100))
+        weekly_exposure_pct = max(0, min(weekly_exposure_pct, 100))
     else:
-        # fallback: infer exposure from recent logged behaviour (last 7 days)
-        completed_last_7 = count_logged_sessions_in_week(
-            df,
-            today - dt.timedelta(days=6),
-            today
-        )
-        weekly_exposure_pct = int(round((completed_last_7 / 7) * 100))
+        weekly_exposure_pct = None
 
         # optional: soften perception for inferred exposure
         weekly_exposure_pct = min(100, weekly_exposure_pct + 10)
@@ -2735,38 +2761,89 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     # =========================
     # Neuromuscular Readiness
     # =========================
-    sleep_s = pd.to_numeric(df.get("Sleep_1_5"), errors="coerce").dropna()
-    fatigue_s = pd.to_numeric(df.get("Fatigue_1_5"), errors="coerce").dropna()
-    soreness_s = pd.to_numeric(df.get("Soreness_1_5"), errors="coerce").dropna()
-    mood_s = pd.to_numeric(df.get("Mood_1_5"), errors="coerce").dropna()
+    # =========================
+    # Neuromuscular Readiness
+    # =========================
 
-    if any(s.empty for s in [sleep_s, fatigue_s, soreness_s, mood_s]):
+    NEURO_WINDOW = 14
+    NEURO_DECAY_RATE = 3.5
+    NEURO_DECAY_TARGET = 50.0
+    NEURO_MAX_PENALTY = 35.0
+
+    df_neuro = df.copy()
+    df_neuro["Date"] = pd.to_datetime(df_neuro["Date"], errors="coerce").dt.date
+    df_neuro = df_neuro.sort_values("Date")
+
+    cutoff = today - dt.timedelta(days=NEURO_WINDOW)
+    recent_neuro = df_neuro[df_neuro["Date"] >= cutoff]
+
+    def _last_wellness_col(frame, col):
+        s = pd.to_numeric(frame.get(col, pd.Series(dtype=float)), errors="coerce")
+        valid = s.dropna()
+        return float(valid.iloc[-1]) if not valid.empty else None
+
+    sleep_last = _last_wellness_col(recent_neuro, "Sleep_1_5")
+    fatigue_last = _last_wellness_col(recent_neuro, "Fatigue_1_5")
+    soreness_last = _last_wellness_col(recent_neuro, "Soreness_1_5")
+    mood_last = _last_wellness_col(recent_neuro, "Mood_1_5")
+
+    if any(v is None for v in [sleep_last, fatigue_last, soreness_last, mood_last]):
         neuro_val = None
     else:
-        sleep_score = ((sleep_s.clip(1, 5).mean() - 1) / 4) * 100
-        fatigue_score = ((fatigue_s.clip(1, 5).mean() - 1) / 4) * 100
-        soreness_score = 100 - ((soreness_s.clip(1, 5).mean() - 1) / 4) * 100
-        mood_score = ((mood_s.clip(1, 5).mean() - 1) / 4) * 100
-
-        neuro_val = (
-                0.40 * sleep_score +
-                0.30 * fatigue_score +
-                0.20 * soreness_score +
-                0.10 * mood_score
+        neuro_val = calc_neuro_readiness(
+            sleep=sleep_last,
+            fatigue=fatigue_last,
+            soreness=soreness_last,
+            mood=mood_last,
+            history_df=recent_neuro,
+            span=3,
         )
+
+        # Silence decay — days since athlete last logged any wellness slider
+        wellness_cols = ["Sleep_1_5", "Fatigue_1_5", "Mood_1_5", "Soreness_1_5"]
+        present_cols = [c for c in wellness_cols if c in df_neuro.columns]
+        df_neuro["_has_wellness"] = df_neuro[present_cols].apply(
+            lambda row: any(pd.to_numeric(row, errors="coerce").gt(0).dropna()),
+            axis=1,
+        )
+        logged_wellness_dates = df_neuro[df_neuro["_has_wellness"]]["Date"]
+
+        if not logged_wellness_dates.empty:
+            last_wellness_date = logged_wellness_dates.max()
+            days_silent = (today - last_wellness_date).days
+            if days_silent > 0:
+                penalty = min(NEURO_DECAY_RATE * days_silent, NEURO_MAX_PENALTY)
+                direction = NEURO_DECAY_TARGET - neuro_val
+                neuro_val = float(np.clip(
+                    neuro_val + (direction * penalty / NEURO_MAX_PENALTY),
+                    0, 100,
+                ))
 
         neuro_val = float(np.clip(neuro_val, 0, 100))
 
     # =========================
     # Daily Readiness
     # =========================
-    load_series = pd.to_numeric(df.get("Load"), errors="coerce")
-    rpe_series = pd.to_numeric(
-        df.get("RPE_Post_Session", df.get("sRPE")),
-        errors="coerce"
+    # Ensure proper time series with daily continuity
+    df_time = df.copy()
+    df_time["Date"] = pd.to_datetime(df_time["Date"], errors="coerce")
+    df_time = df_time.sort_values("Date").set_index("Date")
+
+    # Reindex daily to force decay when no entries
+    full_range = pd.date_range(
+        start=df_time.index.min(),
+        end=today,
+        freq="D"
     )
 
-    quality_series = pd.to_numeric(df.get("Session_1_5"), errors="coerce")
+    df_time = df_time.reindex(full_range)
+
+    load_series = pd.to_numeric(df_time.get("Load"), errors="coerce")
+    rpe_series = pd.to_numeric(
+        df_time.get("RPE_Post_Session", df_time.get("sRPE")),
+        errors="coerce"
+    )
+    quality_series = pd.to_numeric(df_time.get("Session_1_5"), errors="coerce")
 
     readiness_val = calc_daily_readiness(
         load_series=load_series,
