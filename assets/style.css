@@ -1,10 +1,8 @@
 /* ============================================================
-   AthleteAI / Dashboard Theme (Revised + Consolidated v4)
-   - TOP ROW: Athlete + Today aligned in one row
-   - DIAL GRID: 4 metric cards in a clean row underneath (responsive wrap)
-   - DIAL SIZE: medium (between small + huge)
-   - FLIP BACK: uses FULL CARD area for writing (key fix)
-   - Keeps dropdown fixes, background, bottom nav, flip cards
+   AthleteAI / Dashboard Theme — Consolidated v5
+   KEY FIX: Portrait dial bubble caused by conflicting
+   display:inline-block + !important overrides removed.
+   Dial sizing now responds cleanly to orientation.
 ============================================================ */
 
 /* ============================================================
@@ -30,15 +28,12 @@
 
   --dial-bg:#eceff1;
 
-  /* Dashboard sizing */
-  --mini-card-h: 72px;
-
-  /* DIALS: medium (bigger than original, smaller than giant) */
-  --dial-size: 135px;        /* medium sweet spot */
+  /* DIALS */
+  --dial-size: 135px;
   --dial-thickness: 18px;
 
-  /* Metric cards: compact like your “good” screenshot */
-  --metric-card-h: 170px;    /* key: stops floaty layout */
+  /* Metric card height */
+  --metric-card-h: 170px;
 
   /* Dial contrast tokens */
   --dial-track: rgba(0,0,0,0.10);
@@ -46,29 +41,28 @@
   --dial-stroke-hi: rgba(255,255,255,0.75);
   --dial-halo: rgba(255,255,255,0.45);
 
-  --dial-blue: #2f80ed;
-  --dial-green:#2fb344;
-  --dial-amber:#f5b301;
-  --dial-pink:#ff4fa3; /* weekly exposure */
+  --dial-blue-color: #2f80ed;
+  --dial-green-color: #2fb344;
+  --dial-amber-color: #f5b301;
+  --dial-pink-color: #ff4fa3;
 
-  /* Bottom nav height so padding stays in sync */
+  /* Bottom nav */
   --bottom-nav-h: 65px;
+
+  /* Mini card */
+  --mini-card-h: 72px;
 }
 
 [data-theme="dark"]{
   --bg:#0e0f11;
   --text:#f2f2f2;
   --text-muted:#9ca3af;
-
   --card-bg:#16181c;
   --card-shadow:rgba(0,0,0,0.60);
   --border:#2a2e33;
-
   --accent:#4dabf7;
   --accent-soft:rgba(77,171,247,0.15);
-
   --dial-bg:#22252b;
-
   --dial-track: rgba(255,255,255,0.10);
   --dial-stroke: rgba(255,255,255,0.14);
   --dial-stroke-hi: rgba(0,0,0,0.55);
@@ -94,12 +88,9 @@ body{
   font-family:-apple-system, BlinkMacSystemFont, "Inter", sans-serif;
   -webkit-font-smoothing:antialiased;
   transition:background .25s ease, color .25s ease;
-
-  /* Reserve space for fixed bottom nav */
   padding-bottom: calc(var(--bottom-nav-h) + 18px);
 }
 
-/* Hide scrollbars without breaking scroll */
 *::-webkit-scrollbar{ width:0; height:0; }
 *{ scrollbar-width:none; }
 
@@ -107,7 +98,6 @@ body{
   *{ animation:none !important; transition:none !important; scroll-behavior:auto !important; }
 }
 
-/* Dash wrapper */
 .app-shell{
   position:relative;
   min-height:100vh;
@@ -116,7 +106,7 @@ body{
 }
 
 /* ============================================================
-   2) SCIENCE BACKGROUND (subtle overlay)
+   2) SCIENCE BACKGROUND
 ============================================================ */
 .app-shell::before{
   content:"";
@@ -124,12 +114,10 @@ body{
   inset:0;
   z-index:-2;
   pointer-events:none;
-
   background-image:url("/assets/30440-14.jpg");
   background-size:cover;
   background-position:center;
   background-repeat:no-repeat;
-
   opacity:0.15;
   filter:blur(0.4px) saturate(1.15);
 }
@@ -140,7 +128,6 @@ body{
   inset:0;
   z-index:-1;
   pointer-events:none;
-
   background:
     radial-gradient(900px 500px at 20% 0%, rgba(30,136,229,0.10), rgba(0,0,0,0)),
     radial-gradient(800px 450px at 90% 15%, rgba(38,166,154,0.08), rgba(0,0,0,0));
@@ -220,7 +207,7 @@ body{
 }
 
 /* ============================================================
-   4b) DASH HEADER: Athlete + Today (TOP ROW FIX)
+   4b) TOP ROW: Athlete + Today
 ============================================================ */
 .top-metrics{
   display:grid;
@@ -228,7 +215,6 @@ body{
   gap:16px;
   align-items:center;
   margin-bottom:18px;
-  justify-content:center;
 }
 
 .top-metrics .mini-card{
@@ -258,77 +244,41 @@ body{
   letter-spacing:-0.02em;
 }
 
-/* keep inputs/dropdowns inside card */
-.mini-card input,
-.mini-card .form-control,
-.mini-card .mini-input,
-.mini-card .Select-control{
-  height:36px !important;
-  border-radius:10px !important;
-  border:1px solid var(--border) !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.75);
-  padding:6px 10px !important;
-  font-weight:650 !important;
-}
-
 @media (max-width:768px){
   .top-metrics{ grid-template-columns: 1fr; }
 }
 
-/* ============================================================
-   4c) DIAL GRID (4 cards in a tight row like your “good” screenshot)
-   Wrapper must be class="dial-grid"
-============================================================ */
-.dial-grid{
-  display:grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap:16px;
-  align-items:stretch;
-  margin-top:2px;
+/* --- compact labels above Athlete/Today --- */
+.mini-label{
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  margin: 0 0 4px 2px;
+  color: #222;
 }
 
-.dial-grid > *{ min-width:0; }
-
-@media (max-width:1100px){
-  .dial-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.compact-dd .Select-control,
+.compact-dd .Select__control{
+  min-height: 36px !important;
+  height: 36px !important;
 }
-@media (max-width:576px){
-  .dial-grid{ grid-template-columns: 1fr; }
-}
-
-/* ============================================================
-   4d) METRIC CARDS: compact height + centered dial
-============================================================ */
-.metric-card{
-  height:var(--metric-card-h);
-  display:flex;
-  flex-direction:column;
+.compact-dd .Select-placeholder,
+.compact-dd .Select-value-label,
+.compact-dd .Select__single-value{
+  line-height: 34px !important;
+  font-size: 14px;
 }
 
-.metric-card .card-body{
-  height:100%;
-  display:flex;
-  flex-direction:column;
-  justify-content:flex-start;
-  padding:12px 14px !important;
-  gap:10px;
-}
-
-.metric-card .metric-title{
-  font-size:12px;
-  font-weight:850;
-  color:var(--text-muted);
-  margin:0;
-  letter-spacing:-0.01em;
-}
-
-.metric-card .dial-wrapper{
-  flex:1;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:0;
-  min-height:0;
+.compact-today{
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dcdcdc;
+  border-radius: 8px;
+  background: rgba(248,249,250,0.85);
+  font-weight: 700;
+  font-size: 14px;
 }
 
 /* ============================================================
@@ -349,7 +299,7 @@ body{
 }
 
 /* ============================================================
-   6) INPUTS (base)
+   6) INPUTS
 ============================================================ */
 textarea, input, .form-control{
   background:var(--card-bg) !important;
@@ -359,7 +309,7 @@ textarea, input, .form-control{
 }
 
 /* ============================================================
-   7) DROPDOWN CORNER ARTEFACT FIX (Dash/React-Select/Bootstrap)
+   7) DROPDOWN FIXES
 ============================================================ */
 .Select-control,
 .Select-menu-outer,
@@ -392,10 +342,8 @@ textarea, input, .form-control{
   box-shadow:none !important;
   background-image:none !important;
 }
-#ai-mode-1::before,
-#ai-mode-1::after,
-#ai-mode-2::before,
-#ai-mode-2::after{
+#ai-mode-1::before, #ai-mode-1::after,
+#ai-mode-2::before, #ai-mode-2::after{
   content:none !important;
 }
 #ai-mode-1 .Select-control,
@@ -406,24 +354,164 @@ textarea, input, .form-control{
 }
 
 /* ============================================================
-   8) APPLE-STYLE RING DIALS
+   8) DIAL LAYOUT — PORTRAIT + LANDSCAPE FIX
+   Root cause of portrait bubbling:
+   - Conflicting display:inline-block fought display:flex
+   - !important overrides cascaded incorrectly in narrow columns
+   - Fixed by: single clean cascade, no !important wars,
+     orientation-aware sizing
 ============================================================ */
-.dial-wrapper{
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  position:relative;
+
+/* --- Dial row + block structure --- */
+.dial-row, .dials-row{
+  margin-top: 24px;
+  margin-bottom: 12px;
+  align-items: stretch;
 }
 
-/* ring */
+.dial-row > [class*="col"],
+.dials-row > [class*="col"]{
+  display: flex;
+}
+
+.dial-block{
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.dial-label{
+  width: 100%;
+  text-align: center;
+  font-weight: 800;
+  font-size: 10px;
+  margin-bottom: 6px;
+  color: #222;
+}
+
+/* --- Dial centre zone: sized to contain the dial cleanly --- */
+.dial-center{
+  width: 100%;
+  height: 190px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ============================================================
+   FLIP CARD — single clean definition, no !important
+============================================================ */
+.dial-flip{
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  perspective: 1000px;
+  /* ✅ NO display:inline-block here — that was the portrait killer */
+}
+
+.dial-flip-inner{
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 520ms cubic-bezier(.2,.8,.2,1);
+}
+
+.dial-flip.is-flipped .dial-flip-inner{
+  transform: rotateY(180deg);
+}
+
+.dial-face{
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backface-visibility: hidden;
+}
+
+.dial-front{
+  transform: rotateY(0deg);
+}
+
+.dial-back{
+  transform: rotateY(180deg);
+  padding: 10px;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+/* Back content fills card area */
+.dial-back-content{
+  width: 100%;
+  height: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--card-bg);
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.10);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+[data-theme="dark"] .dial-back-content{
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 18px 38px rgba(0,0,0,0.40);
+}
+
+.dial-back-title{
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px 0;
+  font-size: 13px;
+}
+
+.dial-back-body{
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: auto;
+  padding-right: 6px;
+}
+.dial-back-body strong{ color: var(--text); }
+
+.dial-back-hint{
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+/* ============================================================
+   9) APPLE-STYLE RING DIALS
+============================================================ */
+.dial-wrapper{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  margin: 0;
+}
+
 .dial-circle{
   --size: var(--dial-size);
   --thickness: var(--dial-thickness);
 
-  width:var(--size);
-  height:var(--size);
-  border-radius:50%;
-  position:relative;
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  position: relative;
+  flex-shrink: 0;   /* ← prevents squash in narrow columns */
 
   background:
     conic-gradient(
@@ -431,22 +519,19 @@ textarea, input, .form-control{
       var(--dial-track) 0
     );
 
-  .dial-circle{
   box-shadow:
     0 4px 10px rgba(0,0,0,0.14),
     0 0 0 1px var(--dial-stroke);
-}
-
 
   transition: background 600ms ease, transform 250ms ease;
 }
 
 .dial-circle::before{
-  content:"";
-  position:absolute;
-  inset:var(--thickness);
-  border-radius:50%;
-  background:var(--card-bg);
+  content: "";
+  position: absolute;
+  inset: var(--thickness);
+  border-radius: 50%;
+  background: var(--card-bg);
   box-shadow:
     inset 0 12px 18px rgba(0,0,0,0.08),
     inset 0 1px 0 rgba(255,255,255,0.85),
@@ -454,41 +539,41 @@ textarea, input, .form-control{
 }
 
 .dial-circle::after{
-  content:"";
-  position:absolute;
-  inset:0;
-  border-radius:50%;
-  pointer-events:none;
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
   background:
     radial-gradient(circle at 28% 22%, rgba(255,255,255,0.55), rgba(255,255,255,0) 55%),
     radial-gradient(circle at 70% 78%, rgba(0,0,0,0.06), rgba(0,0,0,0) 60%);
-  opacity:0.55;
+  opacity: 0.55;
 }
 
 .dial-text{
-  position:absolute;
-  inset:0;
-  z-index:2;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  text-align:center;
-  font-weight:900;
-  letter-spacing:-0.03em;
-  color:var(--text);
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: var(--text);
   transform: translateY(-1px);
-  line-height:1;
-  font-size: calc(var(--dial-size) * 0.26); /* ~39px at 150px */
+  line-height: 1;
+  font-size: calc(var(--dial-size) * 0.26);
   text-shadow: 0 1px 0 rgba(255,255,255,0.65);
 }
 
 .dial-text .dial-sub{
-  display:block;
+  display: block;
   font-size: 12px;
-  font-weight:750;
-  color:var(--text-muted);
-  margin-top:6px;
-  text-shadow:none;
+  font-weight: 750;
+  color: var(--text-muted);
+  margin-top: 6px;
+  text-shadow: none;
 }
 
 /* Dark mode depth */
@@ -506,640 +591,224 @@ textarea, input, .form-control{
     inset 0 1px 0 rgba(255,255,255,0.08),
     0 0 0 1px rgba(255,255,255,0.12);
 }
-[data-theme="dark"] .dial-text{ text-shadow:none; }
+[data-theme="dark"] .dial-text{ text-shadow: none; }
 
-/* pulse */
-.dial-circle.updated{ animation:dialPulse 900ms ease-out; }
+/* pulse on update */
+.dial-circle.updated{ animation: dialPulse 900ms ease-out; }
 @keyframes dialPulse{
   0%{ transform:scale(1); }
   45%{ transform:scale(1.03); }
   100%{ transform:scale(1); }
 }
 
-/* colours */
-.dial-blue{  --dial-color: var(--dial-blue); }
-.dial-green{ --dial-color: var(--dial-green); }
-.dial-amber{ --dial-color: var(--dial-amber); }
-.dial-pink{  --dial-color: var(--dial-pink); }
+/* ============================================================
+   DIAL COLOURS
+============================================================ */
+.dial-red   { --dial-color: #f44336; }
+.dial-amber { --dial-color: #f5b301; }
+.dial-green { --dial-color: #2fb344; }
+.dial-blue  { --dial-color: #2f80ed; }
+.dial-pink  { --dial-color: #ff4fa3; }
+.dial-grey  { --dial-color: rgba(0,0,0,0.18); }
 
 /* ============================================================
-   FLIP CARD WRAPPER (KEY FIX)
-   - Front: dial centered
-   - Back: FULL CARD area for writing
+   ORIENTATION-AWARE DIAL SIZING
+   Portrait phone (narrow columns): shrink dial to fit
+   Landscape phone: comfortable mid size
+   Desktop: full size (default tokens above)
 ============================================================ */
-.dial-flip{
-  width:100%;
-  height:100%;                 /* fill the metric-card */
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  cursor:pointer;
-  user-select:none;
-  -webkit-tap-highlight-color: transparent;
-  perspective: 1000px;
-}
 
-/* inner fills the whole card */
-.dial-flip-inner{
-  position:relative;
-  width:100%;
-  height:100%;
-  transform-style: preserve-3d;
-  transition: transform 520ms cubic-bezier(.2,.8,.2,1);
-}
-
-.dial-flip.is-flipped .dial-flip-inner{
-  transform: rotateY(180deg);
-}
-
-.dial-face{
-  position:absolute;
-  inset:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  backface-visibility:hidden;
-}
-.dial-back{
-  align-items: stretch;
-  justify-content: stretch;
-}
-
-/* front keeps the dial centered */
-.dial-front{ transform: rotateY(0deg); }
-
-/* back fills the whole card area */
-.dial-back{
-  transform: rotateY(180deg);
-  padding: 10px;              /* inner breathing room */
-}
-
-/* back content is now FULL SIZE of the card (not dial size) */
-.dial-back-content{
-  width: 100%;
-  height: 100%;
-  padding: 14px;
-  border-radius: 14px;
-  background: var(--card-bg);
-  border: 1px solid rgba(0,0,0,0.08);
-  box-shadow: 0 12px 28px rgba(0,0,0,0.10);
-  text-align:left;
-  display:flex;
-  flex-direction:column;
-  justify-content:flex-start;
-  overflow:hidden;
-}
-
-[data-theme="dark"] .dial-back-content{
-  border: 1px solid rgba(255,255,255,0.10);
-  box-shadow: 0 18px 38px rgba(0,0,0,0.40);
-}
-
-.dial-back-title{
-  font-weight: 900;
-  letter-spacing:-0.02em;
-  margin: 0 0 10px 0;
-  font-size: 14px;
-}
-
-/* scroll inside if text is long */
-.dial-back-body{
-  flex:1;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.4;
-  overflow:auto;
-  padding-right: 6px;
-}
-.dial-back-body strong{ color: var(--text); }
-
-.dial-back-hint{
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--text-muted);
-  opacity: 0.75;
-}
-
-/* ============================================================
-   9) CALENDAR (unchanged)
-============================================================ */
-.calendar-day{
-  background:transparent;
-  border:none;
-  box-shadow:none;
-  border-radius:16px;
-  padding:8px 0;
-
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-
-  cursor:pointer;
-  transition:background .15s ease, transform .15s ease;
-}
-
-.cal-day-number{
-  font-size:13px;
-  font-weight:600;
-  color:rgba(0,0,0,0.85);
-  margin-bottom:4px;
-}
-[data-theme="dark"] .cal-day-number{ color:rgba(255,255,255,0.88); }
-
-.calendar-day.out-month .cal-day-number{ color:rgba(0,0,0,0.35); }
-[data-theme="dark"] .calendar-day.out-month .cal-day-number{ color:rgba(255,255,255,0.35); }
-
-.rpe-dot{
-  width:12px;
-  height:12px;
-  border-radius:50%;
-}
-
-.calendar-day.today{ background:rgba(59, 130, 246, 0.14); }
-.calendar-day.logged{ background:rgba(34, 197, 94, 0.14); }
-.calendar-day.selected{ background:rgba(245, 158, 11, 0.16); }
-[data-theme="dark"] .calendar-day.selected{ background:rgba(255,255,255,0.07); }
-
-.calendar-day:hover:not(.today):not(.logged){
-  background:rgba(0,0,0,0.04);
-  transform:translateY(-1px);
-}
-[data-theme="dark"] .calendar-day:hover:not(.today):not(.logged){
-  background:rgba(255,255,255,0.06);
-}
-
-/* ============================================================
-   10) AI SESSION TEXT
-============================================================ */
-.ai-plan-text{
-  font-family:Arial, sans-serif !important;
-  font-size:16px;
-  line-height:1.45;
-  white-space:pre-wrap;
-}
-
-/* ============================================================
-   11) SESSION HEADER (unchanged)
-============================================================ */
-.session-header-toggle{
-  appearance:none;
-  border:none;
-  outline:none;
-  padding:8px 14px;
-  min-height:38px;
-  border-radius:999px;
-  background:rgba(0,0,0,0.05);
-  font-size:15px;
-  font-weight:700;
-  color:rgba(0,0,0,0.85);
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  cursor:pointer;
-  transition:background .15s ease, box-shadow .15s ease;
-}
-
-.session-header-toggle::after{
-  content:"▾";
-  font-size:12px;
-  opacity:0.65;
-  transform:translateY(1px);
-}
-
-.session-header-toggle:hover{ background:rgba(0,0,0,0.08); }
-.session-header-toggle:focus,
-.session-header-toggle:active{
-  background:rgba(0,0,0,0.10);
-  box-shadow:0 0 0 2px rgba(0,0,0,0.06);
-}
-
-[data-theme="dark"] .session-header-toggle{
-  background:rgba(255,255,255,0.08);
-  color:rgba(255,255,255,0.88);
-}
-[data-theme="dark"] .session-header-toggle:hover{ background:rgba(255,255,255,0.12); }
-[data-theme="dark"] .session-header-toggle:focus,
-[data-theme="dark"] .session-header-toggle:active{
-  background:rgba(255,255,255,0.14);
-  box-shadow:0 0 0 2px rgba(255,255,255,0.08);
-}
-
-.session-header-card{
-  border-radius:16px !important;
-  overflow:hidden;
-}
-
-/* ============================================================
-   12) AI “PREMIUM v2” PAGE (unchanged)
-============================================================ */
-.page-wrap{
-  width:100% !important;
-  max-width:none !important;
-  margin:0 !important;
-  padding:0 16px 96px !important;
-}
-
-.ai-hero{
-  border-radius:22px;
-  padding:18px 18px;
-  background:linear-gradient(135deg, #0b1220 0%, #0f1b34 55%, #122449 100%);
-  border:1px solid rgba(255,255,255,0.10);
-  box-shadow:0 18px 46px rgba(15,23,42,0.24);
-  margin-bottom:14px;
-  color:#fff;
-}
-
-.ai-hero-title{
-  font-size:30px;
-  font-weight:850;
-  letter-spacing:-0.03em;
-  margin:0;
-}
-
-.ai-hero-sub{
-  margin:8px 0 0 0;
-  color:rgba(255,255,255,0.72);
-  font-size:14px;
-  line-height:1.4;
-}
-
-/* ============================================================
-   13) BOTTOM NAV
-============================================================ */
-.bottom-nav{
-  position:fixed;
-  bottom:0; left:0; right:0;
-  height:var(--bottom-nav-h);
-  background:var(--card-bg);
-  border-top:1px solid var(--border);
-  box-shadow:0 -2px 8px rgba(0,0,0,0.25);
-  z-index:9999;
-}
-
-.nav-item{
-  text-align:center;
-  padding-top:4px;
-  cursor:pointer;
-  transition:.25s ease;
-}
-
-.nav-icon{
-  font-size:22px;
-  color:#666;
-  transition:.25s ease;
-}
-
-.nav-label{
-  font-size:12px;
-  color:#666;
-  font-weight:500;
-  transition:.25s ease;
-}
-
-.nav-item.active .nav-icon{
-  color:var(--accent) !important;
-  transform:scale(1.25);
-  text-shadow:
-    0 0 6px rgba(30,136,229,0.85),
-    0 0 12px rgba(30,136,229,0.55),
-    0 0 18px rgba(30,136,229,0.35);
-}
-
-.nav-item.active .nav-label{
-  color:var(--accent);
-  font-weight:700;
-}
-
-.nav-underline{
-  position:absolute;
-  bottom:0;
-  height:3px;
-  width:25%;
-  background:var(--accent);
-  transition:transform .32s cubic-bezier(.25,.1,.25,1);
-}
-
-@keyframes bounce{
-  0%{ transform:scale(1); }
-  30%{ transform:scale(1.32); }
-  55%{ transform:scale(1.18); }
-  75%{ transform:scale(1.26); }
-  100%{ transform:scale(1); }
-}
-.bounce{ animation:bounce .45s ease-out; }
-
-@keyframes wobble{
-  0%{ transform:rotate(0); }
-  20%{ transform:rotate(-12deg); }
-  40%{ transform:rotate(10deg); }
-  60%{ transform:rotate(-8deg); }
-  80%{ transform:rotate(6deg); }
-  100%{ transform:rotate(0); }
-}
-.wobble{ animation:wobble .45s ease-out; }
-
-/* ============================================================
-   MOBILE TUNING (keep it neat)
-============================================================ */
-@media (max-width:576px){
+/* Portrait phones — columns are ~45vw wide, dial must fit */
+@media (max-width: 600px) and (orientation: portrait){
   :root{
-    --dial-size: 140px;
-    --dial-thickness: 16px;
-    --metric-card-h: 180px;
+    --dial-size: 108px;
+    --dial-thickness: 13px;
+  }
+  .dial-center{
+    height: 150px;
+  }
+  .dial-label{
+    font-size: 9px;
+  }
+  .dial-text{
+    font-size: calc(var(--dial-size) * 0.30);
+  }
+  /* Remove expensive glassmorphism on small portrait screens */
+  .dial-circle::after{
+    display: none;
   }
 }
 
-/* --- compact labels above Athlete/Today --- */
-.mini-label{
-  font-size: 12px;
-  font-weight: 700;
-  text-align: left;
-  margin: 0 0 4px 2px;
-  color: #222;
+/* Landscape phones */
+@media (max-width: 900px) and (orientation: landscape){
+  :root{
+    --dial-size: 120px;
+    --dial-thickness: 15px;
+  }
+  .dial-center{
+    height: 160px;
+  }
 }
 
-/* dropdown slightly shorter */
-.compact-dd .Select-control,
-.compact-dd .Select__control{
-  min-height: 36px !important;
-  height: 36px !important;
-}
-.compact-dd .Select-placeholder,
-.compact-dd .Select-value-label,
-.compact-dd .Select__single-value{
-  line-height: 34px !important;
-  font-size: 14px;
+/* Tablets portrait */
+@media (min-width: 601px) and (max-width: 900px) and (orientation: portrait){
+  :root{
+    --dial-size: 125px;
+    --dial-thickness: 16px;
+  }
+  .dial-center{
+    height: 175px;
+  }
 }
 
-/* Today "card" shorter + smaller */
-.compact-today{
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #dcdcdc;
-  border-radius: 8px;
-  background: rgba(248,249,250,0.85);
-  font-weight: 700;
-  font-size: 14px;
+/* iOS portrait — suppress card shadow bleed behind dials */
+@media (max-width: 576px) and (orientation: portrait){
+  .metric-card{
+    box-shadow: none !important;
+    border: 1px solid var(--border) !important;
+  }
+  /* Hide reflection on small portrait screens */
+  .dial-circle::after{
+    display: none;
+  }
 }
 
-/* push dials lower so headings don't collide with row-1 */
-.dials-row{
-  padding-top: 10px;
-}
-
-/* dial headings */
-.dial-label{
-  text-align: center;
-  font-weight: 800;
-  font-size: 10px;
-  margin-bottom: 6px;
-  color: #222;
-}
-
-.dial-center{
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-}
-/* ensure each dial is centered in its col */
-.dial-center{
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-/* --- FLIP CARD: make the back readable --- */
-.dial-flip{
-  display: inline-block;
-}
-
-
-
-/* Keep the dial itself centered inside the larger face */
-.dial-front .dial-wrapper{
-  transform: scale(1.0);
-  transform-origin: center;
-}
-
-/* Back face typography */
-.dial-back-content{
-  padding: 12px 12px;
-  font-size: 13px;
-  line-height: 1.25;
-  text-align: left;
-}
-
-/* Make title stronger */
-.dial-back-title{
-  font-weight: 800;
-  margin-bottom: 6px;
-  font-size: 13px;
-}
-
-/* Allow body text to scroll if long */
-.dial-back-body{
-  font-size: 13px;
-  overflow: auto;
-  max-height: 110px;
-}
-
-/* Hint smaller */
-.dial-back-hint{
-  margin-top: 6px;
-  font-size: 11px;
-  opacity: 0.75;
-}
-
-/* Support both old and new row class names */
-.dial-row, .dials-row{
-  margin-top: 24px;
-  margin-bottom: 12px;
-  align-items: stretch !important;
-}
-
-.dial-row > [class*="col"], .dials-row > [class*="col"]{
-  display: flex !important;
-}
-
-.dial-block{
-  width: 100%;
+/* ============================================================
+   10) CALENDAR
+============================================================ */
+.calendar-day{
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 16px;
+  padding: 8px 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-}
-
-.dial-label{
-  width: 100%;
-  text-align: center;
-  font-weight: 800;
-  font-size: 14px;
-  margin-bottom: 8px;
-}
-
-.dial-center{
-  width: 100%;
-  height: 220px;
-  display: flex;
-  align-items: center;
   justify-content: center;
+  cursor: pointer;
+  transition: background .15s ease, transform .15s ease;
 }
 
-/* ===== HARD OVERRIDES: force true centring ===== */
+.cal-day-number{
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(0,0,0,0.85);
+  margin-bottom: 4px;
+}
+[data-theme="dark"] .cal-day-number{ color: rgba(255,255,255,0.88); }
 
-/* Make sure the dial zone is a real box */
-.dial-center{
+.calendar-day.out-month .cal-day-number{ color: rgba(0,0,0,0.35); }
+[data-theme="dark"] .calendar-day.out-month .cal-day-number{ color: rgba(255,255,255,0.35); }
+
+.rpe-dot{
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.calendar-day.today    { background: rgba(59,130,246,0.14); }
+.calendar-day.logged   { background: rgba(34,197,94,0.14); }
+.calendar-day.selected { background: rgba(245,158,11,0.16); }
+[data-theme="dark"] .calendar-day.selected{ background: rgba(255,255,255,0.07); }
+
+.calendar-day:hover:not(.today):not(.logged){
+  background: rgba(0,0,0,0.04);
+  transform: translateY(-1px);
+}
+[data-theme="dark"] .calendar-day:hover:not(.today):not(.logged){
+  background: rgba(255,255,255,0.06);
+}
+
+/* ============================================================
+   11) SESSION ROWS / CONTEXT CARDS
+============================================================ */
+.sess-row{
+  display: flex;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.sess-icon{
+  font-size: 22px;
+  width: 28px;
+  text-align: center;
+  line-height: 1.2;
+}
+.sess-title{
+  font-weight: 600;
+  color: #0f172a;
+  font-size: 14px;
+}
+.sess-content{
+  font-size: 14px;
+  color: #334155;
+  line-height: 1.4;
+}
+.sess-content > div{ margin-top: 2px; }
+
+.ctx-sub > div{
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+/* ============================================================
+   12) AI SESSION PAGE
+============================================================ */
+.page-wrap{
   width: 100% !important;
-  height: 220px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-/* Flip container must fill the dial-center */
-.dial-center .dial-flip{
-  width: 100% !important;
-  height: 100% !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-/* Inner must fill too */
-.dial-center .dial-flip-inner{
-  width: 100% !important;
-  height: 100% !important;
-}
-
-/* Each face must fill and centre contents */
-.dial-center .dial-face{
-  width: 100% !important;
-  height: 100% !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-/* Front face: centre the dial wrapper */
-.dial-center .dial-front{
-  width: 100% !important;
-  height: 100% !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-/* Remove any accidental offsets */
-.dial-wrapper{
+  max-width: none !important;
   margin: 0 !important;
-  transform: none !important;
+  padding: 0 16px 96px !important;
 }
 
-@media (max-width: 576px) {
-  .dial-text{
-    font-size: calc(var(--dial-size) * 0.34);
-  }
-
-  .dial-text .dial-sub{
-    font-size: 13px;
-  }
+.ai-hero{
+  border-radius: 22px;
+  padding: 18px 18px;
+  background: linear-gradient(135deg, #0b1220 0%, #0f1b34 55%, #122449 100%);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 18px 46px rgba(15,23,42,0.24);
+  margin-bottom: 14px;
+  color: #fff;
 }
 
-
-.logout-container {
-  position: fixed;
-  bottom: 72px;              /* sits just above bottom nav */
-  right: 16px;
-  z-index: 1000;
-}
-
-.logout-button {
-  border-radius: 14px;
-  padding: 10px 18px;
-  font-weight: 600;
-}
-
-@media (max-width: 768px) {
-  .app-header {
-    padding-top: 24px;
-  }
-}
-
-/* Push header content down from browser edge */
-.app-header{
-  padding: 26px 26px 10px 16px;
-
-@media (max-width: 576px){
-  .dial-circle{
-    box-shadow:
-      0 6px 14px rgba(0,0,0,0.18),
-      inset 0 1px 0 rgba(255,255,255,0.35),
-      0 0 0 1px var(--dial-stroke);
-  }
-
-  .dial-circle::after{
-    opacity: 0.25;
-  }
-}
-
-}
-
-/* Optional: make title area a touch nicer */
-.app-title{
+.ai-hero-title{
+  font-size: 30px;
+  font-weight: 850;
+  letter-spacing: -0.03em;
   margin: 0;
-  line-height: 1.05;
 }
 
-.app-subtitle{
-  margin: 4px 0 0 0;
-  opacity: 0.85;
+.ai-hero-sub{
+  margin: 8px 0 0 0;
+  color: rgba(255,255,255,0.72);
+  font-size: 14px;
+  line-height: 1.4;
 }
 
-/* Fixed logout button near bottom nav (Home only) */
-.logout-container{
-  position: fixed;
-  right: 16px;
-  bottom: 84px;     /* adjust to sit just above your bottom nav */
-  z-index: 2000;
+.ai-plan-text{
+  font-family: Arial, sans-serif !important;
+  font-size: 16px;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
-.logout-button{
-  border-radius: 14px;
-  padding: 10px 16px;
-  font-weight: 600;
-}
-
-/* Mobile: give a bit more top breathing room */
-@media (max-width: 768px){
-  .app-header{
-    padding-top: 24px;
-  }
-
-  .logout-container{
-    right: 12px;
-    bottom: 92px;
-  }
-}
-
-.view-toggle {
+/* ============================================================
+   13) VIEW TOGGLE (Weekly / Daily)
+============================================================ */
+.view-toggle{
   display: inline-flex;
   gap: 4px;
-  background: rgba(255, 255, 255, 0.75);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255,255,255,0.75);
+  border: 1px solid rgba(0,0,0,0.08);
   padding: 6px;
   border-radius: 999px;
   backdrop-filter: blur(8px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
 }
 
-.view-toggle-input {
-  display: none;
-}
+.view-toggle-input{ display: none; }
 
-.view-toggle-label {
+.view-toggle-label{
   cursor: pointer;
   padding: 6px 14px;
   border-radius: 999px;
@@ -1150,111 +819,172 @@ textarea, input, .form-control{
   transition: all 0.18s ease;
 }
 
-.view-toggle-label:hover {
-  opacity: 1;
-}
+.view-toggle-label:hover{ opacity: 1; }
 
-.view-toggle-input:checked + .view-toggle-label {
+.view-toggle-input:checked + .view-toggle-label{
   background: #000B4D;
   color: #fff;
   opacity: 1;
-  box-shadow: 0 6px 14px rgba(0, 11, 77, 0.25);
+  box-shadow: 0 6px 14px rgba(0,11,77,0.25);
 }
 
-.refresh-btn {
+.refresh-btn{
   border-radius: 10px;
   font-weight: 600;
 }
 
-.sess-row {
-  display: flex;
-  gap: 14px;
-  margin-bottom: 12px;
+/* ============================================================
+   14) BOTTOM NAV
+============================================================ */
+.bottom-nav{
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: var(--bottom-nav-h);
+  background: var(--card-bg);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -2px 8px rgba(0,0,0,0.25);
+  z-index: 9999;
 }
 
-.sess-icon {
-  font-size: 22px;
-  width: 28px;
+.nav-item{
   text-align: center;
-  line-height: 1.2;
+  padding-top: 4px;
+  cursor: pointer;
+  transition: .25s ease;
 }
 
-.sess-title {
-  font-weight: 600;
-  color: #0f172a;
-  font-size: 14px;
+.nav-icon{
+  font-size: 22px;
+  color: #666;
+  transition: .25s ease;
 }
 
-.sess-content {
-  font-size: 14px;
-  color: #334155;
-  line-height: 1.4;
+.nav-label{
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+  transition: .25s ease;
 }
 
-.sess-content > div {
-  margin-top: 2px;
+.nav-item.active .nav-icon{
+  color: var(--accent) !important;
+  transform: scale(1.25);
+  text-shadow:
+    0 0 6px rgba(30,136,229,0.85),
+    0 0 12px rgba(30,136,229,0.55),
+    0 0 18px rgba(30,136,229,0.35);
 }
 
-
-#session-details-wrapper {
-  transition: all 0.25s ease;
+.nav-item.active .nav-label{
+  color: var(--accent);
+  font-weight: 700;
 }
 
-.ctx-sub > div {
-  margin-top: 2px;
-  line-height: 1.35;
+.nav-underline{
+  position: absolute;
+  bottom: 0;
+  height: 3px;
+  width: 25%;
+  background: var(--accent);
+  transition: transform .32s cubic-bezier(.25,.1,.25,1);
+}
+
+@keyframes bounce{
+  0%{ transform:scale(1); }
+  30%{ transform:scale(1.32); }
+  55%{ transform:scale(1.18); }
+  75%{ transform:scale(1.26); }
+  100%{ transform:scale(1); }
+}
+.bounce{ animation: bounce .45s ease-out; }
+
+@keyframes wobble{
+  0%{ transform:rotate(0); }
+  20%{ transform:rotate(-12deg); }
+  40%{ transform:rotate(10deg); }
+  60%{ transform:rotate(-8deg); }
+  80%{ transform:rotate(6deg); }
+  100%{ transform:rotate(0); }
+}
+.wobble{ animation: wobble .45s ease-out; }
+
+/* ============================================================
+   15) SESSION HEADER TOGGLE
+============================================================ */
+.session-header-toggle{
+  appearance: none;
+  border: none;
+  outline: none;
+  padding: 8px 14px;
+  min-height: 38px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.05);
+  font-size: 15px;
+  font-weight: 700;
+  color: rgba(0,0,0,0.85);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background .15s ease, box-shadow .15s ease;
+}
+
+.session-header-toggle::after{
+  content: "▾";
+  font-size: 12px;
+  opacity: 0.65;
+  transform: translateY(1px);
+}
+
+.session-header-toggle:hover{ background: rgba(0,0,0,0.08); }
+.session-header-toggle:focus,
+.session-header-toggle:active{
+  background: rgba(0,0,0,0.10);
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.06);
+}
+
+[data-theme="dark"] .session-header-toggle{
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.88);
+}
+[data-theme="dark"] .session-header-toggle:hover{ background: rgba(255,255,255,0.12); }
+[data-theme="dark"] .session-header-toggle:focus,
+[data-theme="dark"] .session-header-toggle:active{
+  background: rgba(255,255,255,0.14);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.08);
 }
 
 /* ============================================================
-   DIAL COLOURS — COMPLETE SET (FIXED)
-   Low → High: red → amber → green → blue
+   16) LOGOUT / APP HEADER
 ============================================================ */
-.dial-red{
-  --dial-color:#f44336;   /* low / recover */
+.logout-container{
+  position: fixed;
+  right: 16px;
+  bottom: 84px;
+  z-index: 2000;
 }
 
-.dial-amber{
-  --dial-color:#f5b301;   /* manage */
+.logout-button{
+  border-radius: 14px;
+  padding: 10px 16px;
+  font-weight: 600;
 }
 
-.dial-green{
-  --dial-color:#2fb344;   /* ready */
+.app-header{
+  padding: 26px 26px 10px 16px;
 }
 
-.dial-blue{
-  --dial-color:#2f80ed;   /* peak */
+.app-title{
+  margin: 0;
+  line-height: 1.05;
 }
 
-/* missing / not available */
-.dial-grey{
-  --dial-color:rgba(0,0,0,0.18);
+.app-subtitle{
+  margin: 4px 0 0 0;
+  opacity: 0.85;
 }
-
-.dial-circle::before{
-  box-shadow:
-    inset 0 4px 8px rgba(0,0,0,0.08);
-}
-
 
 @media (max-width: 768px){
-  .dial-circle::after{
-    display: none !important;
-  }
-}
-
-/* ============================================================
-   iOS PORTRAIT ONLY — stop card shadow bleed behind dials
-============================================================ */
-
-@media (max-width: 576px) and (orientation: portrait) {
-
-  /* Remove shadow ONLY for dial cards */
-  .metric-card {
-    box-shadow: none !important;
-  }
-
-  /* Keep card border so it doesn't look flat */
-  .metric-card {
-    border: 1px solid var(--border) !important;
-  }
+  .app-header{ padding-top: 24px; }
+  .logout-container{ right: 12px; bottom: 92px; }
 }
