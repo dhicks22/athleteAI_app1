@@ -1205,11 +1205,10 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
         fig.update_layout(**MOBILE_PLOT_LAYOUT)
         return fig
 
-    # --- Colours ---
-    BLUE = "#1E6BD6"
-    TEAL = "#1BA39C"
+    BLUE       = "#1E6BD6"
+    TEAL       = "#1BA39C"
     GREEN_DARK = "#6B7280"
-    PURPLE = "#7B61FF"
+    PURPLE     = "#7B61FF"
 
     d = df.copy()
     d["Date"] = pd.to_datetime(d["Date"], errors="coerce")
@@ -1226,13 +1225,12 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
             Load=("Load", lambda s: s.sum(min_count=1))
         )
 
-        g["EWMA7"] = g["Load"].ewm(span=7, adjust=False, min_periods=3).mean()
+        g["EWMA7"]  = g["Load"].ewm(span=7,  adjust=False, min_periods=3).mean()
         g["EWMA28"] = g["Load"].ewm(span=28, adjust=False, min_periods=10).mean()
-        g["ACWR"] = g["EWMA7"] / g["EWMA28"]
+        g["ACWR"]   = g["EWMA7"] / g["EWMA28"]
 
         x = g["Week"]
 
-        # --- Load bars (WHOOP-style) ---
         fig.add_bar(
             x=x,
             y=g["Load"],
@@ -1241,10 +1239,9 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
                 color="rgba(30,107,214,0.35)",
                 line=dict(color=BLUE, width=1.8),
             ),
-            hovertemplate="Load: %{y:.2f}<extra></extra>",
+            hovertemplate="Load: %{y:,.0f}<extra></extra>",
         )
 
-        # --- Lines ---
         fig.add_trace(go.Scatter(
             x=x, y=g["EWMA7"],
             name="Short-term Load",
@@ -1252,6 +1249,7 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
             line=dict(color=TEAL, width=2.6),
             line_shape="spline",
             line_smoothing=0.75,
+            hovertemplate="Short-term: %{y:,.0f}<extra></extra>",
         ))
 
         fig.add_trace(go.Scatter(
@@ -1263,6 +1261,7 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
             line_smoothing=0.75,
             opacity=0.5,
             visible="legendonly",
+            hovertemplate="Long-term: %{y:,.0f}<extra></extra>",
         ))
 
         fig.add_trace(go.Scatter(
@@ -1274,9 +1273,9 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
             line_shape="spline",
             line_smoothing=0.75,
             opacity=0.7,
+            hovertemplate="ACWR: %{y:.2f}<extra></extra>",
         ))
 
-        # --- ACWR band ---
         fig.add_shape(
             type="rect",
             xref="paper", x0=0, x1=1,
@@ -1306,21 +1305,21 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
     # =========================================================
     # DAILY VIEW
     # =========================================================
-    d["EWMA7"] = d["Load"].ewm(span=7, adjust=False).mean()
+    d["EWMA7"]  = d["Load"].ewm(span=7,  adjust=False).mean()
     d["EWMA28"] = d["Load"].ewm(span=28, adjust=False).mean()
-    d["ACWR"] = d["EWMA7"] / d["EWMA28"]
+    d["ACWR"]   = d["EWMA7"] / d["EWMA28"]
 
     x = d["Date"]
 
     fig.add_bar(
         x=x,
-        y=d["Load"],  # ✅ FIXED (was g["Load"])
+        y=d["Load"],
         name="Daily Load",
         marker=dict(
             color="rgba(30,107,214,0.35)",
             line=dict(color=BLUE, width=1.8),
         ),
-        hovertemplate="Load: %{y:.2f}<extra></extra>",
+        hovertemplate="Load: %{y:,.0f}<extra></extra>",
     )
 
     fig.add_trace(go.Scatter(
@@ -1330,6 +1329,7 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
         line=dict(color=TEAL, width=2.6),
         line_shape="spline",
         line_smoothing=0.75,
+        hovertemplate="Short-term: %{y:,.0f}<extra></extra>",
     ))
 
     fig.add_trace(go.Scatter(
@@ -1341,6 +1341,7 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
         line_smoothing=0.75,
         opacity=0.5,
         visible="legendonly",
+        hovertemplate="Long-term: %{y:,.0f}<extra></extra>",
     ))
 
     fig.add_trace(go.Scatter(
@@ -1351,6 +1352,7 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
         line=dict(color=PURPLE, width=1.6),
         line_shape="spline",
         line_smoothing=0.75,
+        hovertemplate="ACWR: %{y:.2f}<extra></extra>",
     ))
 
     fig.add_shape(
@@ -1380,7 +1382,6 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
     return fig
 
 
-
 def build_wellness_plot(df: pd.DataFrame, view_mode: str):
     fig = go.Figure()
 
@@ -1393,10 +1394,10 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
     d = d.sort_values("Date")
 
     metrics = {
-        "Sleep_1_5":    ("Sleep", BLUE),
-        "Fatigue_1_5":  ("Fatigue", ORANGE),
+        "Sleep_1_5":    ("Sleep",    BLUE),
+        "Fatigue_1_5":  ("Fatigue",  ORANGE),
         "Soreness_1_5": ("Soreness", GREEN_DARK),
-        "Mood_1_5":     ("Mood", PURPLE),
+        "Mood_1_5":     ("Mood",     PURPLE),
     }
 
     for col in metrics:
@@ -1407,39 +1408,34 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
         d["Week"] = _week_agg_date(d["Date"])
         g = d.groupby("Week", as_index=False).mean(numeric_only=True)
         x = g["Week"]
-        window = 3   # short smoothing, weekly state
+        window = 3
 
         for col, (label, color) in metrics.items():
             if col not in g.columns:
                 continue
-
             y = g[col]
             if y.dropna().empty:
                 continue
-
             roll = y.rolling(window, min_periods=1).mean()
 
-            # --- SHADED ---
             fig.add_trace(go.Scatter(
-                x=x,
-                y=roll,
+                x=x, y=roll,
                 mode="lines",
                 line=dict(width=0),
                 fill="tozeroy",
-                fillcolor=f"rgba{tuple(int(color[i:i + 2], 16) for i in (1, 3, 5)) + (0.12,)}",
+                fillcolor=f"rgba{tuple(int(color[i:i+2], 16) for i in (1,3,5)) + (0.12,)}",
                 hoverinfo="skip",
                 showlegend=False,
             ))
 
-            # --- LINE ---
             fig.add_trace(go.Scatter(
-                x=x,
-                y=roll,
+                x=x, y=roll,
                 name=label,
                 mode="lines",
                 line=dict(color=color, width=2.6),
                 line_shape="spline",
                 line_smoothing=0.7,
+                hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>",
             ))
 
         fig.update_layout(
@@ -1451,63 +1447,51 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
                 tickvals=[1, 2, 3, 4, 5],
             ),
             hovermode="x unified",
-            **_legend_right_layout()
+            **_legend_right_layout(),
         )
-
         fig.update_layout(**MOBILE_PLOT_LAYOUT)
         return fig
 
     # =====================
     # DAILY VIEW
     # =====================
-    # =====================
-    # DAILY VIEW (FIXED)
-    # =====================
     x = d["Date"]
-    window = 3  # short smoothing for daily reflection
+    window = 3
 
     for col, (label, color) in metrics.items():
         if col not in d.columns:
             continue
-
         y = d[col]
         if y.dropna().empty:
             continue
-
         roll = y.rolling(window, min_periods=1).mean()
 
-        # --- BASELINE (invisible, required for proper fill) ---
         fig.add_trace(go.Scatter(
-            x=x,
-            y=[0] * len(x),
+            x=x, y=[0] * len(x),
             mode="lines",
             line=dict(width=0),
             showlegend=False,
             hoverinfo="skip",
         ))
 
-        # --- SHADED AREA (fills to baseline, NOT zero per metric) ---
         fig.add_trace(go.Scatter(
-            x=x,
-            y=roll,
+            x=x, y=roll,
             mode="lines",
             line=dict(width=0),
             fill="tonexty",
-            fillcolor=f"rgba{tuple(int(color[i:i + 2], 16) for i in (1, 3, 5)) + (0.12,)}",
+            fillcolor=f"rgba{tuple(int(color[i:i+2], 16) for i in (1,3,5)) + (0.12,)}",
             hoverinfo="skip",
             showlegend=False,
         ))
 
-        # --- DARK SMOOTH LINE (on top) ---
         fig.add_trace(go.Scatter(
-            x=x,
-            y=roll,
+            x=x, y=roll,
             name=label,
             mode="lines",
             line=dict(color=color, width=2.6),
             line_shape="spline",
             line_smoothing=0.7,
-            hovertemplate=f"{label}: %{{y:.2f}}<extra></extra>",
+            hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>",
             visible="legendonly" if label == "Mood" else True,
         ))
 
@@ -1520,9 +1504,8 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
             tickvals=[1, 2, 3, 4, 5],
         ),
         hovermode="x unified",
-        **_legend_right_layout()
+        **_legend_right_layout(),
     )
-
     fig.update_layout(**MOBILE_PLOT_LAYOUT)
     return fig
 
@@ -1550,31 +1533,26 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
     if view_mode == "daily":
         x = d["Date"]
 
-        # --- SPEED BARS ---
         fig.add_bar(
-            x=x,
-            y=speed,
+            x=x, y=speed,
             name="Speed exposure",
             marker=dict(
                 color="rgba(37,99,235,0.35)",
                 line=dict(color=BLUE, width=1.6),
             ),
-            hovertemplate="Speed: %{y:.2f} m<extra></extra>",
+            hovertemplate="Speed: %{y:,.0f} m<extra></extra>",
         )
 
-        # --- TEMPO BARS ---
         fig.add_bar(
-            x=x,
-            y=tempo,
+            x=x, y=tempo,
             name="Tempo exposure",
             marker=dict(
                 color="rgba(245,158,11,0.35)",
                 line=dict(color=ORANGE, width=1.6),
             ),
-            hovertemplate="Tempo: %{y:.2f} m<extra></extra>",
+            hovertemplate="Tempo: %{y:,.0f} m<extra></extra>",
         )
 
-        # --- SPEED ROLLING LINES ---
         fig.add_trace(go.Scatter(
             x=x,
             y=speed.rolling(7, min_periods=1).mean(),
@@ -1583,7 +1561,7 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
             line=dict(color=BLUE, width=2.4, dash="dot"),
             line_shape="spline",
             line_smoothing=0.7,
-            hovertemplate="Speed 7d: %{y:.2f} m<extra></extra>",
+            hovertemplate="Speed 7d: %{y:,.0f} m<extra></extra>",
         ))
 
         fig.add_trace(go.Scatter(
@@ -1594,11 +1572,10 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
             line=dict(color=BLUE, width=2.4, dash="dash"),
             line_shape="spline",
             line_smoothing=0.7,
-            hovertemplate="Speed 28d: %{y:.2f} m<extra></extra>",
+            hovertemplate="Speed 28d: %{y:,.0f} m<extra></extra>",
             visible="legendonly",
         ))
 
-        # --- TEMPO ROLLING LINES ---
         fig.add_trace(go.Scatter(
             x=x,
             y=tempo.rolling(7, min_periods=1).mean(),
@@ -1607,7 +1584,7 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
             line=dict(color=ORANGE, width=2.4, dash="dot"),
             line_shape="spline",
             line_smoothing=0.7,
-            hovertemplate="Tempo 7d: %{y:.2f} m<extra></extra>",
+            hovertemplate="Tempo 7d: %{y:,.0f} m<extra></extra>",
         ))
 
         fig.add_trace(go.Scatter(
@@ -1618,7 +1595,7 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
             line=dict(color=ORANGE, width=2.4, dash="dash"),
             line_shape="spline",
             line_smoothing=0.7,
-            hovertemplate="Tempo 28d: %{y:.2f} m<extra></extra>",
+            hovertemplate="Tempo 28d: %{y:,.0f} m<extra></extra>",
             visible="legendonly",
         ))
 
@@ -1636,7 +1613,7 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
     # =====================================================
     # WEEKLY VIEW
     # =====================================================
-    d["Week"] = _week_agg_date(d["Date"])
+    d["Week"]        = _week_agg_date(d["Date"])
     d["Speed_clean"] = speed
     d["Tempo_clean"] = tempo
 
@@ -1647,30 +1624,26 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
 
     x = g["Week"]
 
-    # --- BARS ---
     fig.add_bar(
-        x=x,
-        y=g["Speed"],
+        x=x, y=g["Speed"],
         name="Speed exposure",
         marker=dict(
             color="rgba(37,99,235,0.35)",
             line=dict(color=BLUE, width=1.6),
         ),
-        hovertemplate="Speed: %{y:.2f} m<extra></extra>",
+        hovertemplate="Speed: %{y:,.0f} m<extra></extra>",
     )
 
     fig.add_bar(
-        x=x,
-        y=g["Tempo"],
+        x=x, y=g["Tempo"],
         name="Tempo exposure",
         marker=dict(
             color="rgba(245,158,11,0.35)",
             line=dict(color=ORANGE, width=1.6),
         ),
-        hovertemplate="Tempo: %{y:.2f} m<extra></extra>",
+        hovertemplate="Tempo: %{y:,.0f} m<extra></extra>",
     )
 
-    # --- ROLLING LINES ---
     fig.add_trace(go.Scatter(
         x=x,
         y=g["Speed"].rolling(1, min_periods=1).mean(),
@@ -1679,6 +1652,7 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
         line=dict(color=BLUE, width=2.4, dash="dot"),
         line_shape="spline",
         line_smoothing=0.7,
+        hovertemplate="Speed 7d: %{y:,.0f} m<extra></extra>",
     ))
 
     fig.add_trace(go.Scatter(
@@ -1689,6 +1663,7 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
         line=dict(color=BLUE, width=2.4, dash="dash"),
         line_shape="spline",
         line_smoothing=0.7,
+        hovertemplate="Speed 28d: %{y:,.0f} m<extra></extra>",
     ))
 
     fig.add_trace(go.Scatter(
@@ -1699,6 +1674,7 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
         line=dict(color=ORANGE, width=2.4, dash="dot"),
         line_shape="spline",
         line_smoothing=0.7,
+        hovertemplate="Tempo 7d: %{y:,.0f} m<extra></extra>",
     ))
 
     fig.add_trace(go.Scatter(
@@ -1709,6 +1685,7 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
         line=dict(color=ORANGE, width=2.4, dash="dash"),
         line_shape="spline",
         line_smoothing=0.7,
+        hovertemplate="Tempo 28d: %{y:,.0f} m<extra></extra>",
     ))
 
     fig.update_layout(
@@ -1721,7 +1698,6 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
     )
 
     return fig
-
 
 
 # ============================================================
