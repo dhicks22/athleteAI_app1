@@ -3434,144 +3434,6 @@ app.clientside_callback(
     State("ai-plan-duration", "value"),
     prevent_initial_call=True,
 )
-@app.callback(
-    Output("welcome-message", "children"),
-    Input("readiness-dial-container", "children"),
-    State("athlete-dropdown", "value"),
-    State("neuromuscular-dial-container", "children"),
-    State("streak-dial-container", "children"),
-    prevent_initial_call=True,
-)
-def update_welcome(readiness_dial, athlete_id, neuro_dial, streak_dial_val):
-    if not athlete_id:
-        raise PreventUpdate
-
-    first_name = athlete_id.strip().split()[0] if athlete_id.strip() else "Athlete"
-    today = today_adl()
-    hour = dt.datetime.now(ADL_TZ).hour
-
-    greeting = (
-        "Good morning" if hour < 12
-        else "Good afternoon" if hour < 17
-        else "Good evening"
-    )
-
-    # Pull fresh data for context
-    try:
-        df = load_tab(athlete_id)
-        readiness_val = None
-        neuro_val = None
-        streak = 0
-
-        if not df.empty:
-            streak, _ = compute_streaks(df)
-
-            # Get readiness from RPE_Post_Session only
-            df_time = df.copy()
-            df_time["Date"] = pd.to_datetime(df_time["Date"], errors="coerce")
-            df_time = df_time.sort_values("Date").set_index("Date")
-            full_range = pd.date_range(start=df_time.index.min(), end=today, freq="D")
-            df_time = df_time.reindex(full_range)
-
-            rpe_col = "RPE_Post_Session" if "RPE_Post_Session" in df_time.columns else None
-            rpe_series = pd.to_numeric(
-                df_time[rpe_col] if rpe_col else pd.Series(dtype=float),
-                errors="coerce"
-            )
-            load_series = pd.to_numeric(df_time.get("Load"), errors="coerce")
-            quality_series = pd.to_numeric(df_time.get("Session_1_5"), errors="coerce")
-            readiness_val = calc_daily_readiness(load_series, rpe_series, quality_series)
-
-            # Neuro
-            df_neuro = df.copy()
-            df_neuro["Date"] = pd.to_datetime(df_neuro["Date"], errors="coerce").dt.date
-            df_neuro = df_neuro.sort_values("Date")
-            cutoff = today - dt.timedelta(days=14)
-            recent_neuro = df_neuro[df_neuro["Date"] >= cutoff]
-
-            def _last(frame, col):
-                s = pd.to_numeric(frame.get(col, pd.Series(dtype=float)), errors="coerce")
-                v = s.dropna()
-                return float(v.iloc[-1]) if not v.empty else None
-
-            sl = _last(recent_neuro, "Sleep_1_5")
-            fa = _last(recent_neuro, "Fatigue_1_5")
-            so = _last(recent_neuro, "Soreness_1_5")
-            mo = _last(recent_neuro, "Mood_1_5")
-            if all(v is not None for v in [sl, fa, so, mo]):
-                neuro_val = calc_neuro_readiness(sl, fa, so, mo, history_df=recent_neuro)
-
-    except Exception:
-        streak, readiness_val, neuro_val = 0, None, None
-
-    # --- Build message based on scores ---
-    r = readiness_val or 0
-    n = neuro_val or 0
-
-    if readiness_val is None and neuro_val is None:
-        msg = f"Log your first session to start tracking readiness."
-        sub = "Your dials will come alive once you've entered some data."
-        color = "#6e6e6e"
-        icon = "—"
-    elif r >= 75 and n >= 75:
-        msg = f"You're in great shape today — go get it."
-        sub = f"Readiness and neuromuscular state are both high. This is a good day to push."
-        color = "#2E7D32"
-        icon = "↑"
-    elif r >= 60 and n >= 60:
-        msg = f"Good to go — solid session ahead."
-        sub = f"Numbers look steady. Execute your plan and stay sharp on technique."
-        color = "#1565C0"
-        icon = "→"
-    elif r >= 40 or n >= 40:
-        msg = f"Manage your load carefully today."
-        sub = f"Some fatigue in the system. Quality over quantity — reduce intensity if needed."
-        color = "#E65100"
-        icon = "↓"
-    else:
-        msg = f"Recovery day recommended."
-        sub = f"Both readiness markers are low. Light movement, sleep, and nutrition are your training today."
-        color = "#C62828"
-        icon = "⚠"
-
-    streak_txt = f" • {streak}-day streak 🔥" if streak >= 3 else ""
-
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.Span(f"{icon} ", style={
-                        "fontSize": "18px",
-                        "fontWeight": 900,
-                        "color": color,
-                        "marginRight": "4px",
-                    }),
-                    html.Span(
-                        f"{greeting}, {first_name}. {msg}",
-                        style={"fontWeight": 800, "fontSize": "16px", "color": color},
-                    ),
-                    html.Span(
-                        streak_txt,
-                        style={"fontSize": "13px", "color": "#E65100", "marginLeft": "6px"},
-                    ),
-                ],
-                style={"marginBottom": "4px"},
-            ),
-            html.Div(
-                sub,
-                style={"fontSize": "13px", "color": "#6e6e6e", "lineHeight": "1.4"},
-            ),
-        ],
-        style={
-            "background": f"{color}0f",
-            "border": f"1px solid {color}33",
-            "borderLeft": f"4px solid {color}",
-            "borderRadius": "12px",
-            "padding": "14px 16px",
-            "marginBottom": "8px",
-        }
-    )
-
 
 def generate_session_plan(n_clicks, athlete_id, coach_style, goal, duration):
     if not n_clicks:
@@ -3733,6 +3595,147 @@ def generate_session_plan(n_clicks, athlete_id, coach_style, goal, duration):
     ))
 
     return html.Div(cards), ""
+
+@app.callback(
+    Output("welcome-message", "children"),
+    Input("readiness-dial-container", "children"),
+    State("athlete-dropdown", "value"),
+    State("neuromuscular-dial-container", "children"),
+    State("streak-dial-container", "children"),
+    prevent_initial_call=True,
+)
+def update_welcome(readiness_dial, athlete_id, neuro_dial, streak_dial_val):
+    if not athlete_id:
+        raise PreventUpdate
+
+    first_name = athlete_id.strip().split()[0] if athlete_id.strip() else "Athlete"
+    today = today_adl()
+    hour = dt.datetime.now(ADL_TZ).hour
+
+    greeting = (
+        "Good morning" if hour < 12
+        else "Good afternoon" if hour < 17
+        else "Good evening"
+    )
+
+    # Pull fresh data for context
+    try:
+        df = load_tab(athlete_id)
+        readiness_val = None
+        neuro_val = None
+        streak = 0
+
+        if not df.empty:
+            streak, _ = compute_streaks(df)
+
+            # Get readiness from RPE_Post_Session only
+            df_time = df.copy()
+            df_time["Date"] = pd.to_datetime(df_time["Date"], errors="coerce")
+            df_time = df_time.sort_values("Date").set_index("Date")
+            full_range = pd.date_range(start=df_time.index.min(), end=today, freq="D")
+            df_time = df_time.reindex(full_range)
+
+            rpe_col = "RPE_Post_Session" if "RPE_Post_Session" in df_time.columns else None
+            rpe_series = pd.to_numeric(
+                df_time[rpe_col] if rpe_col else pd.Series(dtype=float),
+                errors="coerce"
+            )
+            load_series = pd.to_numeric(df_time.get("Load"), errors="coerce")
+            quality_series = pd.to_numeric(df_time.get("Session_1_5"), errors="coerce")
+            readiness_val = calc_daily_readiness(load_series, rpe_series, quality_series)
+
+            # Neuro
+            df_neuro = df.copy()
+            df_neuro["Date"] = pd.to_datetime(df_neuro["Date"], errors="coerce").dt.date
+            df_neuro = df_neuro.sort_values("Date")
+            cutoff = today - dt.timedelta(days=14)
+            recent_neuro = df_neuro[df_neuro["Date"] >= cutoff]
+
+            def _last(frame, col):
+                s = pd.to_numeric(frame.get(col, pd.Series(dtype=float)), errors="coerce")
+                v = s.dropna()
+                return float(v.iloc[-1]) if not v.empty else None
+
+            sl = _last(recent_neuro, "Sleep_1_5")
+            fa = _last(recent_neuro, "Fatigue_1_5")
+            so = _last(recent_neuro, "Soreness_1_5")
+            mo = _last(recent_neuro, "Mood_1_5")
+            if all(v is not None for v in [sl, fa, so, mo]):
+                neuro_val = calc_neuro_readiness(sl, fa, so, mo, history_df=recent_neuro)
+
+    except Exception:
+        streak, readiness_val, neuro_val = 0, None, None
+
+    # --- Build message based on scores ---
+    r = readiness_val or 0
+    n = neuro_val or 0
+
+    if readiness_val is None and neuro_val is None:
+        msg = f"Log your first session to start tracking readiness."
+        sub = "Your dials will come alive once you've entered some data."
+        color = "#6e6e6e"
+        icon = "—"
+    elif r >= 75 and n >= 75:
+        msg = f"You're in great shape today — go get it."
+        sub = f"Readiness and neuromuscular state are both high. This is a good day to push."
+        color = "#2E7D32"
+        icon = "↑"
+    elif r >= 60 and n >= 60:
+        msg = f"Good to go — solid session ahead."
+        sub = f"Numbers look steady. Execute your plan and stay sharp on technique."
+        color = "#1565C0"
+        icon = "→"
+    elif r >= 40 or n >= 40:
+        msg = f"Manage your load carefully today."
+        sub = f"Some fatigue in the system. Quality over quantity — reduce intensity if needed."
+        color = "#E65100"
+        icon = "↓"
+    else:
+        msg = f"Recovery day recommended."
+        sub = f"Both readiness markers are low. Light movement, sleep, and nutrition are your training today."
+        color = "#C62828"
+        icon = "⚠"
+
+    streak_txt = f" • {streak}-day streak 🔥" if streak >= 3 else ""
+
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Span(f"{icon} ", style={
+                        "fontSize": "18px",
+                        "fontWeight": 900,
+                        "color": color,
+                        "marginRight": "4px",
+                    }),
+                    html.Span(
+                        f"{greeting}, {first_name}. {msg}",
+                        style={"fontWeight": 800, "fontSize": "16px", "color": color},
+                    ),
+                    html.Span(
+                        streak_txt,
+                        style={"fontSize": "13px", "color": "#E65100", "marginLeft": "6px"},
+                    ),
+                ],
+                style={"marginBottom": "4px"},
+            ),
+            html.Div(
+                sub,
+                style={"fontSize": "13px", "color": "#6e6e6e", "lineHeight": "1.4"},
+            ),
+        ],
+        style={
+            "background": f"{color}0f",
+            "border": f"1px solid {color}33",
+            "borderLeft": f"4px solid {color}",
+            "borderRadius": "12px",
+            "padding": "14px 16px",
+            "marginBottom": "8px",
+        }
+    )
+
+
+
 
 if __name__ == "__main__":
     app.run(debug=True)
