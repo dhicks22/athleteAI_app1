@@ -574,11 +574,39 @@ def load_tab(tab_name: str) -> pd.DataFrame:
     except gspread.WorksheetNotFound:
         ws = sh.get_worksheet(0)
 
-    records = ws.get_all_records()
-    df = pd.DataFrame(records)
+    try:
+        records = ws.get_all_records()
+        df = pd.DataFrame(records)
+    except Exception:
+        # Fallback: read raw values and use first row as headers,
+        # deduplicating any blank or duplicate column names
+        all_values = ws.get_all_values()
+        if not all_values:
+            return pd.DataFrame()
+
+        headers = all_values[0]
+        # Deduplicate headers: blank or duplicate cols get a suffix
+        seen = {}
+        clean_headers = []
+        for h in headers:
+            h = h.strip() if h else ""
+            if not h:
+                h = "_unnamed"
+            if h in seen:
+                seen[h] += 1
+                h = f"{h}_{seen[h]}"
+            else:
+                seen[h] = 0
+            clean_headers.append(h)
+
+        df = pd.DataFrame(all_values[1:], columns=clean_headers)
+
+        # Drop entirely unnamed columns
+        df = df.loc[:, ~df.columns.str.startswith("_unnamed")]
 
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
+
     return df
 
 
@@ -1295,10 +1323,12 @@ def make_ai_suggestions(
         "TASK — PRIMARY COACH:\n"
         f"Write feedback as the {ai_mode_1}.\n"
         f"Open with '{first_name},'\n"
-        "Give 3 concrete, specific recommendations tied directly to what the numbers show.\n"
-        "Focus on what to DO in the next 24–48 hours.\n"
+        "Give 3 concrete, specific recommendations tied DIRECTLY to the logged session data above.\n"
+        "You MUST reference the actual exercises, loads, or times the athlete entered.\n"
+        "Do NOT give generic recovery, hydration, or nutrition advice unless the wellness data specifically justifies it.\n"
+        "Focus on what to DO in the next 24–48 hours. Be a coach, not a chatbot.\n"
         "Keep to 3–5 sentences. No waffle, no generics."
-    )
+        )
 
     ai1 = call_openai_chat(
         [{"role": "system", "content": system_1},
@@ -1335,10 +1365,11 @@ def make_ai_suggestions(
         "TASK — SECONDARY COACH:\n"
         f"Write as the {ai_mode_2}.\n"
         f"Open with '{first_name},'\n"
-        "Add 2 specific monitoring cues or adjustments the primary coach did not mention.\n"
-        "End with ONE short, open reflective question (optional — only if it adds value).\n"
-        "3–4 sentences maximum."
-    )
+        "Add 2 specific observations tied to the actual session data — reference the exercises or loads logged.\n"
+        "Do NOT mention hydration, nutrition, or mindfulness unless wellness scores specifically warrant it.\n"
+        "End with ONE pointed reflective question about their training, not their lifestyle.\n"
+        "3–4 sentences maximum. Be direct."
+        )
 
     ai2 = call_openai_chat(
         [{"role": "system", "content": system_2},
@@ -2198,6 +2229,7 @@ def build_main_layout(auth_data):
                 ],
             ),
 
+            html.Div(id="welcome-message", className="mt-3"),
             dbc.Row(
                 className="g-2 align-items-stretch mt-2 dial-row",
                 children=[
@@ -2220,8 +2252,9 @@ def build_main_layout(auth_data):
                 ],
             ),
 
+
             html.P(
-                "Swipe between Calendar, Graphs and AI Session Builder using the bottom nav.",
+                "Swipe between Calendar, Graphs and Session Builder using the bottom nav.",
                 className="text-muted mt-2",
                 style={"textAlign": "center"},
             ),
@@ -2449,7 +2482,7 @@ def build_main_layout(auth_data):
                                 className="g-3",
                             ),
                             dbc.Button(
-                                "Log Session & Generate AI Coaching Feedback",
+                                "Log Session & Generate Coaching Feedback",
                                 id="btn-generate-ai",
                                 className="mt-4 w-100 ai-save-btn",
                             ),
@@ -2519,8 +2552,8 @@ def build_main_layout(auth_data):
             html.Div(className="ai-hero", children=[
                 html.Div(className="d-flex align-items-start justify-content-between", children=[
                     html.Div(children=[
-                        html.H3("AI Training Session Builder", className="ai-hero-title"),
-                        html.P("Build a structured session in clean blocks (warm-up → primary → secondary → tertiary → cool-down).",
+                        html.H3("Training Session Builder", className="ai-hero-title"),
+                        html.P("Warm-up → primary → secondary → tertiary → cool-down",
                                className="ai-hero-sub"),
                     ]),
                     html.Div(className="pill", children=[html.Div(className="pill-dot"), html.Span("ACI", className="text-nowrap")]),
@@ -2899,12 +2932,6 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     else:
         weekly_exposure_pct = None
 
-        # optional: soften perception for inferred exposure
-        weekly_exposure_pct = min(100, weekly_exposure_pct + 10)
-
-    # clamp for safety
-    weekly_exposure_pct = max(0, min(weekly_exposure_pct, 100))
-
     # --- Streaks ---
     streak, best = compute_streaks(df)
 
@@ -3168,7 +3195,7 @@ def save_and_ai(
     venue = safe(df, row_idx, "Venue", "")
     workout = safe(df, row_idx, "Workout", "")
 
-    status_msg = "✅ Saved, AI suggestions generated & email sent to Coach."
+    status_msg = "✅ Saved, coaching feedback generated & email sent to Coach."
 
     try:
         send_email_payload({
@@ -3198,23 +3225,23 @@ def save_and_ai(
             "Athlete_email": athlete_email,
         })
     except Exception as e:
-        status_msg = f"⚠️ Saved + AI generated, but email failed: {e}"
+        status_msg = f"⚠️ Saved + coaching feedback generated, but email failed: {e}"
 
     ai1_div = html.Div(
         html.Div([
-            html.Div("💡 AI Suggestion 1", className="ai-title"),
+            html.Div("💡 Coaching Feedback 1", className="ai-title"),
             html.P(ai1),
         ], className="ai-card ai-card-green")
     )
     ai2_div = html.Div(
         html.Div([
-            html.Div("💡 AI Suggestion 2", className="ai-title"),
+            html.Div("💡 Coaching Feedback 2", className="ai-title"),
             html.P(ai2),
         ], className="ai-card ai-card-blue")
     )
 
     return ai1_div, ai2_div, html.Span(
-    "✅ Saved, AI suggestions generated & email sent to Coach.",
+    "✅ Saved, coaching feedback generated & email sent to Coach.",
     style={"color": "#2E7D32", "fontWeight": 600}
 )
 
@@ -3397,6 +3424,315 @@ app.clientside_callback(
     Input("bottom-nav-click", "data"),
 )
 
+@app.callback(
+    Output("ai-plan-output", "children"),
+    Output("ai-plan-status", "children"),
+    Input("btn-generate-plan", "n_clicks"),
+    State("athlete-dropdown", "value"),
+    State("ai-plan-coach", "value"),
+    State("ai-plan-goal", "value"),
+    State("ai-plan-duration", "value"),
+    prevent_initial_call=True,
+)
+@app.callback(
+    Output("welcome-message", "children"),
+    Input("readiness-dial-container", "children"),
+    State("athlete-dropdown", "value"),
+    State("neuromuscular-dial-container", "children"),
+    State("streak-dial-container", "children"),
+    prevent_initial_call=True,
+)
+def update_welcome(readiness_dial, athlete_id, neuro_dial, streak_dial_val):
+    if not athlete_id:
+        raise PreventUpdate
+
+    first_name = athlete_id.strip().split()[0] if athlete_id.strip() else "Athlete"
+    today = today_adl()
+    hour = dt.datetime.now(ADL_TZ).hour
+
+    greeting = (
+        "Good morning" if hour < 12
+        else "Good afternoon" if hour < 17
+        else "Good evening"
+    )
+
+    # Pull fresh data for context
+    try:
+        df = load_tab(athlete_id)
+        readiness_val = None
+        neuro_val = None
+        streak = 0
+
+        if not df.empty:
+            streak, _ = compute_streaks(df)
+
+            # Get readiness from RPE_Post_Session only
+            df_time = df.copy()
+            df_time["Date"] = pd.to_datetime(df_time["Date"], errors="coerce")
+            df_time = df_time.sort_values("Date").set_index("Date")
+            full_range = pd.date_range(start=df_time.index.min(), end=today, freq="D")
+            df_time = df_time.reindex(full_range)
+
+            rpe_col = "RPE_Post_Session" if "RPE_Post_Session" in df_time.columns else None
+            rpe_series = pd.to_numeric(
+                df_time[rpe_col] if rpe_col else pd.Series(dtype=float),
+                errors="coerce"
+            )
+            load_series = pd.to_numeric(df_time.get("Load"), errors="coerce")
+            quality_series = pd.to_numeric(df_time.get("Session_1_5"), errors="coerce")
+            readiness_val = calc_daily_readiness(load_series, rpe_series, quality_series)
+
+            # Neuro
+            df_neuro = df.copy()
+            df_neuro["Date"] = pd.to_datetime(df_neuro["Date"], errors="coerce").dt.date
+            df_neuro = df_neuro.sort_values("Date")
+            cutoff = today - dt.timedelta(days=14)
+            recent_neuro = df_neuro[df_neuro["Date"] >= cutoff]
+
+            def _last(frame, col):
+                s = pd.to_numeric(frame.get(col, pd.Series(dtype=float)), errors="coerce")
+                v = s.dropna()
+                return float(v.iloc[-1]) if not v.empty else None
+
+            sl = _last(recent_neuro, "Sleep_1_5")
+            fa = _last(recent_neuro, "Fatigue_1_5")
+            so = _last(recent_neuro, "Soreness_1_5")
+            mo = _last(recent_neuro, "Mood_1_5")
+            if all(v is not None for v in [sl, fa, so, mo]):
+                neuro_val = calc_neuro_readiness(sl, fa, so, mo, history_df=recent_neuro)
+
+    except Exception:
+        streak, readiness_val, neuro_val = 0, None, None
+
+    # --- Build message based on scores ---
+    r = readiness_val or 0
+    n = neuro_val or 0
+
+    if readiness_val is None and neuro_val is None:
+        msg = f"Log your first session to start tracking readiness."
+        sub = "Your dials will come alive once you've entered some data."
+        color = "#6e6e6e"
+        icon = "—"
+    elif r >= 75 and n >= 75:
+        msg = f"You're in great shape today — go get it."
+        sub = f"Readiness and neuromuscular state are both high. This is a good day to push."
+        color = "#2E7D32"
+        icon = "↑"
+    elif r >= 60 and n >= 60:
+        msg = f"Good to go — solid session ahead."
+        sub = f"Numbers look steady. Execute your plan and stay sharp on technique."
+        color = "#1565C0"
+        icon = "→"
+    elif r >= 40 or n >= 40:
+        msg = f"Manage your load carefully today."
+        sub = f"Some fatigue in the system. Quality over quantity — reduce intensity if needed."
+        color = "#E65100"
+        icon = "↓"
+    else:
+        msg = f"Recovery day recommended."
+        sub = f"Both readiness markers are low. Light movement, sleep, and nutrition are your training today."
+        color = "#C62828"
+        icon = "⚠"
+
+    streak_txt = f" • {streak}-day streak 🔥" if streak >= 3 else ""
+
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Span(f"{icon} ", style={
+                        "fontSize": "18px",
+                        "fontWeight": 900,
+                        "color": color,
+                        "marginRight": "4px",
+                    }),
+                    html.Span(
+                        f"{greeting}, {first_name}. {msg}",
+                        style={"fontWeight": 800, "fontSize": "16px", "color": color},
+                    ),
+                    html.Span(
+                        streak_txt,
+                        style={"fontSize": "13px", "color": "#E65100", "marginLeft": "6px"},
+                    ),
+                ],
+                style={"marginBottom": "4px"},
+            ),
+            html.Div(
+                sub,
+                style={"fontSize": "13px", "color": "#6e6e6e", "lineHeight": "1.4"},
+            ),
+        ],
+        style={
+            "background": f"{color}0f",
+            "border": f"1px solid {color}33",
+            "borderLeft": f"4px solid {color}",
+            "borderRadius": "12px",
+            "padding": "14px 16px",
+            "marginBottom": "8px",
+        }
+    )
+
+
+def generate_session_plan(n_clicks, athlete_id, coach_style, goal, duration):
+    if not n_clicks:
+        raise PreventUpdate
+
+    if not coach_style:
+        return no_update, "⚠️ Please select a coaching focus."
+    if not goal or not goal.strip():
+        return no_update, "⚠️ Please enter a session goal."
+
+    duration = duration or 45
+    persona = persona_prompt(coach_style)
+
+    # Pull recent context if athlete selected
+    context_block = ""
+    if athlete_id:
+        try:
+            df = load_tab(athlete_id)
+            if not df.empty:
+                summary = build_context_summary(df, days=7)
+                wellness = build_wellness_flags(df, days=7)
+                upcoming = build_upcoming_context(df, today_adl(), n=3)
+                context_block = (
+                    f"Athlete context (last 7 days): {summary}\n"
+                    f"Wellness scan: {wellness}\n"
+                    f"Upcoming sessions: {upcoming}\n\n"
+                )
+        except Exception:
+            pass
+
+    COACH_STRUCTURE = {
+        "Acceleration & Speed Coach": (
+            "Structure: Warm-Up (CNS activation, A-drills, wickets), Primary (max velocity or acceleration reps — "
+            "specify exact distances e.g. 3×30m fly, rest periods, surface cues), Secondary (speed endurance or "
+            "plyometrics — box jumps, bounds, hurdle hops with contact time cues), Cool-Down (parasympathetic reset). "
+            "Every block must include exact rep counts, distances, rest periods, and at least one technical cue per block."
+        ),
+        "Tempo & Endurance Coach": (
+            "Structure: Warm-Up (aerobic activation, dynamic mobility), Primary (tempo runs — specify distances, "
+            "target % effort e.g. 10×100m @70%, rest:work ratio), Secondary (aerobic volume or lactate threshold work "
+            "with pace guidance), Cool-Down (active recovery, breathing). "
+            "Specify exact volumes, pacing targets, and rhythm cues."
+        ),
+        "Technical Sprint Coach": (
+            "Structure: Warm-Up (posture drills, arm mechanics, tall running), Primary (technical drill series — "
+            "A-skip, B-skip, wicket runs, wall drills — with specific coaching cues on projection angle, shin angle, "
+            "arm drive), Secondary (short acceleration runs applying the technical focus — e.g. 4×20m), "
+            "Cool-Down (movement review, feedback). Each block must name the specific technical fault being addressed "
+            "and the corrective cue."
+        ),
+        "Strength & Power Coach": (
+            "Structure: Warm-Up (potentiation — glute activation, bar warm-up sets), Primary (main lift — specify "
+            "exercise, sets×reps×%1RM or RPE, rest, bar speed cue), Secondary (supplementary — jumps, pulls, or "
+            "accessory lifts with sets×reps), Tertiary (single-leg or posterior chain accessory), "
+            "Cool-Down (tissue work, breathing). Must include exact loading parameters and bar speed or RPE targets."
+        ),
+        "Recovery & Readiness Coach": (
+            "Structure: Warm-Up (gentle mobilisation — hip 90/90, thoracic rotation), Primary (low-CNS aerobic "
+            "work — e.g. 20min easy bike, pool walk, or breath-work circuit at <65% HRmax), Secondary (parasympathetic "
+            "activation — foam roll, contrast breathing, progressive muscle relaxation), Cool-Down (sleep hygiene cue, "
+            "nutrition timing reminder). Flag any wellness markers from context that influenced session design."
+        ),
+    }
+
+    coach_structure = COACH_STRUCTURE.get(coach_style, (
+        "Structure the session with Warm-Up, Primary, Secondary, and Cool-Down blocks. "
+        "Be specific: include exact sets, reps, distances, rest periods and coaching cues."
+    ))
+
+    system_msg = (
+        f"{persona}\n\n"
+        f"STRUCTURAL REQUIREMENTS FOR THIS SESSION TYPE:\n{coach_structure}\n\n"
+        "Output ONLY a JSON object — no markdown, no preamble, no explanation:\n"
+        '{"blocks": ['
+        '{"title": "Warm-Up", "duration_min": 10, "details": "..."},'
+        '{"title": "Primary", "duration_min": 20, "details": "..."},'
+        '{"title": "Secondary", "duration_min": 10, "details": "..."},'
+        '{"title": "Tertiary", "duration_min": 8, "details": "..."},'
+        '{"title": "Cool-Down", "duration_min": 5, "details": "..."}'
+        "]}\n\n"
+        "Rules: Always include all 5 blocks: Warm-Up, Primary, Secondary, Tertiary, Cool-Down. "
+        "Every 'details' field must be dense with specifics — "
+        "exact exercises, sets×reps or distances, rest periods, and at least one coaching cue per block. "
+        "No generic filler. If the athlete context shows high fatigue or soreness, reduce intensity accordingly."
+    )
+
+    user_msg = (
+        f"{context_block}"
+        f"Session goal: {goal.strip()}\n"
+        f"Approx duration: {duration} minutes\n"
+        f"Coach style: {coach_style}\n\n"
+        "Build the session plan now. Return only valid JSON."
+    )
+
+    raw = call_openai_chat(
+        [{"role": "system", "content": system_msg},
+         {"role": "user", "content": user_msg}],
+        max_tokens=900,
+    )
+
+    # Parse JSON response
+    try:
+        clean = raw.replace("```json", "").replace("```", "").strip()
+        data = json.loads(clean)
+        blocks = data.get("blocks", [])
+    except Exception:
+        # Fallback: show raw text if JSON fails
+        return html.Div([
+            html.Div("Session Plan", className="fw-semibold mb-2"),
+            html.Pre(raw, style={"whiteSpace": "pre-wrap", "fontSize": "13px"}),
+        ]), ""
+
+    if not blocks:
+        return html.Div("No plan generated. Try adjusting your goal.", className="text-muted"), ""
+
+    BLOCK_COLORS = {
+        "Warm-Up":   ("#e3f2fd", "#1565C0"),
+        "Primary":   ("#e8f5e9", "#2E7D32"),
+        "Secondary": ("#fff3e0", "#E65100"),
+        "Tertiary":  ("#f3e5f5", "#6A1B9A"),
+        "Cool-Down": ("#fce4ec", "#880E4F"),
+    }
+
+    cards = []
+    for b in blocks:
+        title = b.get("title", "Block")
+        dur = b.get("duration_min", "")
+        details = b.get("details", "")
+        bg, accent = BLOCK_COLORS.get(title, ("#f5f5f5", "#333"))
+
+        cards.append(html.Div(
+            [
+                html.Div(
+                    [
+                        html.Span(title, style={"fontWeight": 800, "fontSize": "14px", "color": accent}),
+                        html.Span(f"~{dur} min", style={
+                            "fontSize": "12px", "color": accent, "opacity": "0.75",
+                            "marginLeft": "8px", "fontWeight": 600,
+                        }) if dur else None,
+                    ],
+                    style={"marginBottom": "6px"},
+                ),
+                html.Div(details, style={"fontSize": "13px", "lineHeight": "1.5", "color": "#1a1a1a"}),
+            ],
+            style={
+                "background": bg,
+                "border": f"1px solid {accent}33",
+                "borderLeft": f"4px solid {accent}",
+                "borderRadius": "10px",
+                "padding": "14px 16px",
+                "marginBottom": "10px",
+            }
+        ))
+
+    total = sum(b.get("duration_min", 0) for b in blocks)
+    cards.append(html.Div(
+        f"Total: ~{total} min  •  {coach_style}",
+        style={"fontSize": "12px", "color": "#666", "textAlign": "right", "marginTop": "4px"},
+    ))
+
+    return html.Div(cards), ""
 
 if __name__ == "__main__":
     app.run(debug=True)
