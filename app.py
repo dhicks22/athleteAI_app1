@@ -289,9 +289,15 @@ def apple_neuromuscular_ring(score_0_100: float | None):
 
 
 def apple_readiness_ring(score_0_100: float | None):
-    if score_0_100 is None or (isinstance(score_0_100, float) and np.isnan(score_0_100)):
+    if score_0_100 is None:
         return _build_dial("—", 0, "dial-grey")
-    v = max(0, min(float(score_0_100), 100))
+    try:
+        v = float(score_0_100)
+    except (TypeError, ValueError):
+        return _build_dial("—", 0, "dial-grey")
+    if np.isnan(v):
+        return _build_dial("—", 0, "dial-grey")
+    v = max(0, min(v, 100))
     return _build_dial(f"{int(round(v))}", v, dial_class_from_score(v))
 
 
@@ -371,7 +377,7 @@ def calc_daily_readiness(
     # ------------------------------------------------------------------
     rpe_valid = df["rpe"].dropna()
     if rpe_valid.empty:
-        return 75.0  # no data at all — neutral
+        return None  # ← was 75.0, now returns None = grey dial
 
     load_ref = df["load"].quantile(0.9)
     if pd.isna(load_ref) or load_ref <= 0:
@@ -421,24 +427,17 @@ def calc_daily_readiness(
     MAX_PENALTY  = 40.0  # cap so floor ≈ 30-35
 
     # rpe_series index should be a DatetimeIndex (set by update_dashboard)
-    try:
-        rpe_dated = pd.to_numeric(rpe_series, errors="coerce")
-        last_entry_pos = rpe_dated.last_valid_index()
+    rpe_dated = pd.to_numeric(rpe_series, errors="coerce")
+    last_entry_pos = rpe_dated.last_valid_index()
 
-        if last_entry_pos is not None:
-            if hasattr(last_entry_pos, "date"):
-                # DatetimeIndex
-                from datetime import date as _date
-                today_dt = dt.datetime.now(ADL_TZ).date()
-                days_silent = (today_dt - last_entry_pos.date()).days
-            else:
-                # Integer positional index: count trailing NaNs
-                days_silent = len(rpe_dated) - 1 - rpe_dated.index.get_loc(last_entry_pos)
+    if last_entry_pos is not None:
+        if hasattr(last_entry_pos, "date"):
+            today_dt = dt.datetime.now(ADL_TZ).date()
+            days_silent = (today_dt - last_entry_pos.date()).days
         else:
-            days_silent = len(df)
-
-    except Exception:
-        days_silent = 0
+            days_silent = len(rpe_dated) - 1 - rpe_dated.index.get_loc(last_entry_pos)
+    else:
+        days_silent = len(df)
 
     days_silent = max(0, int(days_silent))
 
@@ -879,57 +878,213 @@ def build_trend_context(df: pd.DataFrame, days: int = 14) -> str:
 
 
 def build_text_history(df: pd.DataFrame, max_rows: int = 7) -> str:
+    """
+    Scans the last max_rows logged sessions and extracts:
+    - Athlete notes, gym/track data
+    - Wellness signals (soreness, fatigue, sleep, mood) with plain-English flags
+    - Previous AI suggestions (to avoid repetition)
+    Returns a structured string for AI context.
+    """
     if df.empty:
-        return "No previous written notes are available."
-
-    cols = [c for c in [
-        "Date",
-        "Athlete_Notes",
-        "Sets_Reps_Load",
-        "Track_Reps_Times",
-        "AI_Suggestion_1",
-        "AI_Suggestion_2",
-    ] if c in df.columns]
-
-    if not cols:
-        return "No previous written notes are available."
+        return "No previous session data available."
 
     d = df.copy()
     if "Date" in d.columns:
         d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
         d = d.sort_values("Date")
 
-    tail = d[cols].tail(max_rows)
+    # Only look at rows that have at least one athlete entry
+    athlete_cols = ["Athlete_Notes", "Sets_Reps_Load", "Track_Reps_Times",
+                    "RPE_Post_Session", "Sleep_1_5", "Fatigue_1_5",
+                    "Mood_1_5", "Soreness_1_5"]
 
+    present = [c for c in athlete_cols if c in d.columns]
+    if not present:
+        return "No previous session data available."
+
+    tail = d.tail(max_rows)
     lines = []
+
     for _, r in tail.iterrows():
-        date_str = str(r.get("Date", ""))
-        note = str(r.get("Athlete_Notes", "")).strip()
-        sets_reps = str(r.get("Sets_Reps_Load", "")).strip()
-        track = str(r.get("Track_Reps_Times", "")).strip()
-        ai1 = str(r.get("AI_Suggestion_1", "")).strip()
-        ai2 = str(r.get("AI_Suggestion_2", "")).strip()
+        date_str = str(r.get("Date", "unknown"))
 
-        parts = []
-        if note and note.lower() not in ("nan", "none"):
+        # ---- Text fields ----
+        note     = str(r.get("Athlete_Notes",   "")).strip()
+        sets     = str(r.get("Sets_Reps_Load",  "")).strip()
+        track    = str(r.get("Track_Reps_Times","")).strip()
+        ai1_prev = str(r.get("AI_Suggestion_1", "")).strip()
+
+        # ---- Numeric wellness ----
+        rpe      = pd.to_numeric(r.get("RPE_Post_Session"), errors="coerce")
+        sleep    = pd.to_numeric(r.get("Sleep_1_5"),        errors="coerce")
+        fatigue  = pd.to_numeric(r.get("Fatigue_1_5"),      errors="coerce")
+        mood     = pd.to_numeric(r.get("Mood_1_5"),         errors="coerce")
+        soreness = pd.to_numeric(r.get("Soreness_1_5"),     errors="coerce")
+
+        # ---- Skip rows with no real athlete data ----
+        has_data = (
+            any(s.lower() not in ("", "nan", "none", "nil")
+                for s in [note, sets, track])
+            or any(pd.notna(v) and v > 0
+                   for v in [rpe, sleep, fatigue, mood, soreness])
+        )
+        if not has_data:
+            continue
+
+        parts = [f"[{date_str}]"]
+
+        # ---- Wellness flags — plain English for the model ----
+        flags = []
+        if pd.notna(soreness):
+            if soreness >= 4:
+                flags.append(f"HIGH soreness ({int(soreness)}/5)")
+            elif soreness >= 3:
+                flags.append(f"moderate soreness ({int(soreness)}/5)")
+
+        if pd.notna(fatigue):
+            if fatigue <= 2:
+                flags.append(f"LOW energy/fatigue ({int(fatigue)}/5)")
+            elif fatigue <= 3:
+                flags.append(f"moderate fatigue ({int(fatigue)}/5)")
+
+        if pd.notna(sleep):
+            if sleep <= 2:
+                flags.append(f"POOR sleep ({int(sleep)}/5)")
+            elif sleep <= 3:
+                flags.append(f"average sleep ({int(sleep)}/5)")
+
+        if pd.notna(mood):
+            if mood <= 2:
+                flags.append(f"LOW mood ({int(mood)}/5)")
+
+        if pd.notna(rpe):
+            parts.append(f"RPE {int(rpe)}/5")
+
+        if flags:
+            parts.append("Wellness: " + ", ".join(flags))
+        else:
+            if any(pd.notna(v) for v in [sleep, fatigue, mood, soreness]):
+                parts.append("Wellness: all markers within normal range")
+
+        # ---- Text content ----
+        if note and note.lower() not in ("nan", "none", "nil"):
             parts.append(f"Note: {note}")
-        if sets_reps and sets_reps.lower() not in ("nan", "none"):
-            parts.append(f"Gym: {sets_reps}")
-        if track and track.lower() not in ("nan", "none"):
+        if sets and sets.lower() not in ("nan", "none", "nil"):
+            parts.append(f"Gym: {sets}")
+        if track and track.lower() not in ("nan", "none", "nil"):
             parts.append(f"Track: {track}")
-        if ai1 and ai1.lower() not in ("nan", "none"):
-            parts.append(f"Prev AI1: {ai1}")
-        if ai2 and ai2.lower() not in ("nan", "none"):
-            parts.append(f"Prev AI2: {ai2}")
 
-        if parts:
-            lines.append(f"{date_str} → " + " | ".join(parts))
+        # ---- Previous AI (trimmed — just to avoid repeating it) ----
+        if ai1_prev and ai1_prev.lower() not in ("nan", "none", "nil"):
+            # Truncate so it doesn't bloat the prompt
+            trimmed = ai1_prev[:120].strip()
+            if len(ai1_prev) > 120:
+                trimmed += "…"
+            parts.append(f"Prev AI said: {trimmed}")
+
+        lines.append(" | ".join(parts))
 
     if not lines:
-        return "No previous written notes are available."
+        return "No previous logged sessions found in this window."
 
-    return "Recent text history:\n" + "\n".join(lines)
+    return "Recent logged sessions (oldest → newest):\n" + "\n".join(lines)
 
+def build_wellness_flags(df: pd.DataFrame, days: int = 7) -> str:
+    """
+    Scans the last N days for persistent or worsening wellness signals.
+    Returns a plain-English summary the AI can directly act on.
+    """
+    if df.empty or "Date" not in df.columns:
+        return ""
+
+    d = df.copy()
+    d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
+    d = d.sort_values("Date")
+
+    cutoff = today_adl() - dt.timedelta(days=days)
+    recent = d[d["Date"] >= cutoff]
+
+    if recent.empty:
+        return ""
+
+    def _series(col):
+        if col not in recent.columns:
+            return pd.Series(dtype=float)
+        s = pd.to_numeric(recent[col], errors="coerce").dropna()
+        # Only count rows where athlete actually logged
+        return s[s > 0]
+
+    soreness = _series("Soreness_1_5")
+    fatigue  = _series("Fatigue_1_5")
+    sleep    = _series("Sleep_1_5")
+    mood     = _series("Mood_1_5")
+    rpe      = _series("RPE_Post_Session")
+
+    flags = []
+
+    # --- Soreness ---
+    if not soreness.empty:
+        avg_sor = soreness.mean()
+        days_high_sor = int((soreness >= 4).sum())
+        if days_high_sor >= 3:
+            flags.append(
+                f"⚠️ Soreness has been HIGH (≥4/5) on {days_high_sor} of the last "
+                f"{len(soreness)} logged days (avg {avg_sor:.1f}/5) — "
+                "possible accumulated muscle stress, consider load reduction or recovery work."
+            )
+        elif avg_sor >= 3.5:
+            flags.append(
+                f"Soreness trending elevated (avg {avg_sor:.1f}/5 over {len(soreness)} sessions)."
+            )
+
+    # --- Fatigue (remember: higher = more energetic on your scale) ---
+    if not fatigue.empty:
+        avg_fat = fatigue.mean()
+        days_low_fat = int((fatigue <= 2).sum())
+        if days_low_fat >= 3:
+            flags.append(
+                f"⚠️ Energy/fatigue LOW (≤2/5) on {days_low_fat} of last "
+                f"{len(fatigue)} logged days (avg {avg_fat:.1f}/5) — "
+                "athlete reporting consistently low energy."
+            )
+        elif avg_fat <= 2.5:
+            flags.append(
+                f"Fatigue/energy trending low (avg {avg_fat:.1f}/5 over {len(fatigue)} sessions)."
+            )
+
+    # --- Sleep ---
+    if not sleep.empty:
+        avg_slp = sleep.mean()
+        days_poor_slp = int((sleep <= 2).sum())
+        if days_poor_slp >= 2:
+            flags.append(
+                f"⚠️ Sleep has been POOR (≤2/5) on {days_poor_slp} of last "
+                f"{len(sleep)} logged days (avg {avg_slp:.1f}/5)."
+            )
+
+    # --- Mood ---
+    if not mood.empty:
+        avg_mood = mood.mean()
+        if avg_mood <= 2.5 and len(mood) >= 3:
+            flags.append(
+                f"Mood trending low over {len(mood)} sessions (avg {avg_mood:.1f}/5) — "
+                "worth a brief check-in."
+            )
+
+    # --- RPE trend (rising effort for same sessions = fatigue accumulation) ---
+    if len(rpe) >= 4:
+        first_half = rpe.iloc[:len(rpe)//2].mean()
+        second_half = rpe.iloc[len(rpe)//2:].mean()
+        if second_half - first_half >= 0.8:
+            flags.append(
+                f"RPE trending UP over 7 days ({first_half:.1f} → {second_half:.1f}/5) — "
+                "sessions feeling harder for likely same workload."
+            )
+
+    if not flags:
+        return "No persistent wellness concerns in the last 7 days."
+
+    return "7-day wellness scan:\n" + "\n".join(f"- {f}" for f in flags)
 
 def build_upcoming_context(df: pd.DataFrame, anchor_date: dt.date, n: int = 5) -> str:
     try:
@@ -1077,100 +1232,119 @@ def make_ai_suggestions(
     row_matches = df.index[df["Date"] == selected_date_dt].tolist()
     row_idx = row_matches[0] if row_matches else None
 
-    workout = safe(df, row_idx, "Workout", "nil") if row_idx is not None else "nil"
-    focus_txt = safe(df, row_idx, "Focus", "nil") if row_idx is not None else "nil"
-    venue = safe(df, row_idx, "Venue", "nil") if row_idx is not None else "nil"
-    upcoming = build_upcoming_context(df, selected_date_dt, n=5)
+    workout   = safe(df, row_idx, "Workout",  "not specified") if row_idx is not None else "not specified"
+    focus_txt = safe(df, row_idx, "Focus",    "not specified") if row_idx is not None else "not specified"
+    venue     = safe(df, row_idx, "Venue",    "not specified") if row_idx is not None else "not specified"
+    upcoming  = build_upcoming_context(df, selected_date_dt, n=4)
 
-    first_name = athlete_name.split()[0] if athlete_name else "Athlete"
+    # ✅ Fix: safe first-name extraction
+    first_name = athlete_name.strip().split()[0] if athlete_name.strip() else "Athlete"
 
-    summary = build_context_summary(df, days=7)
+    # ✅ Focused context — don't dump everything into one prompt
+    summary      = build_context_summary(df, days=7)
     trend_context = build_trend_context(df, days=14)
-    history_text = build_text_history(df, max_rows=7)
+    wellness_scan = build_wellness_flags(df, days=7)
+    history_text  = build_text_history(df, max_rows=5)
 
-    notes = notes or "nil"
-    sets_reps_load = sets_reps_load or "nil"
-    track_reps_times = track_reps_times or "nil"
+    notes          = (notes or "").strip() or "none provided"
+    sets_reps_load = (sets_reps_load or "").strip() or "none provided"
+    track_reps_times = (track_reps_times or "").strip() or "none provided"
 
+    # ✅ Fix: RPE is 1–5 from slider, not 1–10
     session_block = (
-        f"Current session — {selected_date_dt}\n"
-        f"Planned workout: {workout}\n"
+        f"SESSION — {selected_date_dt}\n"
+        f"Workout: {workout}\n"
         f"Focus: {focus_txt}\n"
         f"Venue: {venue}\n"
-        f"Upcoming (next sessions):\n{upcoming}\n\n"
-        f"RPE (1–10): {session_rpe}\n"
-        f"Session quality (execution, 1–5): {session_quality}\n"
-        f"Sleep (1–5): {sleep}\n"
-        f"Fatigue (1–5): {fatigue}\n"
+        f"Post-session RPE (1–5): {session_rpe}\n"
+        f"Session quality / execution (1–5): {session_quality}\n"
+        f"Sleep last night (1–5): {sleep}\n"
+        f"Fatigue (1–5, higher = more energetic): {fatigue}\n"
         f"Mood (1–5): {mood}\n"
         f"Soreness (1–5): {soreness}\n"
         f"Athlete notes: {notes}\n"
         f"Sets × Reps × Load: {sets_reps_load}\n"
         f"Track reps & times: {track_reps_times}\n"
+        f"\nUpcoming sessions:\n{upcoming}"
     )
 
-    def build_messages(mode: str):
-        persona = persona_prompt(mode)
-        system_msg = (
-            persona
-            + "\nYou are providing short, specific, natural coaching advice. "
-              "Avoid guessing injuries or medical issues. "
-              "Avoid generic advice. "
-              "Your tone must match the persona style. "
-              f"Always begin your response with: '{first_name},'"
-        )
+    # ✅ Fix: guard against same persona being selected for both
+    if ai_mode_1 == ai_mode_2:
+        ai_mode_2 = "Recovery & Readiness Coach"
 
-        user_msg = (
-            f"Recent trend summary:\n{summary}\n\n"
-            f"Detailed trend context:\n{trend_context}\n\n"
-            f"Recent history:\n{history_text}\n\n"
-            f"{session_block}\n"
-            f"Session quality (1–5): {session_quality} (execution, rhythm, technical sharpness)\n"
+    # ============================================================
+    # AI 1 — Primary coach: specific training focus
+    # ============================================================
+    persona_1 = persona_prompt(ai_mode_1)
 
-            "TASK:\n"
-            f"- Write coaching feedback as the {mode} persona.\n"
-            f"- Start with '{first_name},'\n"
-            "- Keep it concise (2–4 sentences).\n"
-            "- Give 3–4 clear, actionable recommendations for the next 24–48 hours.\n"
-            "- Tie recommendations directly to the trends and the session info.\n"
-        )
-
-        return [{"role": "system", "content": system_msg}, {"role": "user", "content": user_msg}]
-
-    primary_messages = build_messages(ai_mode_1)
-    primary_messages[0]["content"] += (
-        "\nROLE: PRIMARY COACH\n"
-        "Set the main training priority. Be decisive and focused. Use 3–4 sentences."
-    )
-    ai1 = call_openai_chat(primary_messages)
-
-    blocked_terms = PERSONA_KEYWORDS.get(ai_mode_1, [])
-    secondary_system_msg = (
-        persona_prompt(ai_mode_2)
-        + "\nROLE: SECONDARY COACH\n"
-          "Support or monitor the primary focus — do NOT compete with it.\n"
-          f"Avoid these concepts entirely: {', '.join(blocked_terms) if blocked_terms else 'none'}.\n"
-          "Offer awareness cues or recovery considerations only.\n\n"
-          f"PRIMARY COACH FEEDBACK:\n{ai1}\n\n"
-          f"Always begin with '{first_name},'"
+    system_1 = (
+        f"{persona_1}\n\n"
+        f"You are giving post-session feedback to {first_name}. "
+        "Be specific, direct, and grounded in the numbers provided. "
+        "Do NOT give generic advice. Do NOT repeat what was said in previous sessions. "
+        "Do NOT mention injury or medical issues. "
+        f"Always open with '{first_name},' — this is mandatory."
     )
 
-    secondary_user_msg = (
-        f"Recent trend summary:\n{summary}\n\n"
-        f"Detailed trend context:\n{trend_context}\n\n"
-        f"Recent history:\n{history_text}\n\n"
-        f"{session_block}\n"
-        "TASK:\n"
-        "- Add a complementary perspective ONLY.\n"
-        "- Provide 1–2 monitoring cues.\n"
-        "- End with ONE reflective question.\n"
-        "- Keep it brief (3-4 sentences).\n"
+    user_1 = (
+        f"7-day summary: {summary}\n\n"
+        f"Trend context (14 days):\n{trend_context}\n\n"
+        f"Recent session notes:\n{history_text}\n\n"
+        f"{session_block}\n\n"
+        f"Wellness pattern scan (last 7 days):\n{wellness_scan}\n\n"
+        "TASK — PRIMARY COACH:\n"
+        f"Write feedback as the {ai_mode_1}.\n"
+        f"Open with '{first_name},'\n"
+        "Give 3 concrete, specific recommendations tied directly to what the numbers show.\n"
+        "Focus on what to DO in the next 24–48 hours.\n"
+        "Keep to 3–5 sentences. No waffle, no generics."
     )
 
-    ai2 = call_openai_chat([
-        {"role": "system", "content": secondary_system_msg},
-        {"role": "user", "content": secondary_user_msg},
-    ])
+    ai1 = call_openai_chat(
+        [{"role": "system", "content": system_1},
+         {"role": "user",   "content": user_1}],
+        max_tokens=500,
+    )
+
+    # ============================================================
+    # AI 2 — Secondary coach: genuinely different angle
+    # ============================================================
+    persona_2 = persona_prompt(ai_mode_2)
+
+    # Build a tight description of what AI 1 already covered
+    # so AI 2 is structurally forced to go elsewhere
+    ai1_summary = (
+        f"The primary coach ({ai_mode_1}) has already addressed the main training focus. "
+        f"Here is what they said:\n\"{ai1}\"\n\n"
+        "Your job is to add a DIFFERENT perspective — not to repeat or agree with the above."
+    )
+
+    system_2 = (
+        f"{persona_2}\n\n"
+        f"You are a secondary coach giving {first_name} a complementary perspective. "
+        f"{ai1_summary}"
+        "Focus on what the primary coach did NOT cover. "
+        "Be specific and practical. Do NOT repeat training load or speed advice if that was covered above. "
+        f"Always open with '{first_name},' — this is mandatory."
+    )
+
+    user_2 = (
+        f"7-day summary: {summary}\n\n"
+        f"{session_block}\n\n"
+        f"Wellness pattern scan (last 7 days):\n{wellness_scan}\n\n"
+        "TASK — SECONDARY COACH:\n"
+        f"Write as the {ai_mode_2}.\n"
+        f"Open with '{first_name},'\n"
+        "Add 2 specific monitoring cues or adjustments the primary coach did not mention.\n"
+        "End with ONE short, open reflective question (optional — only if it adds value).\n"
+        "3–4 sentences maximum."
+    )
+
+    ai2 = call_openai_chat(
+        [{"role": "system", "content": system_2},
+         {"role": "user",   "content": user_2}],
+        max_tokens=400,
+    )
 
     return (ai1 or "").strip(), (ai2 or "").strip()
 
