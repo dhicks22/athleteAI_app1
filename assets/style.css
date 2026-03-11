@@ -1008,5 +1008,21 @@ textarea, input, .form-control{
 }
 
 .dial-center {
+  height: auto;
+  min-height: unset;      /* ← kills any inherited min-height */
+  padding: 12px 0;
   overflow: visible;
+  align-items: center;    /* ← prevents flex-stretch bubbling on mobile */
+  align-self: center;     /* ← stops parent stretching this container */
 }
+
+/* Also override the portrait/landscape media query heights */
+@media (max-width: 600px) and (orientation: portrait) {
+  .dial-center { height: auto; }
+}
+@media (max-width: 900px) and (orientation: landscape) {
+  .dial-center { height: auto; }
+}
+@media (min-width: 601px) and (max-width: 900px) and (orientation: portrait) {
+  .dial-center { height: auto; }
+}}
