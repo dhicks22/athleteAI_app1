@@ -988,3 +988,142 @@ textarea, input, .form-control{
   .app-header{ padding-top: 24px; }
   .logout-container{ right: 12px; bottom: 92px; }
 }
+
+/* ============================================================
+   AI SESSION BUILDER — Premium card styles
+============================================================ */
+
+.premium-card {
+  border-radius: 16px !important;
+  border: 1px solid var(--border) !important;
+  background: var(--card-bg) !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.07) !important;
+  overflow: hidden;
+}
+
+.premium-card .card-header {
+  background: linear-gradient(135deg, #0b1220 0%, #0f1b34 100%) !important;
+  color: #fff !important;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  padding: 14px 18px;
+  border-bottom: none !important;
+}
+
+.card-muted {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.divider-soft {
+  height: 1px;
+  background: var(--border);
+  margin: 14px 0;
+  opacity: 0.6;
+}
+
+.premium-input,
+.premium-textarea,
+.premium-number {
+  border-radius: 10px !important;
+  border: 1px solid var(--border) !important;
+  background: var(--card-bg) !important;
+  color: var(--text) !important;
+  font-size: 14px !important;
+  padding: 8px 12px !important;
+  width: 100%;
+}
+
+.premium-textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.premium-btn {
+  border-radius: 12px !important;
+  font-weight: 700 !important;
+  font-size: 15px !important;
+  padding: 12px 20px !important;
+  background: linear-gradient(135deg, #1e88e5, #1565c0) !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(30,136,229,0.35) !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.premium-btn:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 20px rgba(30,136,229,0.45) !important;
+}
+
+/* Pill badge (top-right of AI hero) */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.20);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  backdrop-filter: blur(6px);
+  white-space: nowrap;
+}
+
+.pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #35e359;
+  box-shadow: 0 0 6px rgba(53,227,89,0.75);
+  animation: pillPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes pillPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.6; transform: scale(0.85); }
+}
+
+/* AI plan output blocks */
+.ai-card {
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ai-card-green {
+  background: rgba(53,227,89,0.08);
+  border: 1px solid rgba(53,227,89,0.25);
+}
+
+.ai-card-blue {
+  background: rgba(30,136,229,0.08);
+  border: 1px solid rgba(30,136,229,0.25);
+}
+
+.ai-title {
+  font-weight: 800;
+  font-size: 13px;
+  margin-bottom: 8px;
+  letter-spacing: -0.01em;
+}
+
+[data-theme="dark"] .premium-card .card-header {
+  background: linear-gradient(135deg, #0a0f1c 0%, #0d1628 100%) !important;
+}
+
+[data-theme="dark"] .ai-card-green {
+  background: rgba(53,227,89,0.06);
+  border-color: rgba(53,227,89,0.18);
+}
+
+[data-theme="dark"] .ai-card-blue {
+  background: rgba(77,171,247,0.06);
+  border-color: rgba(77,171,247,0.18);
+}

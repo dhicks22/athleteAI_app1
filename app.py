@@ -2989,8 +2989,11 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     df_time = df_time.reindex(full_range)
 
     load_series = pd.to_numeric(df_time.get("Load"), errors="coerce")
+    # RPE_Post_Session ONLY — never fall back to sRPE (coach-planned field)
+    # If athlete has never logged, this will be all-NaN → returns None dial
+    rpe_col = "RPE_Post_Session" if "RPE_Post_Session" in df_time.columns else None
     rpe_series = pd.to_numeric(
-        df_time.get("RPE_Post_Session", df_time.get("sRPE")),
+        df_time[rpe_col] if rpe_col else pd.Series(dtype=float),
         errors="coerce"
     )
     quality_series = pd.to_numeric(df_time.get("Session_1_5"), errors="coerce")
