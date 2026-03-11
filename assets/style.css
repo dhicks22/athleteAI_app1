@@ -988,3 +988,25 @@ textarea, input, .form-control{
   .app-header{ padding-top: 24px; }
   .logout-container{ right: 12px; bottom: 92px; }
 }
+
+/* ============================================================
+   DIAL CIRCLE FIX — enforce perfect circle in all orientations
+============================================================ */
+.dial-circle {
+  aspect-ratio: 1 / 1;
+  width: var(--dial-size);
+  height: var(--dial-size);
+  flex-shrink: 0;
+  flex-grow: 0;
+  max-width: 100%;
+}
+
+.dial-wrapper {
+  width: var(--dial-size);
+  height: var(--dial-size);
+  flex-shrink: 0;
+}
+
+.dial-center {
+  overflow: visible;
+}
