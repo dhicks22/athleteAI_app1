@@ -1127,3 +1127,81 @@ textarea, input, .form-control{
   background: rgba(77,171,247,0.06);
   border-color: rgba(77,171,247,0.18);
 }
+
+.dial-row {
+    margin-top: 6px !important;
+    margin-bottom: 4px !important;
+}
+
+.dial-block {
+    padding: 6px 8px;
+}
+
+#motivational-message {
+    margin-top: 2px !important;
+}
+
+.dial-circle.updated {
+    transition: --dial-progress 0.8s ease-out;
+}
+
+.dial-primary {
+transform: scale(1.1);
+}
+
+/* Dial row spacing */
+.dial-row {
+    margin-top: 6px !important;
+    margin-bottom: 6px !important;
+}
+
+/* Tighten coaching insight block */
+#welcome-message {
+    padding: 6px 12px;
+    margin-top: 6px;
+    margin-bottom: 4px;
+    background: transparent;
+}
+
+/* Make motivation subtle and compact */
+#motivational-message {
+    max-width: 1000px;
+    margin: 4px auto 10px auto;
+    text-align: center;
+    font-size: 14px;
+    opacity: 0.75;
+}
+
+#welcome-message span { font-weight: 600; }
+#welcome-message div { line-height: 1.3; }
+
+/* Pro dial styling */
+.dial-center svg {
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.12));
+}
+
+.dial-circle {
+    stroke-linecap: round;
+}
+
+.dial-center {
+    transform: scale(1.05);
+}
+
+
+.dial-circle.high {
+    filter: drop-shadow(0 0 6px rgba(40,167,69,0.35));
+}
+
+
+#welcome-message {
+    max-width: 1000px;
+    margin: 10px auto 4px auto;
+    padding-left: 14px;
+}
+
+#motivational-message {
+    max-width: 1000px;
+    margin: 4px auto 8px auto;
+    text-align: center;
+}

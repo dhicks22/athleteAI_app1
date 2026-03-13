@@ -305,7 +305,10 @@ def streak_dial(streak: int):
     s = max(0, int(streak))
     percent = min(s, 14) / 14 * 100
     colour = streak_colour_from_days(s)
-    return _build_dial(str(s), percent, colour)
+
+    display = "—" if s == 0 else str(s)
+
+    return _build_dial(display, percent, colour)
 
 
 
@@ -2114,11 +2117,11 @@ def app_header(center=False):
         [
             html.Img(
                 src="/assets/app_icon.png",
-                style={"height": "56px", "marginRight": "10px", "verticalAlign": "middle"},
+                style={"height": "50px", "marginRight": "10px", "verticalAlign": "middle"},
             ),
             html.Div(
                 [
-                    html.H2("Adaptive Coaching Intelligence", style={"margin": 0, "fontWeight": 600, "textAlign": align}),
+                    html.H3("Adaptive Coaching Intelligence", style={"margin": 0, "fontWeight": 600, "textAlign": align}),
                     html.Small("Empowering performance through athlete insight",
                                style={"color": "#555", "textAlign": align, "display": "block"}),
                 ],
@@ -2229,9 +2232,9 @@ def build_main_layout(auth_data):
                 ],
             ),
 
-            html.Div(id="welcome-message", className="mt-3"),
+
             dbc.Row(
-                className="g-2 align-items-stretch mt-2 dial-row",
+                className="g-2 align-items-stretch mt-1 dial-row",
                 children=[
                     dbc.Col(html.Div([html.Div("Daily Readiness", className="dial-label"),
                                       html.Div(id="readiness-dial-container", className="dial-center")],
@@ -2251,13 +2254,15 @@ def build_main_layout(auth_data):
                             lg=3, md=3, sm=6, xs=6, width=6),
                 ],
             ),
+            html.Div(id="welcome-message", className="mt-3"),
+            html.Div(id="motivational-message"),
 
 
-            html.P(
-                "Swipe between Calendar, Graphs and Session Builder using the bottom nav.",
-                className="text-muted mt-2",
-                style={"textAlign": "center"},
-            ),
+            #html.P(
+             #   "Swipe between Calendar, Graphs and Session Builder using the bottom nav.",
+             #   className="text-muted mt-2",
+              #  style={"textAlign": "center"},
+            #),
 
             html.Div(
                 logout_button,
@@ -3241,9 +3246,12 @@ def save_and_ai(
     )
 
     return ai1_div, ai2_div, html.Span(
-    "✅ Saved, coaching feedback generated & email sent to Coach.",
-    style={"color": "#2E7D32", "fontWeight": 600}
-)
+        status_msg,
+        style={
+            "color": "#2E7D32" if status_msg.startswith("✅") else "#C62828",
+            "fontWeight": 600,
+        }
+    )
 
 
 @app.callback(
@@ -3350,11 +3358,6 @@ def populate_session_context(selected_date, athlete_name):
     return workout_card, focus_card, venue_card
 
 
-
-
-
-
-
 @app.callback(
     [
         Output("athlete-dropdown", "value"),
@@ -3380,10 +3383,6 @@ def reset_inputs(n):
         3, 3, 3, 3, 3, 3,   # sliders back to neutral
         "", "", ""          # clear text boxes
     )
-
-
-
-
 
 
 app.clientside_callback(
@@ -3424,6 +3423,287 @@ app.clientside_callback(
     Input("bottom-nav-click", "data"),
 )
 
+
+@app.callback(
+    Output("welcome-message", "children"),
+    Input("athlete-dropdown", "value"),
+    Input("today-date", "children"),
+)
+def update_welcome(athlete_id, _today):
+    if not athlete_id:
+        raise PreventUpdate
+
+    first_name = athlete_id.strip().split()[0] if athlete_id.strip() else "Athlete"
+    today = today_adl()
+    hour = dt.datetime.now(ADL_TZ).hour
+
+    greeting = (
+        "Good morning" if hour < 12
+        else "Good afternoon" if hour < 17
+        else "Good evening"
+    )
+
+    readiness_val = None
+    neuro_val = None
+    streak = 0
+
+    try:
+        df = load_tab(athlete_id)
+
+        if not df.empty:
+
+            # ---------- streak ----------
+            streak, _ = compute_streaks(df)
+
+            # ---------- readiness ----------
+            df_time = df.copy()
+            df_time["Date"] = pd.to_datetime(df_time["Date"], errors="coerce")
+            df_time = df_time.sort_values("Date").set_index("Date")
+
+            full_range = pd.date_range(
+                start=df_time.index.min(),
+                end=today,
+                freq="D"
+            )
+            df_time = df_time.reindex(full_range)
+
+            rpe_col = "RPE_Post_Session" if "RPE_Post_Session" in df_time.columns else None
+
+            rpe_series = pd.to_numeric(
+                df_time[rpe_col] if rpe_col else pd.Series(dtype=float),
+                errors="coerce"
+            )
+
+            load_series = pd.to_numeric(df_time.get("Load"), errors="coerce")
+            quality_series = pd.to_numeric(df_time.get("Session_1_5"), errors="coerce")
+
+            readiness_val = calc_daily_readiness(
+                load_series,
+                rpe_series,
+                quality_series
+            )
+
+            # ---------- neuromuscular ----------
+            df_neuro = df.copy()
+            df_neuro["Date"] = pd.to_datetime(df_neuro["Date"], errors="coerce").dt.date
+            df_neuro = df_neuro.sort_values("Date")
+
+            cutoff = today - dt.timedelta(days=14)
+            recent_neuro = df_neuro[df_neuro["Date"] >= cutoff]
+
+            def _last(frame, col):
+                s = pd.to_numeric(frame.get(col, pd.Series(dtype=float)), errors="coerce")
+                v = s.dropna()
+                return float(v.iloc[-1]) if not v.empty else None
+
+            sl = _last(recent_neuro, "Sleep_1_5")
+            fa = _last(recent_neuro, "Fatigue_1_5")
+            so = _last(recent_neuro, "Soreness_1_5")
+            mo = _last(recent_neuro, "Mood_1_5")
+
+            if all(v is not None for v in [sl, fa, so, mo]):
+                neuro_val = calc_neuro_readiness(sl, fa, so, mo, history_df=recent_neuro)
+
+    except Exception:
+        streak, readiness_val, neuro_val = 0, None, None
+
+    r = readiness_val if readiness_val is not None else 0
+    n = neuro_val if neuro_val is not None else 0
+
+    # ---------- message logic ----------
+    if readiness_val is None and neuro_val is None:
+        msg = "Log your first session to start tracking readiness."
+        sub = "Your dials will activate once you've entered some data."
+        color = "#6e6e6e"
+        icon = "—"
+
+    elif r >= 75 and n >= 75:
+        msg = "You're in great shape today — go get it."
+        sub = "Both readiness markers are high. This is a good day to push."
+        color = "#2E7D32"
+        icon = "↑"
+
+    elif r >= 60 and n >= 60:
+        msg = "Good to go — solid session ahead."
+        sub = "Numbers look steady. Execute your plan and stay sharp."
+        color = "#1565C0"
+        icon = "→"
+
+    elif r >= 40 or n >= 40:
+        msg = "Manage your load carefully today."
+        sub = "Some fatigue showing. Focus on quality over quantity."
+        color = "#E65100"
+        icon = "↓"
+
+    else:
+        msg = "Recovery day recommended."
+        sub = "Both readiness markers are low. Prioritise recovery today."
+        color = "#C62828"
+        icon = "⚠"
+
+    streak_txt = f" • {streak}-day streak 🔥" if streak >= 3 else ""
+
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Span(
+                        f"{icon} ",
+                        style={
+                            "fontSize": "18px",
+                            "fontWeight": 900,
+                            "color": color,
+                            "marginRight": "4px",
+                        },
+                    ),
+                    html.Span(
+                        f"{greeting}, {first_name}. {msg}",
+                        style={"fontWeight": 800, "fontSize": "16px", "color": color},
+                    ),
+                    html.Span(
+                        streak_txt,
+                        style={
+                            "fontSize": "13px",
+                            "color": "#E65100",
+                            "marginLeft": "6px",
+                        },
+                    ),
+                ],
+                style={"marginBottom": "4px"},
+            ),
+            html.Div(
+                sub,
+                style={
+                    "fontSize": "13px",
+                    "color": "#6e6e6e",
+                    "lineHeight": "1.4",
+                },
+            ),
+        ],
+        style={
+            "maxWidth": "1000px",
+            "margin": "10px auto 4px auto",
+            "textAlign": "center",
+            "padding": "0px",
+            "background": "transparent",
+            "border": "none",
+        },
+    )
+
+@app.callback(
+    Output("motivational-message", "children"),
+    Input("today-date", "children"),
+    State("athlete-dropdown", "value"),
+    prevent_initial_call=True,
+)
+def update_motivational_message(today_date, athlete_id):
+    if not athlete_id:
+        raise PreventUpdate
+
+    first_name = athlete_id.strip().split()[0] if athlete_id.strip() else "Athlete"
+
+    try:
+        df = load_tab(athlete_id)
+        context = ""
+
+        if not df.empty:
+            streak, _ = compute_streaks(df)
+            summary = build_context_summary(df, days=7)
+            wellness = build_wellness_flags(df, days=7)
+
+            # Get readiness
+            df_time = df.copy()
+            df_time["Date"] = pd.to_datetime(df_time["Date"], errors="coerce")
+            df_time = df_time.sort_values("Date").set_index("Date")
+            full_range = pd.date_range(start=df_time.index.min(), end=today_adl(), freq="D")
+            df_time = df_time.reindex(full_range)
+            rpe_col = "RPE_Post_Session" if "RPE_Post_Session" in df_time.columns else None
+            rpe_series = pd.to_numeric(
+                df_time[rpe_col] if rpe_col else pd.Series(dtype=float),
+                errors="coerce"
+            )
+            load_series = pd.to_numeric(df_time.get("Load"), errors="coerce")
+            quality_series = pd.to_numeric(df_time.get("Session_1_5"), errors="coerce")
+            readiness_val = calc_daily_readiness(load_series, rpe_series, quality_series)
+
+            context = (
+                f"Athlete first name: {first_name}\n"
+                f"Current streak: {streak} days\n"
+                f"7-day summary: {summary}\n"
+                f"Wellness scan: {wellness}\n"
+                f"Daily readiness score: {round(readiness_val, 1) if readiness_val else 'unknown'}/100\n"
+                f"Day of week: {dt.datetime.now(ADL_TZ).strftime('%A')}\n"
+            )
+        else:
+            context = f"Athlete first name: {first_name}\nNo training data logged yet.\n"
+
+    except Exception:
+        context = f"Athlete first name: {first_name}\n"
+
+    system_msg = (
+        "You are a high-performance sprint and strength coach writing a single motivational line "
+        "for an athlete when they open their training app. "
+        "Rules:\n"
+        "- 1 sentence ONLY. Never more.\n"
+        "- Address the athlete by first name.\n"
+        "- Focus on PROCESS, IDENTITY, or CONSISTENCY — NOT on today's readiness score.\n"
+        "- Draw from streak length, day of week, training history, or upcoming sessions.\n"
+        "- Tone: like a coach who has worked with this athlete for years. Sharp, personal, not generic.\n"
+        "- Rotate between themes: competitive identity, process discipline, long-term vision, quiet confidence.\n"
+        "- No hashtags. No emojis. No exclamation marks.\n"
+        "- Never mention readiness, fatigue scores, or wellness numbers — the banner above already covers that.\n"
+        "- Never start with 'It's [day]' — that's too predictable.\n"
+        "- Examples of good tone: 'The athletes who win championships trained on days they didn't feel like it, Dylan.' "
+        "/ 'Four days straight — that kind of consistency is what separates good from elite.' "
+        "/ 'Your next PB is being built in sessions like this one.'"
+    )
+
+    user_msg = (
+        f"Athlete context:\n{context}\n\n"
+        "Write the motivational message now. 1–2 sentences only."
+    )
+
+    raw = call_openai_chat(
+        [{"role": "system", "content": system_msg},
+         {"role": "user", "content": user_msg}],
+        max_tokens=80,
+    )
+
+    if not raw or "unavailable" in raw.lower():
+        # Fallback pool if API fails
+        import random
+        fallbacks = [
+            f"{first_name}, the work you put in today compounds into who you become.",
+            f"Every session is data, {first_name}. Make this one count.",
+            f"{first_name}, consistency beats intensity. Show up.",
+            f"The best athletes in the world trained today, {first_name}. So will you.",
+            f"{first_name}, trust the process — the numbers don't lie.",
+        ]
+        raw = random.choice(fallbacks)
+
+    return html.Div(
+        [
+           # html.Span("⚡ ", style={"fontSize": "13px", "color": "#1565C0"}),
+            html.Span(
+                raw.strip(),
+                style={
+                    "fontSize": "15px",
+                    "fontStyle": "normal",
+                    "color": "#424242",
+                    "fontWeight": 500,
+                    "lineHeight": "1.4",
+                    "opacity": 0.85,
+                }
+            ),
+        ],
+        style={
+            "textAlign": "center",
+            "padding": "4px 0",
+            "marginTop": "4px",
+            "marginBottom": "8px",
+        }
+    )
+
 @app.callback(
     Output("ai-plan-output", "children"),
     Output("ai-plan-status", "children"),
@@ -3434,7 +3714,6 @@ app.clientside_callback(
     State("ai-plan-duration", "value"),
     prevent_initial_call=True,
 )
-
 def generate_session_plan(n_clicks, athlete_id, coach_style, goal, duration):
     if not n_clicks:
         raise PreventUpdate
@@ -3596,143 +3875,6 @@ def generate_session_plan(n_clicks, athlete_id, coach_style, goal, duration):
 
     return html.Div(cards), ""
 
-@app.callback(
-    Output("welcome-message", "children"),
-    Input("readiness-dial-container", "children"),
-    State("athlete-dropdown", "value"),
-    State("neuromuscular-dial-container", "children"),
-    State("streak-dial-container", "children"),
-    prevent_initial_call=True,
-)
-def update_welcome(readiness_dial, athlete_id, neuro_dial, streak_dial_val):
-    if not athlete_id:
-        raise PreventUpdate
-
-    first_name = athlete_id.strip().split()[0] if athlete_id.strip() else "Athlete"
-    today = today_adl()
-    hour = dt.datetime.now(ADL_TZ).hour
-
-    greeting = (
-        "Good morning" if hour < 12
-        else "Good afternoon" if hour < 17
-        else "Good evening"
-    )
-
-    # Pull fresh data for context
-    try:
-        df = load_tab(athlete_id)
-        readiness_val = None
-        neuro_val = None
-        streak = 0
-
-        if not df.empty:
-            streak, _ = compute_streaks(df)
-
-            # Get readiness from RPE_Post_Session only
-            df_time = df.copy()
-            df_time["Date"] = pd.to_datetime(df_time["Date"], errors="coerce")
-            df_time = df_time.sort_values("Date").set_index("Date")
-            full_range = pd.date_range(start=df_time.index.min(), end=today, freq="D")
-            df_time = df_time.reindex(full_range)
-
-            rpe_col = "RPE_Post_Session" if "RPE_Post_Session" in df_time.columns else None
-            rpe_series = pd.to_numeric(
-                df_time[rpe_col] if rpe_col else pd.Series(dtype=float),
-                errors="coerce"
-            )
-            load_series = pd.to_numeric(df_time.get("Load"), errors="coerce")
-            quality_series = pd.to_numeric(df_time.get("Session_1_5"), errors="coerce")
-            readiness_val = calc_daily_readiness(load_series, rpe_series, quality_series)
-
-            # Neuro
-            df_neuro = df.copy()
-            df_neuro["Date"] = pd.to_datetime(df_neuro["Date"], errors="coerce").dt.date
-            df_neuro = df_neuro.sort_values("Date")
-            cutoff = today - dt.timedelta(days=14)
-            recent_neuro = df_neuro[df_neuro["Date"] >= cutoff]
-
-            def _last(frame, col):
-                s = pd.to_numeric(frame.get(col, pd.Series(dtype=float)), errors="coerce")
-                v = s.dropna()
-                return float(v.iloc[-1]) if not v.empty else None
-
-            sl = _last(recent_neuro, "Sleep_1_5")
-            fa = _last(recent_neuro, "Fatigue_1_5")
-            so = _last(recent_neuro, "Soreness_1_5")
-            mo = _last(recent_neuro, "Mood_1_5")
-            if all(v is not None for v in [sl, fa, so, mo]):
-                neuro_val = calc_neuro_readiness(sl, fa, so, mo, history_df=recent_neuro)
-
-    except Exception:
-        streak, readiness_val, neuro_val = 0, None, None
-
-    # --- Build message based on scores ---
-    r = readiness_val or 0
-    n = neuro_val or 0
-
-    if readiness_val is None and neuro_val is None:
-        msg = f"Log your first session to start tracking readiness."
-        sub = "Your dials will come alive once you've entered some data."
-        color = "#6e6e6e"
-        icon = "—"
-    elif r >= 75 and n >= 75:
-        msg = f"You're in great shape today — go get it."
-        sub = f"Readiness and neuromuscular state are both high. This is a good day to push."
-        color = "#2E7D32"
-        icon = "↑"
-    elif r >= 60 and n >= 60:
-        msg = f"Good to go — solid session ahead."
-        sub = f"Numbers look steady. Execute your plan and stay sharp on technique."
-        color = "#1565C0"
-        icon = "→"
-    elif r >= 40 or n >= 40:
-        msg = f"Manage your load carefully today."
-        sub = f"Some fatigue in the system. Quality over quantity — reduce intensity if needed."
-        color = "#E65100"
-        icon = "↓"
-    else:
-        msg = f"Recovery day recommended."
-        sub = f"Both readiness markers are low. Light movement, sleep, and nutrition are your training today."
-        color = "#C62828"
-        icon = "⚠"
-
-    streak_txt = f" • {streak}-day streak 🔥" if streak >= 3 else ""
-
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.Span(f"{icon} ", style={
-                        "fontSize": "18px",
-                        "fontWeight": 900,
-                        "color": color,
-                        "marginRight": "4px",
-                    }),
-                    html.Span(
-                        f"{greeting}, {first_name}. {msg}",
-                        style={"fontWeight": 800, "fontSize": "16px", "color": color},
-                    ),
-                    html.Span(
-                        streak_txt,
-                        style={"fontSize": "13px", "color": "#E65100", "marginLeft": "6px"},
-                    ),
-                ],
-                style={"marginBottom": "4px"},
-            ),
-            html.Div(
-                sub,
-                style={"fontSize": "13px", "color": "#6e6e6e", "lineHeight": "1.4"},
-            ),
-        ],
-        style={
-            "background": f"{color}0f",
-            "border": f"1px solid {color}33",
-            "borderLeft": f"4px solid {color}",
-            "borderRadius": "12px",
-            "padding": "14px 16px",
-            "marginBottom": "8px",
-        }
-    )
 
 
 
