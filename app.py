@@ -388,7 +388,7 @@ def calc_daily_readiness(
     if pd.isna(load_ref) or load_ref <= 0:
         return 75.0
 
-    load_n = df["load"].fillna(0) / load_ref
+    load_n = df["load"].fillna(load_ref * 0.05) / load_ref
     rpe_n  = (df["rpe"].fillna(0).clip(1, 5) - 1) / 4
     qual_n = (df["qual"].fillna(0).clip(1, 5) - 1) / 4
 
@@ -407,6 +407,16 @@ def calc_daily_readiness(
     acute    = df["stress"].iloc[-1]
     base_val = baseline.iloc[-1]
 
+    # ------------------------------------------------------------------
+    # TRAINING SPIKE DETECTION
+    # sudden load increase relative to baseline
+    # ------------------------------------------------------------------
+
+    if base_val > 0:
+        spike_ratio = acute / base_val
+    else:
+        spike_ratio = 1
+
     if pd.isna(base_val) or base_val == 0:
         base_readiness = 75.0
     else:
@@ -417,7 +427,9 @@ def calc_daily_readiness(
             base_readiness = 75.0
         else:
             z = (acute - base_val) / error_ewma
-            base_readiness = float(np.clip(75 - (z * 15), 0, 100))
+            base_readiness = float(np.clip(75 - (z * 12), 0, 100))
+
+
 
     # ------------------------------------------------------------------
     # ⏳ SILENCE PENALTY
@@ -452,6 +464,36 @@ def calc_daily_readiness(
         readiness = float(np.clip(adjusted, 0, 100))
     else:
         readiness = base_readiness
+
+        # ------------------------------------------------------------------
+        # SPIKE PENALTY
+        # ------------------------------------------------------------------
+
+        if spike_ratio > 1.8:
+            readiness *= 0.70
+        elif spike_ratio > 1.5:
+            readiness *= 0.80
+        elif spike_ratio > 1.3:
+            readiness *= 0.90
+
+    # ------------------------------------------------------------------
+    # TRAINING RECENCY LIMITER
+    # If no training load recently, readiness cannot remain high
+    # ------------------------------------------------------------------
+
+    load_dated = pd.to_numeric(load_series, errors="coerce")
+    last_load_pos = load_dated.last_valid_index()
+
+    if last_load_pos is not None and hasattr(last_load_pos, "date"):
+        today_dt = dt.datetime.now(ADL_TZ).date()
+        days_since_load = (today_dt - last_load_pos.date()).days
+
+        if days_since_load > 21:
+            readiness = min(readiness, 40)
+        elif days_since_load > 14:
+            readiness = min(readiness, 55)
+        elif days_since_load > 7:
+            readiness = min(readiness, 70)
 
     return readiness
 
@@ -525,7 +567,21 @@ def calc_neuro_readiness(
 
     hist_scores = pd.concat([hist_scores, pd.Series([score])], ignore_index=True)
     smooth = hist_scores.ewm(span=span, adjust=False).mean().iloc[-1]
-    smooth = smooth + 0.05 * (75 - smooth)  # soft regression to baseline
+    smooth = smooth + 0.03 * (75 - smooth)  # soft regression to baseline
+
+    # -----------------------------------
+    # WELLNESS RECENCY DECAY
+    # -----------------------------------
+
+    if "Date" in history_df.columns:
+        last_entry = pd.to_datetime(history_df["Date"], errors="coerce").max()
+        if pd.notna(last_entry):
+            days = (dt.datetime.now(ADL_TZ).date() - last_entry.date()).days
+
+            if days > 7:
+                smooth *= 0.9
+            if days > 14:
+                smooth *= 0.8
 
     return float(np.clip(smooth, 0, 100))
 
