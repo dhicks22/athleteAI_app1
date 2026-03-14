@@ -1477,3 +1477,107 @@ transform: scale(1.1);
     margin: 4px auto 8px auto;
     text-align: center;
 }
+
+/* ============================================================
+   DIAL CENTRING FIX
+   Ensures each dial sits perfectly centred in its grid column
+   on portrait mobile.
+============================================================ */
+
+/* Force equal columns in the dial row */
+.dial-row,
+.dials-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.dial-row > [class*="col"],
+.dials-row > [class*="col"] {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: flex-start !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+/* Dial block: centred column, no stray alignment */
+.dial-block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;   /* centres the dial circle horizontally */
+  justify-content: flex-start;
+  padding: 4px 0;
+}
+
+/* Dial label: fully centred */
+.dial-label {
+  width: 100%;
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+/* Dial centre zone: flex centre in both axes */
+.dial-center {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center; /* ← this is the critical one */
+  height: min(170px, calc(var(--dial-size) + 50px));
+}
+
+/* Dial wrapper: explicit centre */
+.dial-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--dial-size);
+  height: var(--dial-size);
+  position: relative;
+  margin: 0 auto; /* fallback for non-flex parents */
+}
+
+/* Dial circle: no stray margin that could shift it */
+.dial-circle {
+  margin: 0 auto;
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Portrait phones */
+@media (max-width: 600px) and (orientation: portrait) {
+  :root {
+    --dial-size: 100px;
+    --dial-thickness: 12px;
+  }
+
+  .dial-center {
+    height: 130px;
+  }
+
+  .dial-label {
+    font-size: 9px;
+  }
+
+  /* Tighten column padding so dials don't crowd each other */
+  .dial-row > [class*="col"],
+  .dials-row > [class*="col"] {
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+  }
+}
+
+/* Very small phones */
+@media (max-width: 360px) and (orientation: portrait) {
+  :root {
+    --dial-size: 86px;
+    --dial-thickness: 10px;
+  }
+
+  .dial-center {
+    height: 115px;
+  }
+}
