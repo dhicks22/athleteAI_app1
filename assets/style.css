@@ -1581,3 +1581,142 @@ transform: scale(1.1);
     height: 115px;
   }
 }
+
+/* ============================================================
+   DIAL OVAL + CENTRING FIX
+   Problem: dial-circle stretches to column width → becomes oval
+   Fix: explicit px size, aspect-ratio:1, block centering
+============================================================ */
+
+/* ── Column layout ──────────────────────────────────────── */
+.dial-row,
+.dials-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  margin: 0 !important;
+}
+
+.dial-row > [class*="col"],
+.dials-row > [class*="col"] {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: flex-start !important;
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+}
+
+/* ── Dial block: centred column ─────────────────────────── */
+.dial-block {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  width: 100% !important;
+  padding: 4px 0 !important;
+}
+
+/* ── Dial centre zone ───────────────────────────────────── */
+.dial-center {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: calc(var(--dial-size) + 40px) !important;
+  /* no transform, no scale */
+}
+
+/* ── Dial wrapper: fixed square, centred ────────────────── */
+.dial-wrapper {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  /* Fixed size = dial token — prevents column width bleeding in */
+  width: var(--dial-size) !important;
+  height: var(--dial-size) !important;
+  flex-shrink: 0 !important;
+  position: relative !important;
+  margin: 0 !important;
+}
+
+/* ── THE CRITICAL FIX: dial-circle must be a perfect square ── */
+.dial-circle {
+  /* Explicit px dimensions — do NOT use width:100% or it stretches */
+  width: var(--dial-size) !important;
+  height: var(--dial-size) !important;
+  min-width: var(--dial-size) !important;
+  min-height: var(--dial-size) !important;
+  max-width: var(--dial-size) !important;
+  max-height: var(--dial-size) !important;
+  aspect-ratio: 1 / 1 !important;   /* nuclear option: forces square */
+  flex-shrink: 0 !important;
+  display: block !important;
+  border-radius: 50% !important;
+  margin: 0 !important;
+  /* position/background/box-shadow from existing theme stay intact */
+}
+
+/* ── Dial flip must not distort the circle ──────────────── */
+.dial-flip {
+  width: var(--dial-size) !important;
+  height: var(--dial-size) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  perspective: 1000px !important;
+}
+
+.dial-flip-inner {
+  width: var(--dial-size) !important;
+  height: var(--dial-size) !important;
+  position: relative !important;
+  transform-style: preserve-3d !important;
+  transition: transform 520ms cubic-bezier(.2,.8,.2,1) !important;
+}
+
+.dial-face {
+  position: absolute !important;
+  inset: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  backface-visibility: hidden !important;
+}
+
+/* ── Portrait phones ────────────────────────────────────── */
+@media (max-width: 600px) and (orientation: portrait) {
+  :root {
+    --dial-size: 130px;
+    --dial-thickness: 16px;
+  }
+
+  .dial-center {
+    height: 170px !important;
+  }
+
+  .dial-label {
+    font-size: 9px !important;
+  }
+
+  .dial-circle::after {
+    display: none !important;
+  }
+}
+
+/* Very small phones ≤360px */
+@media (max-width: 360px) and (orientation: portrait) {
+  :root {
+    --dial-size: 110px;
+    --dial-thickness: 13px;
+  }
+
+  .dial-center {
+    height: 148px !important;
+  }
+}
+
+/* Landscape phones */
+@media (max-width: 900px) and (orientation: landscape) {
+  :root {
+    --dial-size: 118px;
+    --dial-thickness: 14px;
+  }
+}
