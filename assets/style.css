@@ -661,6 +661,278 @@ textarea, input, .form-control{
   }
 }
 
+/* ============================================================
+   DIAL FIX PATCH — replace / merge with existing theme CSS
+   Fixes: portrait "bobbled" / oversized dials on mobile
+   Root causes fixed:
+     1. Removed transform:scale() from .dial-center (was inflating layout)
+     2. Removed transform:scale(1.1) from .dial-primary
+     3. dial-circle now uses max-width/max-height to stay inside column
+     4. dial-center height uses min() so it never exceeds column width
+     5. Collapsed duplicate .dial-row / #welcome-message overrides
+     6. Portrait media query tightened further for very narrow phones
+============================================================ */
+
+/* ── DIAL ROW ─────────────────────────────────────────────── */
+.dial-row,
+.dials-row {
+  margin-top: 8px !important;
+  margin-bottom: 8px !important;
+  align-items: stretch;
+}
+
+.dial-row > [class*="col"],
+.dials-row > [class*="col"] {
+  display: flex;
+}
+
+/* ── DIAL BLOCK ───────────────────────────────────────────── */
+.dial-block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 4px;
+}
+
+.dial-label {
+  width: 100%;
+  text-align: center;
+  font-weight: 800;
+  font-size: 10px;
+  margin-bottom: 6px;
+  color: #222;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* ── DIAL CENTER — KEY FIX ────────────────────────────────── */
+/* No transform:scale here — that was blowing layout on portrait */
+.dial-center {
+  width: 100%;
+  /* Height = dial-size token + small padding, but never > column width */
+  height: min(190px, calc(var(--dial-size) + 50px));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* No transform */
+}
+
+/* ── DIAL WRAPPER ─────────────────────────────────────────── */
+.dial-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  margin: 0;
+}
+
+/* ── DIAL CIRCLE — KEY FIX ────────────────────────────────── */
+.dial-circle {
+  --size: var(--dial-size);
+  --thickness: var(--dial-thickness);
+
+  width: var(--size);
+  height: var(--size);
+
+  /* Hard cap so it can never overflow a narrow column */
+  max-width: var(--size);
+  max-height: var(--size);
+
+  border-radius: 50%;
+  position: relative;
+  flex-shrink: 0;
+
+  background:
+    conic-gradient(
+      var(--dial-color) calc(clamp(0, var(--dial-progress), 100) * 1%),
+      var(--dial-track) 0
+    );
+
+  box-shadow:
+    0 4px 10px rgba(0,0,0,0.14),
+    0 0 0 1px var(--dial-stroke);
+
+  transition: background 600ms ease, transform 250ms ease;
+  /* NO scale transform by default */
+}
+
+/* ── DIAL PRIMARY — KEY FIX ──────────────────────────────── */
+/* Removed scale(1.1) which caused portrait overflow */
+.dial-primary {
+  /* intentionally empty — remove the old scale */
+}
+
+/* ── DIAL FLIP ────────────────────────────────────────────── */
+.dial-flip {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  perspective: 1000px;
+}
+
+.dial-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 520ms cubic-bezier(.2,.8,.2,1);
+}
+
+.dial-flip.is-flipped .dial-flip-inner {
+  transform: rotateY(180deg);
+}
+
+.dial-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backface-visibility: hidden;
+}
+
+.dial-front  { transform: rotateY(0deg); }
+.dial-back   { transform: rotateY(180deg); padding: 10px; align-items: stretch; justify-content: stretch; }
+
+/* ── DIAL TEXT ────────────────────────────────────────────── */
+.dial-text {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  transform: translateY(-1px);
+  line-height: 1;
+  font-size: calc(var(--dial-size) * 0.26);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.65);
+}
+
+.dial-text .dial-sub {
+  display: block;
+  font-size: 12px;
+  font-weight: 750;
+  color: var(--text-muted);
+  margin-top: 6px;
+  text-shadow: none;
+}
+
+/* ── PULSE ANIMATION ─────────────────────────────────────── */
+.dial-circle.updated { animation: dialPulse 900ms ease-out; }
+@keyframes dialPulse {
+  0%   { transform: scale(1); }
+  45%  { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+
+/* ── SVG DROP SHADOW (subtle, not inflating) ─────────────── */
+.dial-center svg {
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.10));
+}
+
+/* ============================================================
+   ORIENTATION-AWARE SIZING
+   These override the :root tokens for small screens.
+   Sizes chosen so dial fits comfortably inside a 4-col grid
+   without scaling tricks.
+============================================================ */
+
+/* Portrait phones — columns ≈ 45vw, dial must fit cleanly */
+@media (max-width: 600px) and (orientation: portrait) {
+  :root {
+    --dial-size: 100px;
+    --dial-thickness: 12px;
+  }
+
+  .dial-center {
+    height: 135px;
+  }
+
+  .dial-label {
+    font-size: 8.5px;
+  }
+
+  .dial-text {
+    font-size: calc(var(--dial-size) * 0.28);
+  }
+
+  /* Skip expensive glass effects on small portrait */
+  .dial-circle::after { display: none; }
+
+  /* No card shadow behind dials on small portrait */
+  .metric-card {
+    box-shadow: none !important;
+    border: 1px solid var(--border) !important;
+  }
+}
+
+/* Very small phones (≤360px) */
+@media (max-width: 360px) and (orientation: portrait) {
+  :root {
+    --dial-size: 86px;
+    --dial-thickness: 11px;
+  }
+
+  .dial-center {
+    height: 118px;
+  }
+}
+
+/* Landscape phones */
+@media (max-width: 900px) and (orientation: landscape) {
+  :root {
+    --dial-size: 118px;
+    --dial-thickness: 14px;
+  }
+
+  .dial-center {
+    height: 158px;
+  }
+}
+
+/* Tablets portrait */
+@media (min-width: 601px) and (max-width: 900px) and (orientation: portrait) {
+  :root {
+    --dial-size: 122px;
+    --dial-thickness: 15px;
+  }
+
+  .dial-center {
+    height: 170px;
+  }
+}
+
+/* ============================================================
+   COACHING / WELCOME MESSAGES — consolidated, no duplicates
+============================================================ */
+#welcome-message {
+  max-width: 1000px;
+  margin: 8px auto 4px auto;
+  padding: 6px 14px;
+  background: transparent;
+}
+
+#welcome-message span { font-weight: 600; }
+#welcome-message div  { line-height: 1.3; }
+
+#motivational-message {
+  max-width: 1000px;
+  margin: 4px auto 10px auto;
+  text-align: center;
+  font-size: 14px;
+  opacity: 0.75;
+}
+
 /* iOS portrait — suppress card shadow bleed behind dials */
 @media (max-width: 576px) and (orientation: portrait){
   .metric-card{
