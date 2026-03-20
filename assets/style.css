@@ -469,19 +469,19 @@ textarea, input, .form-control{
 }
 
 .dial-back-title{
-  font-weight: 900;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: -0.06em;
   margin: 0 0 8px 0;
-  font-size: 13px;
+  font-size: 10px;
 }
 
 .dial-back-body{
   flex: 1;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 10px;
   line-height: 1.4;
   overflow: auto;
-  padding-right: 6px;
+  padding-right: 8px;
 }
 .dial-back-body strong{ color: var(--text); }
 
@@ -663,14 +663,20 @@ textarea, input, .form-control{
 }
 
 /* Tablets portrait */
-@media (min-width: 601px) and (max-width: 900px) and (orientation: portrait){
+@media (max-width: 600px) and (orientation: portrait){
   :root{
-    --dial-size: 125px;
-    --dial-thickness: 16px;
+    --dial-size: 115px;
+    --dial-thickness: 13px;
   }
+
   .dial-center{
-    height: 175px;
+    height: calc(var(--dial-size) + 20px);  /* ← FIX */
   }
+
+  .dial-flip{
+  width: var(--dial-size);
+  height: var(--dial-size);
+}
 }
 
 /* iOS portrait — suppress card shadow bleed behind dials */
