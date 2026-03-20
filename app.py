@@ -3937,3 +3937,4 @@ def generate_session_plan(n_clicks, athlete_id, coach_style, goal, duration):
 
 if __name__ == "__main__":
     app.run(debug=True)
+
