@@ -1239,3 +1239,133 @@ textarea, input, .form-control{
 .dial-block{
   justify-content: flex-start;
 }
+
+/* ============================================================
+   🔥 FLIP BACK = READABLE CARD (NOT CIRCLE)
+============================================================ */
+
+/* Keep front as circle */
+.dial-front .dial-circle{
+  border-radius: 50%;
+}
+
+/* Back face layout */
+.dial-back{
+  padding: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 🔥 Key: make back a card, not a circle */
+.dial-back-content{
+  width: 100%;
+  height: 100%;
+
+  padding: 12px !important;
+
+  border-radius: 16px !important;   /* ← rectangle, not circle */
+
+  background: var(--card-bg);
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 10px 26px rgba(0,0,0,0.12);
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;   /* ← better readability */
+
+  text-align: left;          /* ← key change */
+
+  overflow: hidden;
+}
+
+/* Dark mode */
+[data-theme="dark"] .dial-back-content{
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 0 16px 36px rgba(0,0,0,0.45);
+}
+
+/* Title */
+.dial-back-title{
+  font-weight: 900;
+  font-size: calc(var(--dial-size) * 0.14);
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+
+/* Body text */
+.dial-back-body{
+  font-size: calc(var(--dial-size) * 0.12);
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+/* Hint text */
+.dial-back-hint{
+  font-size: 11px;
+  opacity: 0.6;
+  margin-top: 6px;
+}
+
+/* 📱 Mobile tuning */
+@media (max-width: 600px){
+  .dial-back-content{
+    padding: 10px !important;
+  }
+
+  .dial-back-title{
+    font-size: calc(var(--dial-size) * 0.15);
+  }
+
+  .dial-back-body{
+    font-size: calc(var(--dial-size) * 0.13);
+  }
+}
+
+.dial-back-content{
+  backdrop-filter: blur(6px);
+}
+
+/* ============================================================
+   🔥 COACH-STYLE BACK CARD
+============================================================ */
+
+/* Title */
+.dial-back-title{
+  font-weight: 900;
+  font-size: calc(var(--dial-size) * 0.15);
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+
+/* Bullet list */
+.dial-back-list{
+  font-size: calc(var(--dial-size) * 0.11);
+  line-height: 1.35;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.dial-back-list div{
+  margin-bottom: 2px;
+}
+
+/* Recommendation */
+.dial-back-reco{
+  font-size: calc(var(--dial-size) * 0.12);
+  font-weight: 700;
+  color: var(--accent);
+  margin-top: 4px;
+}
+
+/* Hint */
+.dial-back-hint{
+  font-size: 10px;
+  opacity: 0.5;
+  margin-top: 6px;
+}
+
+.dial-back-reco.high{ color: #2fb344; }
+.dial-back-reco.mid{ color: #f5b301; }
+.dial-back-reco.low{ color: #f44336; }

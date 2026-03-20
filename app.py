@@ -306,13 +306,13 @@ def streak_dial(streak: int):
     percent = min(s, 14) / 14 * 100
     colour = streak_colour_from_days(s)
 
-    display = "—" if s == 0 else str(s)
+    display = "0" if s == 0 else str(s)
 
     return _build_dial(display, percent, colour)
 
 
 
-def dial_flip(front_child, back_title: str, back_body: str):
+def dial_flip(front_child, back_title: str, back_body):
     return html.Div(
         className="dial-flip",
         children=[
@@ -326,7 +326,13 @@ def dial_flip(front_child, back_title: str, back_body: str):
                             className="dial-back-content",
                             children=[
                                 html.Div(back_title, className="dial-back-title"),
-                                html.Div(back_body, className="dial-back-body"),
+
+                                # 🔥 THIS IS NEW (supports structured content)
+                                html.Div(
+                                    back_body,
+                                    className="dial-back-body"
+                                ),
+
                                 html.Div("Tap to flip back", className="dial-back-hint"),
                             ],
                         ),
@@ -2959,9 +2965,127 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
             )
         )
 
-        streak_ui = dial_flip(streak_dial(streak), " ", "Consecutive days with a logged session/note.")
-        neuro_ui = dial_flip(apple_neuromuscular_ring(neuro_val), " ", "Mood + Fatigue combined and scaled to 0–100.")
-        readiness_ui = dial_flip(apple_readiness_ring(readiness_val), " ", "Daily readiness proxy scaled 0–100.")
+        if streak is None or streak == 0:
+            s_title = "No Streak"
+            s_bullets = ["No recent sessions logged"]
+            s_reco = "Start building consistency"
+
+        elif streak < 3:
+            s_title = "Building Streak"
+            s_bullets = [
+                f"{streak} day streak",
+                "Consistency emerging"
+            ]
+            s_reco = "Keep showing up"
+
+        elif streak < 7:
+            s_title = "Good Consistency"
+            s_bullets = [
+                f"{streak} day streak",
+                "Routine developing"
+            ]
+            s_reco = "Maintain momentum"
+
+        else:
+            s_title = "High Consistency"
+            s_bullets = [
+                f"{streak} day streak",
+                "Strong habit formed"
+            ]
+            s_reco = "Sustain or periodise load"
+
+        streak_ui = dial_flip(
+            streak_dial(streak),
+            s_title,
+            html.Div(
+                [html.Div(f"• {b}") for b in s_bullets] +
+                [html.Div(f"→ {s_reco}", className="dial-back-reco")]
+            )
+        )
+
+
+
+        if readiness_val is None:
+            r_title = "No Data"
+            r_bullets = ["Log sessions to activate readiness"]
+            r_reco = ""
+
+        elif readiness_val >= 75:
+            r_title = "Readiness: High"
+            r_bullets = [
+                "Low fatigue",
+                "Recovery strong",
+                "Load well tolerated"
+            ]
+            r_reco = "Push intensity today"
+
+        elif readiness_val >= 50:
+            r_title = "Readiness: Moderate"
+            r_bullets = [
+                "Some fatigue present",
+                "Recovery slightly reduced",
+                "Load accumulating"
+            ]
+            r_reco = "Prioritise quality over volume"
+
+        else:
+            r_title = "Readiness: Low"
+            r_bullets = [
+                "High fatigue",
+                "Recovery compromised",
+                "Accumulated load"
+            ]
+            r_reco = "Reduce load and recover"
+
+        readiness_ui = dial_flip(
+            apple_readiness_ring(readiness_val),
+            r_title,
+            html.Div(
+                [html.Div(f"• {b}") for b in r_bullets] +
+                [html.Div(f"→ {r_reco}", className="dial-back-reco")]
+            )
+        )
+
+        if neuro_val is None:
+            n_title = "No Data"
+            n_bullets = ["Log sessions to activate metric"]
+            n_reco = ""
+
+        elif neuro_val >= 75:
+            n_title = "Neuromuscular: High"
+            n_bullets = [
+                "Low fatigue",
+                "Good mood state",
+                "High readiness for output"
+            ]
+            n_reco = "Explosive work recommended"
+
+        elif neuro_val >= 50:
+            n_title = "Neuromuscular: Moderate"
+            n_bullets = [
+                "Some fatigue present",
+                "Mood slightly reduced",
+                "Stable but not optimal"
+            ]
+            n_reco = "Focus on controlled intensity"
+
+        else:
+            n_title = "Neuromuscular: Low"
+            n_bullets = [
+                "High fatigue",
+                "Low mood/readiness",
+                "Reduced output capacity"
+            ]
+            n_reco = "Prioritise recovery"
+
+        neuro_ui = dial_flip(
+            apple_neuromuscular_ring(neuro_val),
+            n_title,
+            html.Div(
+                [html.Div(f"• {b}") for b in n_bullets] +
+                [html.Div(f"→ {n_reco}", className="dial-back-reco")]
+            )
+        )
 
         load_fig = go.Figure().update_layout(title="Training Load (No Data)", **_legend_right_layout())
         wellness_fig = go.Figure().update_layout(title="Wellness (No Data)", **_legend_right_layout())
