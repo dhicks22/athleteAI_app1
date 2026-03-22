@@ -1192,7 +1192,9 @@ textarea, input, .form-control{
 #welcome-message div { line-height: 1.3; }
 
 /* Pro dial styling */
-.dial-center{
+.dial-center {
+  width: var(--dial-size);
+  height: var(--dial-size);    /* ← match exactly, not 170px */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1230,9 +1232,23 @@ textarea, input, .form-control{
   opacity: 0.95;
 }
 
-  @media (max-width: 600px) and (orientation: portrait){
-  .dial-label{
-    font-size: 12px;
+@media (max-width: 600px) and (orientation: portrait){
+  :root{
+    --dial-size: 110px;
+    --dial-thickness: 13px;
+  }
+
+  .dial-center{
+    height: var(--dial-size);
+  }
+
+  .dial-flip{
+    width: var(--dial-size);
+    height: var(--dial-size);
+  }
+
+  .dial-circle::after{
+    display: none;
   }
 }
 
@@ -1258,26 +1274,10 @@ textarea, input, .form-control{
 }
 
 /* 🔥 Key: make back a card, not a circle */
-.dial-back-content{
+.dial-back-content {
+  border-radius: 16px !important;  /* never inherit 50% from parent */
   width: 100%;
   height: 100%;
-
-  padding: 12px !important;
-
-  border-radius: 16px !important;   /* ← rectangle, not circle */
-
-  background: var(--card-bg);
-  border: 1px solid rgba(0,0,0,0.08);
-  box-shadow: 0 10px 26px rgba(0,0,0,0.12);
-
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;   /* ← better readability */
-
-  text-align: left;          /* ← key change */
-
-  overflow: hidden;
 }
 
 /* Dark mode */
@@ -1369,3 +1369,7 @@ textarea, input, .form-control{
 .dial-back-reco.high{ color: #2fb344; }
 .dial-back-reco.mid{ color: #f5b301; }
 .dial-back-reco.low{ color: #f44336; }
+
+.dial-circle{
+  transition: all 0.6s ease;
+}

@@ -250,13 +250,15 @@ def dial_class_from_score(score: float | None):
         return "dial-grey"
 
     if score >= 80:
-        return "dial-blue"     # BEST
+        return "dial-blue"
     elif score >= 60:
-        return "dial-green"    # GOOD
+        return "dial-green"
     elif score >= 40:
-        return "dial-amber"    # MANAGE
+        return "dial-amber"
     elif score >= 20:
-           return "dial-red"      # RECOVER
+        return "dial-red"
+    else:
+        return "dial-grey"   # ✅ THIS WAS MISSING
 
 
 def _build_dial(value_str: str, percent: float, colour_class: str):
@@ -315,6 +317,10 @@ def streak_dial(streak: int):
 def dial_flip(front_child, back_title: str, back_body):
     return html.Div(
         className="dial-flip",
+        style={                          # ← ADD THIS
+            "width": "var(--dial-size)",
+            "height": "var(--dial-size)",
+        },
         children=[
             html.Div(
                 className="dial-flip-inner",
