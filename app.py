@@ -468,12 +468,10 @@ def calc_daily_readiness(
 
     days_silent = max(0, int(days_silent))
 
+    # Replace the silence penalty block with a straight linear decay
     if days_silent > 0:
         penalty = min(DECAY_RATE * days_silent, MAX_PENALTY)
-        # Pull toward DECAY_TARGET, not straight down
-        direction = DECAY_TARGET - base_readiness
-        adjusted  = base_readiness + (direction * penalty / MAX_PENALTY)
-        readiness = float(np.clip(adjusted, 0, 100))
+        readiness = float(np.clip(base_readiness - penalty, 0, 100))
     else:
         readiness = base_readiness
 
@@ -579,21 +577,26 @@ def calc_neuro_readiness(
 
     hist_scores = pd.concat([hist_scores, pd.Series([score])], ignore_index=True)
     smooth = hist_scores.ewm(span=span, adjust=False).mean().iloc[-1]
-    smooth = smooth + 0.03 * (75 - smooth)  # soft regression to baseline
+    #smooth = smooth + 0.03 * (75 - smooth)  # soft regression to baseline
 
     # -----------------------------------
     # WELLNESS RECENCY DECAY
     # -----------------------------------
 
+    hist_scores = pd.concat([hist_scores, pd.Series([score])], ignore_index=True)
+    smooth = hist_scores.ewm(span=span, adjust=False).mean().iloc[-1]
+    # ❌ Remove this line:
+    # smooth = smooth + 0.03 * (75 - smooth)
+
+    # Then make the recency decay more aggressive:
     if "Date" in history_df.columns:
         last_entry = pd.to_datetime(history_df["Date"], errors="coerce").max()
         if pd.notna(last_entry):
             days = (dt.datetime.now(ADL_TZ).date() - last_entry.date()).days
-
-            if days > 7:
-                smooth *= 0.9
             if days > 14:
-                smooth *= 0.8
+                smooth *= 0.55  # was 0.9 * 0.8 = 0.72 → floor ~54
+            elif days > 7:
+                smooth *= 0.75  # was 0.9 → floor ~67
 
     return float(np.clip(smooth, 0, 100))
 
@@ -3181,11 +3184,7 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
             days_silent = (today - last_wellness_date).days
             if days_silent > 0:
                 penalty = min(NEURO_DECAY_RATE * days_silent, NEURO_MAX_PENALTY)
-                direction = NEURO_DECAY_TARGET - neuro_val
-                neuro_val = float(np.clip(
-                    neuro_val + (direction * penalty / NEURO_MAX_PENALTY),
-                    0, 100,
-                ))
+                neuro_val = float(np.clip(neuro_val - penalty, 0, 100))
 
         neuro_val = float(np.clip(neuro_val, 0, 100))
 
