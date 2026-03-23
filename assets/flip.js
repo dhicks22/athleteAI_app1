@@ -1,7 +1,8 @@
-/* flip.js — place in assets/ folder
-   Toggles .is-flipped on .dial-flip elements.
-   Auto-closes any other open dial when a new one is tapped.
-   Auto-closes after 4 seconds of no interaction.
+/* flip.js — assets/flip.js
+   - Mutual exclusion: only one dial open at a time
+   - Auto-close after 5 seconds
+   - Tap outside = close all
+   - Tap same dial = toggle closed
 */
 (function () {
   var closeTimer = null;
@@ -18,26 +19,19 @@
     var flip = e.target.closest(".dial-flip");
 
     if (!flip) {
-      // Clicked outside any dial — close all
       closeAll();
       return;
     }
 
-    var isCurrentlyFlipped = flip.classList.contains("is-flipped");
-
-    // Close all first
+    var wasOpen = flip.classList.contains("is-flipped");
     closeAll();
 
-    if (!isCurrentlyFlipped) {
-      // Open this one
+    if (!wasOpen) {
       flip.classList.add("is-flipped");
-
-      // Auto-close after 4 seconds
       closeTimer = setTimeout(function () {
         flip.classList.remove("is-flipped");
         closeTimer = null;
-      }, 4000);
+      }, 5000);
     }
-    // If it was already open, closeAll() already shut it — so tap = toggle off
   });
 })();

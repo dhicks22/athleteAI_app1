@@ -1,6 +1,6 @@
 /* ============================================================
-   AthleteAI / Dashboard Theme — v8
-   Fixes: flip overlap, z-index stacking, animation, colours
+   AthleteAI / Dashboard Theme — v9
+   Fixes: flip card separation, scrollable back text, dial animation
 ============================================================ */
 
 /* ============================================================
@@ -222,10 +222,10 @@ textarea, input, .form-control {
 
 /* ============================================================
    8) DIAL ROW LAYOUT
-   dial-block is the column cell.
-   dial-center is the fixed square that holds the flip card.
-   Both dial-flip faces sit inside that square.
-   z-index stacking ensures flipped card floats above siblings.
+   KEY RULE: when a dial is flipped, it gets position:fixed
+   so its back card appears in the viewport centre — completely
+   separated from the grid and impossible to overlap neighbours.
+   A dark backdrop dims the page behind it.
 ============================================================ */
 .dial-row {
   margin-top: 8px !important;
@@ -235,7 +235,6 @@ textarea, input, .form-control {
 
 .dial-row > [class*="col"] { display: flex; }
 
-/* Each dial column — relative so flipped card z-index works */
 .dial-block {
   width: 100%;
   display: flex;
@@ -245,11 +244,6 @@ textarea, input, .form-control {
   padding: 4px 2px;
   position: relative;
   z-index: 1;
-}
-
-/* Raise flipped dial above its siblings so card doesn't clip */
-.dial-block:has(.dial-flip.is-flipped) {
-  z-index: 50;
 }
 
 .dial-label {
@@ -264,7 +258,6 @@ textarea, input, .form-control {
   color: #222;
 }
 
-/* Fixed square that contains the flip card */
 .dial-center {
   width: var(--dial-size);
   height: var(--dial-size);
@@ -273,16 +266,14 @@ textarea, input, .form-control {
   align-items: center;
   justify-content: center;
   position: relative;
-  overflow: visible;   /* allow back card to expand beyond square */
 }
 
 /* ============================================================
-   9) FLIP CARD
-   Front face = circle ring dial.
-   Back face  = rectangle info card — expands beyond dial-size
-                using absolute positioning + translate(-50%,-50%)
-                so it stays centred on the dial.
-   flip.js adds/removes .is-flipped and closes others.
+   FLIP CARD
+   The flip container stays in-grid (no position:fixed on it).
+   The BACK CARD uses position:fixed to escape the grid entirely
+   and render in the viewport centre when .is-flipped is active.
+   A pseudo-element backdrop blocks taps outside the card.
 ============================================================ */
 .dial-flip {
   width: var(--dial-size);
@@ -293,7 +284,6 @@ textarea, input, .form-control {
   -webkit-tap-highlight-color: transparent;
   perspective: 900px;
   position: relative;
-  overflow: visible;
 }
 
 .dial-flip-inner {
@@ -322,90 +312,114 @@ textarea, input, .form-control {
 
 .dial-back {
   transform: rotateY(180deg);
-  overflow: visible;
 }
 
-/* ── Back card ─────────────────────────────────────────────
-   Sized for readability (170×170), centred on the dial circle
-   via translate(-50%,-50%). z-index 200 floats it above all
-   sibling dials. Back card is always a rectangle, never a circle.
+/* ── Back card: fixed to viewport centre when open ──────────
+   Hidden by default. Only shows when parent has .is-flipped.
+   position:fixed + translate(-50%,-50%) centres it on screen.
+   Tall enough to show all content; overflow-y:auto scrolls it.
 ──────────────────────────────────────────────────────────── */
 .dial-back-content {
-  position: absolute;
-  width: 170px;
-  min-height: 165px;
+  /* Hidden by default — shown only when flipped */
+  display: none;
+
+  position: fixed;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  z-index: 200;
+  z-index: 1000;
 
-  padding: 14px 13px 10px 13px;
-  border-radius: 16px;
+  width: min(320px, 88vw);
+  max-height: 72vh;
+
+  padding: 20px 18px 16px 18px;
+  border-radius: 20px;
   background: var(--card-bg);
-  border: 1px solid rgba(0,0,0,0.13);
+  border: 1px solid rgba(0,0,0,0.12);
   box-shadow:
     0 4px 6px rgba(0,0,0,0.06),
-    0 12px 32px rgba(0,0,0,0.18);
+    0 20px 48px rgba(0,0,0,0.22);
 
-  display: flex;
+  display: none;           /* overridden below when flipped */
   flex-direction: column;
   justify-content: flex-start;
   align-items: flex-start;
   text-align: left;
-  overflow: hidden;
+  overflow-y: auto;        /* scrollable body text */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Show the back card only when .is-flipped is active */
+.dial-flip.is-flipped .dial-back-content {
+  display: flex;
+}
+
+/* Backdrop — dims the page, catches taps outside */
+.dial-flip.is-flipped::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  z-index: 999;
+  backdrop-filter: blur(2px);
 }
 
 [data-theme="dark"] .dial-back-content {
   border: 1px solid rgba(255,255,255,0.14);
-  box-shadow: 0 14px 36px rgba(0,0,0,0.55);
+  box-shadow: 0 20px 50px rgba(0,0,0,0.60);
 }
 
 .dial-back-title {
   font-weight: 800;
-  font-size: 10px;
-  letter-spacing: 0.05em;
+  font-size: 11px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--accent);
-  margin: 0 0 7px 0;
+  margin: 0 0 10px 0;
   line-height: 1.2;
+  flex-shrink: 0;
 }
 
 .dial-back-body {
-  font-size: 11.5px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 1.55;
   color: var(--text);
   flex: 1;
-  overflow: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 2px;
 }
 
 .dial-back-body strong { color: var(--accent); }
 
 .dial-back-reco {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--accent);
-  margin-top: 5px;
+  margin-top: 8px;
+  flex-shrink: 0;
 }
 
 .dial-back-reco.high { color: #2fb344; }
 .dial-back-reco.mid  { color: #f5b301; }
 .dial-back-reco.low  { color: #f44336; }
 
-.dial-back-list { margin-bottom: 3px; }
-.dial-back-list div { margin-bottom: 2px; font-size: 11px; line-height: 1.35; }
+.dial-back-list { margin-bottom: 4px; }
+.dial-back-list div { margin-bottom: 3px; font-size: 13px; line-height: 1.4; }
 
 .dial-back-hint {
-  font-size: 9px;
+  font-size: 10px;
   opacity: 0.40;
-  margin-top: 8px;
+  margin-top: 12px;
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 /* ============================================================
-   10) RING DIAL — conic-gradient ring with animated fill
+   9) RING DIAL — animated conic-gradient fill
 ============================================================ */
 
-/* Houdini @property lets browser interpolate --dial-progress */
+/* Houdini property — enables smooth number interpolation */
 @property --dial-progress {
   syntax: "<number>";
   inherits: false;
@@ -436,7 +450,12 @@ textarea, input, .form-control {
 
   box-shadow: 0 3px 10px rgba(0,0,0,0.14), 0 0 0 1px var(--dial-stroke);
 
-  /* Animate ring fill + scale separately */
+  /*
+    --dial-progress animates via @property (ring fill sweep).
+    transform animates scale (pulse on update).
+    background must NOT be transitioned separately — it redraws
+    automatically as --dial-progress changes.
+  */
   transition:
     --dial-progress 3.5s cubic-bezier(0.34, 1.56, 0.64, 1),
     transform 250ms ease;
@@ -454,7 +473,7 @@ textarea, input, .form-control {
     inset 0 1px 0 rgba(255,255,255,0.80);
 }
 
-/* Gloss overlay */
+/* Gloss */
 .dial-circle::after {
   content: "";
   position: absolute;
@@ -465,7 +484,7 @@ textarea, input, .form-control {
   opacity: 0.5;
 }
 
-/* Number — true geometric centre */
+/* Number centred with translate */
 .dial-text {
   position: absolute;
   top: 50%;
@@ -492,7 +511,7 @@ textarea, input, .form-control {
   box-shadow: inset 0 12px 20px rgba(0,0,0,0.55);
 }
 
-/* Pulse on data update */
+/* Pulse when data updates */
 .dial-circle.updated { animation: dialPulse 800ms ease-out; }
 @keyframes dialPulse {
   0%   { transform: scale(1); }
@@ -500,7 +519,7 @@ textarea, input, .form-control {
   100% { transform: scale(1); }
 }
 
-/* ── Colour classes ── */
+/* Colour classes */
 .dial-red   { --dial-color: #f44336; }
 .dial-amber { --dial-color: #f5b301; }
 .dial-green { --dial-color: #2fb344; }
@@ -509,7 +528,7 @@ textarea, input, .form-control {
 .dial-grey  { --dial-color: #b0bec5; }
 
 /* ============================================================
-   RESPONSIVE — only the token changes, everything derives from it
+   RESPONSIVE
 ============================================================ */
 @media (max-width: 768px) {
   :root { --dial-size: 108px; --dial-thickness: 13px; }
@@ -519,23 +538,24 @@ textarea, input, .form-control {
   :root { --dial-size: 94px; --dial-thickness: 12px; }
   .dial-circle::after { display: none; }
 
-  /* Slightly smaller back card on portrait phone */
+  /* Back card full-width on small phones */
   .dial-back-content {
-    width: 152px;
-    min-height: 150px;
-    padding: 12px 11px 9px 11px;
+    width: min(300px, 92vw);
+    max-height: 68vh;
+    padding: 18px 16px 14px 16px;
   }
-
-  .dial-back-body  { font-size: 11px; }
-  .dial-back-title { font-size: 9.5px; }
 }
 
 @media (max-width: 900px) and (orientation: landscape) {
   :root { --dial-size: 100px; --dial-thickness: 12px; }
+
+  .dial-back-content {
+    max-height: 80vh;
+  }
 }
 
 /* ============================================================
-   11) CALENDAR
+   10) CALENDAR
 ============================================================ */
 .calendar-day {
   background: transparent;
@@ -550,13 +570,7 @@ textarea, input, .form-control {
   transition: background 0.15s ease, transform 0.15s ease;
 }
 
-.cal-day-number {
-  font-size: 13px;
-  font-weight: 600;
-  color: rgba(0,0,0,0.85);
-  margin-bottom: 4px;
-}
-
+.cal-day-number { font-size: 13px; font-weight: 600; color: rgba(0,0,0,0.85); margin-bottom: 4px; }
 [data-theme="dark"] .cal-day-number { color: rgba(255,255,255,0.88); }
 .calendar-day.out-month .cal-day-number { color: rgba(0,0,0,0.28); }
 [data-theme="dark"] .calendar-day.out-month .cal-day-number { color: rgba(255,255,255,0.28); }
@@ -574,7 +588,7 @@ textarea, input, .form-control {
 }
 
 /* ============================================================
-   12) SESSION ROWS
+   11) SESSION ROWS
 ============================================================ */
 .sess-row { display: flex; gap: 14px; margin-bottom: 12px; }
 .sess-icon { font-size: 22px; width: 28px; text-align: center; line-height: 1.2; }
@@ -584,7 +598,7 @@ textarea, input, .form-control {
 .ctx-sub > div { margin-top: 2px; line-height: 1.35; }
 
 /* ============================================================
-   13) AI SESSION PAGE
+   12) AI SESSION PAGE
 ============================================================ */
 .page-wrap {
   width: 100% !important;
@@ -607,7 +621,7 @@ textarea, input, .form-control {
 .ai-hero-sub   { margin: 8px 0 0; color: rgba(255,255,255,0.72); font-size: 14px; }
 
 /* ============================================================
-   14) VIEW TOGGLE
+   13) VIEW TOGGLE
 ============================================================ */
 .view-toggle {
   display: inline-flex;
@@ -645,7 +659,7 @@ textarea, input, .form-control {
 .refresh-btn { border-radius: 10px; font-weight: 600; }
 
 /* ============================================================
-   15) BOTTOM NAV
+   14) BOTTOM NAV
 ============================================================ */
 .bottom-nav {
   position: fixed;
@@ -701,7 +715,7 @@ textarea, input, .form-control {
 .wobble { animation: wobble 0.45s ease-out; }
 
 /* ============================================================
-   16) AI PREMIUM CARDS
+   15) AI PREMIUM CARDS
 ============================================================ */
 .premium-card {
   border-radius: 16px !important;
@@ -791,7 +805,7 @@ textarea, input, .form-control {
 [data-theme="dark"] .ai-card-blue  { background: rgba(77,171,247,0.06); border-color: rgba(77,171,247,0.18); }
 
 /* ============================================================
-   17) WELCOME + MOTIVATIONAL
+   16) WELCOME + MOTIVATIONAL
 ============================================================ */
 #welcome-message {
   max-width: 1000px;
