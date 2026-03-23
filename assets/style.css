@@ -1,6 +1,6 @@
 /* ============================================================
-   AthleteAI / Dashboard Theme — v7
-   Fixes: bubble dials, flip readability, centred numbers
+   AthleteAI / Dashboard Theme — v8
+   Fixes: flip overlap, z-index stacking, animation, colours
 ============================================================ */
 
 /* ============================================================
@@ -206,7 +206,11 @@ textarea, input, .form-control {
   background-image: none !important;
 }
 
-.dash-dropdown, .dash-dropdown * { box-shadow: none !important; background-image: none !important; }
+.dash-dropdown, .dash-dropdown * {
+  box-shadow: none !important;
+  background-image: none !important;
+}
+
 .form-select { box-shadow: none !important; background-image: none !important; }
 
 #ai-mode-1 .Select-control,
@@ -217,10 +221,11 @@ textarea, input, .form-control {
 }
 
 /* ============================================================
-   8) DIAL LAYOUT
-   THE FIX: dial-center is exactly --dial-size square.
-   dial-flip is exactly --dial-size square. No width:100%.
-   This is the only thing that stops bubbling.
+   8) DIAL ROW LAYOUT
+   dial-block is the column cell.
+   dial-center is the fixed square that holds the flip card.
+   Both dial-flip faces sit inside that square.
+   z-index stacking ensures flipped card floats above siblings.
 ============================================================ */
 .dial-row {
   margin-top: 8px !important;
@@ -230,6 +235,7 @@ textarea, input, .form-control {
 
 .dial-row > [class*="col"] { display: flex; }
 
+/* Each dial column — relative so flipped card z-index works */
 .dial-block {
   width: 100%;
   display: flex;
@@ -237,6 +243,13 @@ textarea, input, .form-control {
   align-items: center;
   justify-content: flex-start;
   padding: 4px 2px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Raise flipped dial above its siblings so card doesn't clip */
+.dial-block:has(.dial-flip.is-flipped) {
+  z-index: 50;
 }
 
 .dial-label {
@@ -251,7 +264,7 @@ textarea, input, .form-control {
   color: #222;
 }
 
-/* ── Fixed-size container — MUST equal --dial-size ── */
+/* Fixed square that contains the flip card */
 .dial-center {
   width: var(--dial-size);
   height: var(--dial-size);
@@ -259,12 +272,17 @@ textarea, input, .form-control {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  overflow: visible;   /* allow back card to expand beyond square */
 }
 
 /* ============================================================
-   FLIP CARD
-   Both faces live inside a fixed --dial-size square.
-   Front = circle dial. Back = readable text card (rectangle).
+   9) FLIP CARD
+   Front face = circle ring dial.
+   Back face  = rectangle info card — expands beyond dial-size
+                using absolute positioning + translate(-50%,-50%)
+                so it stays centred on the dial.
+   flip.js adds/removes .is-flipped and closes others.
 ============================================================ */
 .dial-flip {
   width: var(--dial-size);
@@ -274,6 +292,8 @@ textarea, input, .form-control {
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   perspective: 900px;
+  position: relative;
+  overflow: visible;
 }
 
 .dial-flip-inner {
@@ -288,7 +308,6 @@ textarea, input, .form-control {
   transform: rotateY(180deg);
 }
 
-/* Both faces fill the same fixed square */
 .dial-face {
   position: absolute;
   inset: 0;
@@ -301,34 +320,32 @@ textarea, input, .form-control {
 
 .dial-front { transform: rotateY(0deg); }
 
-/* Back face — grow to fill, stretch content */
 .dial-back {
   transform: rotateY(180deg);
-  align-items: stretch;
-  justify-content: stretch;
+  overflow: visible;
 }
 
-/* ── Back card: RECTANGLE not circle ──
-   Uses a larger virtual size so text is readable.
-   We escape the --dial-size constraint by using
-   position:absolute + negative margins to overflow
-   the fixed square and give the card more room.
-============================================================ */
+/* ── Back card ─────────────────────────────────────────────
+   Sized for readability (170×170), centred on the dial circle
+   via translate(-50%,-50%). z-index 200 floats it above all
+   sibling dials. Back card is always a rectangle, never a circle.
+──────────────────────────────────────────────────────────── */
 .dial-back-content {
-  /* Expand beyond the dial circle for readability */
   position: absolute;
-  width: 160px;
-  height: 160px;
+  width: 170px;
+  min-height: 165px;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+  z-index: 200;
 
-  padding: 12px;
+  padding: 14px 13px 10px 13px;
   border-radius: 16px;
   background: var(--card-bg);
-  border: 1px solid rgba(0,0,0,0.12);
-  box-shadow: 0 8px 28px rgba(0,0,0,0.18);
-  z-index: 10;
+  border: 1px solid rgba(0,0,0,0.13);
+  box-shadow:
+    0 4px 6px rgba(0,0,0,0.06),
+    0 12px 32px rgba(0,0,0,0.18);
 
   display: flex;
   flex-direction: column;
@@ -340,52 +357,61 @@ textarea, input, .form-control {
 
 [data-theme="dark"] .dial-back-content {
   border: 1px solid rgba(255,255,255,0.14);
-  box-shadow: 0 12px 32px rgba(0,0,0,0.50);
+  box-shadow: 0 14px 36px rgba(0,0,0,0.55);
 }
 
 .dial-back-title {
   font-weight: 800;
-  font-size: 11px;
-  letter-spacing: -0.01em;
-  color: var(--accent);
-  margin: 0 0 6px 0;
+  font-size: 10px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 7px 0;
+  line-height: 1.2;
 }
 
 .dial-back-body {
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: 11.5px;
+  line-height: 1.45;
   color: var(--text);
-  overflow: hidden;
   flex: 1;
+  overflow: hidden;
 }
 
 .dial-back-body strong { color: var(--accent); }
-
-.dial-back-hint {
-  font-size: 9px;
-  opacity: 0.45;
-  margin-top: 6px;
-  color: var(--text-muted);
-}
 
 .dial-back-reco {
   font-size: 11px;
   font-weight: 700;
   color: var(--accent);
-  margin-top: 4px;
+  margin-top: 5px;
 }
 
 .dial-back-reco.high { color: #2fb344; }
 .dial-back-reco.mid  { color: #f5b301; }
 .dial-back-reco.low  { color: #f44336; }
 
-.dial-back-list { margin-bottom: 2px; }
-.dial-back-list div { margin-bottom: 2px; font-size: 11px; }
+.dial-back-list { margin-bottom: 3px; }
+.dial-back-list div { margin-bottom: 2px; font-size: 11px; line-height: 1.35; }
+
+.dial-back-hint {
+  font-size: 9px;
+  opacity: 0.40;
+  margin-top: 8px;
+  color: var(--text-muted);
+}
 
 /* ============================================================
-   9) RING DIAL — circle front face
+   10) RING DIAL — conic-gradient ring with animated fill
 ============================================================ */
+
+/* Houdini @property lets browser interpolate --dial-progress */
+@property --dial-progress {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
 .dial-wrapper {
   position: relative;
   display: flex;
@@ -409,10 +435,14 @@ textarea, input, .form-control {
   );
 
   box-shadow: 0 3px 10px rgba(0,0,0,0.14), 0 0 0 1px var(--dial-stroke);
-  transition: background 600ms ease, transform 250ms ease;
+
+  /* Animate ring fill + scale separately */
+  transition:
+    --dial-progress 3.5s cubic-bezier(0.34, 1.56, 0.64, 1),
+    transform 250ms ease;
 }
 
-/* Inner cutout — creates the ring */
+/* Inner cutout */
 .dial-circle::before {
   content: "";
   position: absolute;
@@ -424,7 +454,7 @@ textarea, input, .form-control {
     inset 0 1px 0 rgba(255,255,255,0.80);
 }
 
-/* Gloss */
+/* Gloss overlay */
 .dial-circle::after {
   content: "";
   position: absolute;
@@ -435,7 +465,7 @@ textarea, input, .form-control {
   opacity: 0.5;
 }
 
-/* Number — centred using translate, not flex on parent */
+/* Number — true geometric centre */
 .dial-text {
   position: absolute;
   top: 50%;
@@ -454,6 +484,7 @@ textarea, input, .form-control {
 }
 
 [data-theme="dark"] .dial-text { text-shadow: none; }
+
 [data-theme="dark"] .dial-circle {
   box-shadow: 0 12px 28px rgba(0,0,0,0.50), 0 0 0 1px var(--dial-stroke);
 }
@@ -461,7 +492,7 @@ textarea, input, .form-control {
   box-shadow: inset 0 12px 20px rgba(0,0,0,0.55);
 }
 
-/* Pulse on update */
+/* Pulse on data update */
 .dial-circle.updated { animation: dialPulse 800ms ease-out; }
 @keyframes dialPulse {
   0%   { transform: scale(1); }
@@ -469,7 +500,7 @@ textarea, input, .form-control {
   100% { transform: scale(1); }
 }
 
-/* Colour classes */
+/* ── Colour classes ── */
 .dial-red   { --dial-color: #f44336; }
 .dial-amber { --dial-color: #f5b301; }
 .dial-green { --dial-color: #2fb344; }
@@ -478,24 +509,33 @@ textarea, input, .form-control {
 .dial-grey  { --dial-color: #b0bec5; }
 
 /* ============================================================
-   RESPONSIVE — token only, everything derives from --dial-size
+   RESPONSIVE — only the token changes, everything derives from it
 ============================================================ */
 @media (max-width: 768px) {
   :root { --dial-size: 108px; --dial-thickness: 13px; }
 }
 
 @media (max-width: 600px) and (orientation: portrait) {
-  :root { --dial-size: 96px; --dial-thickness: 12px; }
+  :root { --dial-size: 94px; --dial-thickness: 12px; }
   .dial-circle::after { display: none; }
-  .dial-back-content { width: 148px; height: 148px; }
+
+  /* Slightly smaller back card on portrait phone */
+  .dial-back-content {
+    width: 152px;
+    min-height: 150px;
+    padding: 12px 11px 9px 11px;
+  }
+
+  .dial-back-body  { font-size: 11px; }
+  .dial-back-title { font-size: 9.5px; }
 }
 
 @media (max-width: 900px) and (orientation: landscape) {
-  :root { --dial-size: 104px; --dial-thickness: 13px; }
+  :root { --dial-size: 100px; --dial-thickness: 12px; }
 }
 
 /* ============================================================
-   10) CALENDAR
+   11) CALENDAR
 ============================================================ */
 .calendar-day {
   background: transparent;
@@ -510,7 +550,13 @@ textarea, input, .form-control {
   transition: background 0.15s ease, transform 0.15s ease;
 }
 
-.cal-day-number { font-size: 13px; font-weight: 600; color: rgba(0,0,0,0.85); margin-bottom: 4px; }
+.cal-day-number {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(0,0,0,0.85);
+  margin-bottom: 4px;
+}
+
 [data-theme="dark"] .cal-day-number { color: rgba(255,255,255,0.88); }
 .calendar-day.out-month .cal-day-number { color: rgba(0,0,0,0.28); }
 [data-theme="dark"] .calendar-day.out-month .cal-day-number { color: rgba(255,255,255,0.28); }
@@ -528,7 +574,7 @@ textarea, input, .form-control {
 }
 
 /* ============================================================
-   11) SESSION ROWS
+   12) SESSION ROWS
 ============================================================ */
 .sess-row { display: flex; gap: 14px; margin-bottom: 12px; }
 .sess-icon { font-size: 22px; width: 28px; text-align: center; line-height: 1.2; }
@@ -538,7 +584,7 @@ textarea, input, .form-control {
 .ctx-sub > div { margin-top: 2px; line-height: 1.35; }
 
 /* ============================================================
-   12) AI SESSION PAGE
+   13) AI SESSION PAGE
 ============================================================ */
 .page-wrap {
   width: 100% !important;
@@ -561,7 +607,7 @@ textarea, input, .form-control {
 .ai-hero-sub   { margin: 8px 0 0; color: rgba(255,255,255,0.72); font-size: 14px; }
 
 /* ============================================================
-   13) VIEW TOGGLE
+   14) VIEW TOGGLE
 ============================================================ */
 .view-toggle {
   display: inline-flex;
@@ -599,7 +645,7 @@ textarea, input, .form-control {
 .refresh-btn { border-radius: 10px; font-weight: 600; }
 
 /* ============================================================
-   14) BOTTOM NAV
+   15) BOTTOM NAV
 ============================================================ */
 .bottom-nav {
   position: fixed;
@@ -655,7 +701,7 @@ textarea, input, .form-control {
 .wobble { animation: wobble 0.45s ease-out; }
 
 /* ============================================================
-   15) AI PREMIUM CARDS
+   16) AI PREMIUM CARDS
 ============================================================ */
 .premium-card {
   border-radius: 16px !important;
@@ -745,7 +791,7 @@ textarea, input, .form-control {
 [data-theme="dark"] .ai-card-blue  { background: rgba(77,171,247,0.06); border-color: rgba(77,171,247,0.18); }
 
 /* ============================================================
-   16) WELCOME + MOTIVATIONAL
+   17) WELCOME + MOTIVATIONAL
 ============================================================ */
 #welcome-message {
   max-width: 1000px;
@@ -764,21 +810,4 @@ textarea, input, .form-control {
   text-align: center;
   font-size: 14px;
   opacity: 0.75;
-}
-
-/* ============================================================
-   DIAL ANIMATION — animates the ring fill on load
-   Uses CSS Houdini @property to transition conic-gradient
-============================================================ */
-/* ── Animate the ring fill on load/update ── */
-@property --dial-progress {
-  syntax: "<number>";
-  inherits: false;
-  initial-value: 0;
-}
-
-.dial-circle {
-  transition:
-    --dial-progress 3.5s cubic-bezier(0.34, 1.56, 0.64, 1),
-    transform 250ms ease;
 }
