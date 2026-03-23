@@ -760,3 +760,51 @@ textarea, input, .form-control {
   font-size: 14px;
   opacity: 0.75;
 }
+
+/* ============================================================
+   DROPDOWN FIX — paste these into your dashboard.css,
+   replacing any existing rules for the same selectors.
+============================================================ */
+
+/* 1) Stop the Select menu from being clipped by overflow */
+.Select-menu-outer {
+  z-index: 9999 !important;
+  position: absolute !important;
+  max-height: 300px !important;
+  overflow-y: auto !important;
+}
+
+/* 2) When a dropdown is open, the menu opens ABOVE if near
+      the bottom of the viewport — force it to prefer upward
+      when inside the session input area */
+#session-input-container .Select-menu-outer {
+  bottom: auto !important;
+}
+
+/* 3) The session input container itself should not clip its children */
+#session-input-container {
+  overflow: visible !important;
+}
+
+/* 4) The dbc.Row and dbc.Col wrappers inside session container */
+#session-input-container .row,
+#session-input-container [class*="col"] {
+  overflow: visible !important;
+}
+
+/* 5) Increase bottom padding so last dropdown option isn't
+      hidden behind the bottom nav when scrolled to bottom */
+body {
+  padding-bottom: calc(var(--bottom-nav-h) + 80px) !important;
+}
+
+/* 6) The aw-dropdown class used on ai-mode-1 / ai-mode-2 */
+.aw-dropdown {
+  position: relative;
+  z-index: 500;
+}
+
+.aw-dropdown .Select-menu-outer {
+  z-index: 9999 !important;
+  max-height: 280px !important;
+}
