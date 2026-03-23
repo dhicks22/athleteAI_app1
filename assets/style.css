@@ -311,8 +311,8 @@ textarea, input, .form-control {
 .dial-front { transform: rotateY(0deg); }
 .dial-back  { transform: rotateY(180deg); }
 
-/* Back card content hidden in DOM — flip.js clones it into a body overlay */
-.dial-back-content { display: none; }
+/* Back card — hidden by CSS AND force-hidden by flip.js MutationObserver */
+.dial-back-content { display: none !important; }
 
 /* ── Body-level overlay (injected by flip.js) ── */
 #dial-overlay .dial-back-title {
@@ -390,14 +390,9 @@ textarea, input, .form-control {
 
   box-shadow: 0 3px 10px rgba(0,0,0,0.14), 0 0 0 1px var(--dial-stroke);
 
-  /*
-    --dial-progress animates via @property (ring fill sweep).
-    transform animates scale (pulse on update).
-    background must NOT be transitioned separately — it redraws
-    automatically as --dial-progress changes.
-  */
+  /* @property animates --dial-progress; background redraws automatically */
   transition:
-    --dial-progress 3.5s cubic-bezier(0.34, 1.56, 0.64, 1),
+    --dial-progress 3.0s cubic-bezier(0.34, 1.56, 0.64, 1),
     transform 250ms ease;
 }
 
