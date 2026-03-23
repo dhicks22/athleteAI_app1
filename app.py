@@ -258,7 +258,7 @@ def dial_class_from_score(score: float | None):
     elif score >= 20:
         return "dial-red"
     else:
-        return "dial-grey"   # ✅ THIS WAS MISSING
+        return "dial-red"   # ✅ THIS WAS MISSING
 
 
 def _build_dial(value_str: str, percent: float, colour_class: str):
@@ -315,12 +315,15 @@ def streak_dial(streak: int):
 
 
 def dial_flip(front_child, back_title: str, back_body):
+    """
+    back_title: short label shown in accent colour at top of card
+    back_body:  main explanation text or html.Div with bullets
+    """
     return html.Div(
         className="dial-flip",
-        style={                          # ← ADD THIS
-            "width": "var(--dial-size)",
-            "height": "var(--dial-size)",
-        },
+        # Python inline style for the flip wrapper — keeps it exactly
+        # --dial-size even before CSS loads (prevents flash of large div)
+        style={"width": "var(--dial-size)", "height": "var(--dial-size)"},
         children=[
             html.Div(
                 className="dial-flip-inner",
@@ -332,13 +335,7 @@ def dial_flip(front_child, back_title: str, back_body):
                             className="dial-back-content",
                             children=[
                                 html.Div(back_title, className="dial-back-title"),
-
-                                # 🔥 THIS IS NEW (supports structured content)
-                                html.Div(
-                                    back_body,
-                                    className="dial-back-body"
-                                ),
-
+                                html.Div(back_body, className="dial-back-body"),
                                 html.Div("Tap to flip back", className="dial-back-hint"),
                             ],
                         ),
@@ -367,206 +364,158 @@ def streak_colour_from_days(days: int):
         return "dial-red"
 
 
-def calc_daily_readiness(
-    load_series,
-    rpe_series,
-    quality_series,
-    span=7
-):
+def calc_daily_readiness(load_series, rpe_series, quality_series, span=7):
     """
     Daily readiness (0–100).
-    Uses load, RPE (athlete post-session), and session quality.
-    Applies a time-decay penalty when the athlete has been silent:
-    - Each day without an RPE entry pulls readiness toward 50
-    - Penalty rate: ~4 pts/day, capped at -40 (floor ~30)
-    """
 
+    Model:
+      1. Compute session stress = load × RPE-factor × quality-factor
+      2. Fit EWMA-7 (acute) and EWMA-28 (chronic) on stress
+      3. ACWR = acute / chronic
+         - ACWR < 0.8  → under-training → readiness capped at 70
+         - ACWR 0.8–1.3 → sweet spot → readiness 60–90
+         - ACWR > 1.5  → spike → readiness penalised
+      4. Silence decay: each day since last RPE entry subtracts 5 pts
+         (floor = 20, ceiling = 85 when data is stale)
+    """
     df = pd.DataFrame({
         "load": pd.to_numeric(load_series, errors="coerce"),
         "rpe":  pd.to_numeric(rpe_series,  errors="coerce"),
         "qual": pd.to_numeric(quality_series, errors="coerce"),
     })
 
-    # ------------------------------------------------------------------
-    # Need at least some athlete RPE data to compute anything meaningful
-    # ------------------------------------------------------------------
     rpe_valid = df["rpe"].dropna()
     if rpe_valid.empty:
-        return None  # ← was 75.0, now returns None = grey dial
+        return None   # grey dial — no athlete data at all
 
-    load_ref = df["load"].quantile(0.9)
+    # ── Stress calculation ──
+    load_ref = df["load"].quantile(0.90)
     if pd.isna(load_ref) or load_ref <= 0:
         load_ref = df["load"].max()
     if pd.isna(load_ref) or load_ref <= 0:
-        return 75.0
+        return None
 
-    load_n = df["load"].fillna(load_ref * 0.05) / load_ref
-    rpe_n  = (df["rpe"].fillna(0).clip(1, 5) - 1) / 4
-    qual_n = (df["qual"].fillna(0).clip(1, 5) - 1) / 4
+    load_n = df["load"].fillna(0) / load_ref
+    # RPE factor: 1/5 maps to 0.6 effort, 5/5 maps to 1.0 effort
+    rpe_n  = 0.6 + 0.4 * ((df["rpe"].fillna(3).clip(1, 5) - 1) / 4)
+    # Quality factor: poor quality (1) = 1.10 stress, excellent (5) = 0.90
+    qual_n = 1.10 - 0.20 * ((df["qual"].fillna(3).clip(1, 5) - 1) / 4)
 
-    df["stress"] = (
-        load_n *
-        (0.6 * rpe_n + 0.4) *
-        (1.15 - 0.3 * qual_n)
-    )
-    df["stress"] = df["stress"].fillna(0)
+    df["stress"] = (load_n * rpe_n * qual_n).fillna(0)
 
-    baseline = df["stress"].ewm(span=span, adjust=False).mean()
+    # ── EWMA loads (Gabbett 2016) ──
+    acute   = df["stress"].ewm(span=7,  adjust=False).mean()
+    chronic = df["stress"].ewm(span=28, adjust=False).mean()
 
-    if baseline.empty:
-        return 75.0
+    a_val = float(acute.iloc[-1])
+    c_val = float(chronic.iloc[-1])
 
-    acute    = df["stress"].iloc[-1]
-    base_val = baseline.iloc[-1]
-
-    # ------------------------------------------------------------------
-    # TRAINING SPIKE DETECTION
-    # sudden load increase relative to baseline
-    # ------------------------------------------------------------------
-
-    if base_val > 0:
-        spike_ratio = acute / base_val
+    if pd.isna(a_val) or pd.isna(c_val) or c_val == 0:
+        base_readiness = 65.0
     else:
-        spike_ratio = 1
+        acwr = a_val / c_val
 
-    if pd.isna(base_val) or base_val == 0:
-        base_readiness = 75.0
-    else:
-        error      = (df["stress"] - baseline).abs()
-        error_ewma = error.ewm(span=span, adjust=False).mean().iloc[-1]
-
-        if pd.isna(error_ewma) or error_ewma == 0:
-            base_readiness = 75.0
+        if acwr < 0.8:
+            # Under-loaded — athlete is fresh but de-trained feeling
+            base_readiness = 55.0 + (acwr / 0.8) * 20.0  # 55–75
+        elif acwr <= 1.3:
+            # Sweet spot: peak readiness zone
+            # Maps 0.8→60, 1.0→85, 1.3→75 (slight dip at high end)
+            if acwr <= 1.0:
+                base_readiness = 60.0 + ((acwr - 0.8) / 0.2) * 25.0
+            else:
+                base_readiness = 85.0 - ((acwr - 1.0) / 0.3) * 10.0
+        elif acwr <= 1.5:
+            # High load — readiness dropping
+            base_readiness = 75.0 - ((acwr - 1.3) / 0.2) * 25.0  # 75→50
         else:
-            z = (acute - base_val) / error_ewma
-            base_readiness = float(np.clip(75 - (z * 12), 0, 100))
+            # Spike zone — injury risk territory
+            base_readiness = max(20.0, 50.0 - (acwr - 1.5) * 30.0)
 
+    base_readiness = float(np.clip(base_readiness, 0, 100))
 
-
-    # ------------------------------------------------------------------
-    # ⏳ SILENCE PENALTY
-    # Find how many days since the athlete last entered an RPE value.
-    # Each silent day decays readiness toward 50 by DECAY_RATE pts/day.
-    # This replaces the old behaviour where 0-stress = no decay.
-    # ------------------------------------------------------------------
-    DECAY_RATE   = 4.0   # points per silent day
-    DECAY_TARGET = 50.0  # asymptote (athlete absent ≠ peak readiness)
-    MAX_PENALTY  = 40.0  # cap so floor ≈ 30-35
-
-    # rpe_series index should be a DatetimeIndex (set by update_dashboard)
+    # ── Silence decay ──
     rpe_dated = pd.to_numeric(rpe_series, errors="coerce")
-    last_entry_pos = rpe_dated.last_valid_index()
+    last_pos  = rpe_dated.last_valid_index()
 
-    if last_entry_pos is not None:
-        if hasattr(last_entry_pos, "date"):
-            today_dt = dt.datetime.now(ADL_TZ).date()
-            days_silent = (today_dt - last_entry_pos.date()).days
-        else:
-            days_silent = len(rpe_dated) - 1 - rpe_dated.index.get_loc(last_entry_pos)
+    if last_pos is not None and hasattr(last_pos, "date"):
+        days_silent = (dt.datetime.now(ADL_TZ).date() - last_pos.date()).days
+    elif last_pos is not None:
+        days_silent = len(rpe_dated) - 1 - rpe_dated.index.get_loc(last_pos)
     else:
         days_silent = len(df)
 
     days_silent = max(0, int(days_silent))
 
-    # Replace the silence penalty block with a straight linear decay
+    DECAY_RATE = 5.0
+    MAX_PENALTY = 50.0
+
     if days_silent > 0:
-        penalty = min(DECAY_RATE * days_silent, MAX_PENALTY)
-        readiness = float(np.clip(base_readiness - penalty, 0, 100))
+        penalty    = min(DECAY_RATE * days_silent, MAX_PENALTY)
+        readiness  = float(np.clip(base_readiness - penalty, 0, 100))
     else:
-        readiness = base_readiness
+        readiness  = base_readiness
 
-        # ------------------------------------------------------------------
-        # SPIKE PENALTY
-        # ------------------------------------------------------------------
-
-        if spike_ratio > 1.8:
-            readiness *= 0.70
-        elif spike_ratio > 1.5:
-            readiness *= 0.80
-        elif spike_ratio > 1.3:
-            readiness *= 0.90
-
-    # ------------------------------------------------------------------
-    # TRAINING RECENCY LIMITER
-    # If no training load recently, readiness cannot remain high
-    # ------------------------------------------------------------------
-
-    load_dated = pd.to_numeric(load_series, errors="coerce")
+    # ── Recency limiter on load (no training = can't be "high readiness") ──
+    load_dated    = pd.to_numeric(load_series, errors="coerce")
     last_load_pos = load_dated.last_valid_index()
 
     if last_load_pos is not None and hasattr(last_load_pos, "date"):
-        today_dt = dt.datetime.now(ADL_TZ).date()
-        days_since_load = (today_dt - last_load_pos.date()).days
-
+        days_since_load = (dt.datetime.now(ADL_TZ).date() - last_load_pos.date()).days
         if days_since_load > 21:
-            readiness = min(readiness, 40)
+            readiness = min(readiness, 35)
         elif days_since_load > 14:
-            readiness = min(readiness, 55)
+            readiness = min(readiness, 50)
         elif days_since_load > 7:
-            readiness = min(readiness, 70)
+            readiness = min(readiness, 68)
 
-    return readiness
+    return float(np.clip(readiness, 0, 100))
 
 
-
-def calc_neuro_readiness(
-    sleep, fatigue, soreness, mood,
-    history_df=None,
-    span=3
-):
+def calc_neuro_readiness(sleep, fatigue, soreness, mood, history_df=None, span=3):
     """
-    Neuromuscular readiness (0–100)
-    Sleep ↑
-    Fatigue ↓
-    Soreness ↓
-    Mood ↑
-    Time-aware smoothing
-    """
+    Neuromuscular readiness (0–100) using sport-science weights:
+      Sleep    ↑  weight 0.35  (recovery quality)
+      Fatigue  ↓  weight 0.30  (energy/CNS state; higher = more energetic on 1-5 scale)
+      Soreness ↓  weight 0.20  (muscle readiness)
+      Mood     ↑  weight 0.15  (motivational readiness)
 
+    Reference: Hooper & Mackinnon (1995) wellness monitoring;
+               Buchheit (2014) HRV + subjective wellness composite.
+    """
     try:
-        sleep    = float(np.clip(sleep,    1, 5))
-        fatigue  = float(np.clip(fatigue,  1, 5))
+        sleep = float(np.clip(sleep, 1, 5))
+        fatigue = float(np.clip(fatigue, 1, 5))
         soreness = float(np.clip(soreness, 1, 5))
-        mood     = float(np.clip(mood,     1, 5))
+        mood = float(np.clip(mood, 1, 5))
     except Exception:
         return None
 
-    weights = {
-        "sleep": 0.40,
-        "fatigue": 0.25,
-        "soreness": 0.20,
-        "mood": 0.15,
-    }
-
-    # -----------------------------------
-    # Raw neuromuscular state
-    # -----------------------------------
+    # Raw composite — all inputs normalised so higher = better
     raw = (
-        sleep * weights["sleep"] +
-        (6 - fatigue) * weights["fatigue"] +
-        (6 - soreness) * weights["soreness"] +
-        mood * weights["mood"]
+            sleep * 0.35 +
+            fatigue * 0.30 +  # fatigue scale: 1=low energy, 5=energetic → higher IS better
+            (6 - soreness) * 0.20 +  # soreness inverted: 1=low, 5=high → lower is better
+            mood * 0.15
     )
 
-    score = raw * 20  # scale to 0–100
+    # Scale to 0–100 (raw range: 1*0.35 + 1*0.30 + 5*0.20 + 1*0.15 = 1.8 min,
+    #                             5*0.35 + 5*0.30 + 1*0.20 + 5*0.15 = 4.5 max)
+    score = (raw - 1.8) / (4.5 - 1.8) * 100
     score = float(np.clip(score, 0, 100))
 
-    # -----------------------------------
-    # If no history → return current
-    # -----------------------------------
-    # If no history → return current score unsmoothed
     if history_df is None or history_df.empty:
         return score
 
-    # Recompute neuro score per historical row and apply EWMA smoothing
+    # Recompute score per historical row
     def _row_score(r):
         try:
             s = float(np.clip(pd.to_numeric(r.get("Sleep_1_5"), errors="coerce"), 1, 5))
             f = float(np.clip(pd.to_numeric(r.get("Fatigue_1_5"), errors="coerce"), 1, 5))
             so = float(np.clip(pd.to_numeric(r.get("Soreness_1_5"), errors="coerce"), 1, 5))
             m = float(np.clip(pd.to_numeric(r.get("Mood_1_5"), errors="coerce"), 1, 5))
-            raw = s * 0.40 + (6 - f) * 0.25 + (6 - so) * 0.20 + m * 0.15
-            return float(np.clip(raw * 20, 0, 100))
+            raw = s * 0.35 + f * 0.30 + (6 - so) * 0.20 + m * 0.15
+            return float(np.clip((raw - 1.8) / 2.7 * 100, 0, 100))
         except Exception:
             return np.nan
 
@@ -575,28 +524,19 @@ def calc_neuro_readiness(
     if hist_scores.empty:
         return score
 
+    # Append today and smooth
     hist_scores = pd.concat([hist_scores, pd.Series([score])], ignore_index=True)
-    smooth = hist_scores.ewm(span=span, adjust=False).mean().iloc[-1]
-    #smooth = smooth + 0.03 * (75 - smooth)  # soft regression to baseline
+    smooth = float(hist_scores.ewm(span=span, adjust=False).mean().iloc[-1])
 
-    # -----------------------------------
-    # WELLNESS RECENCY DECAY
-    # -----------------------------------
-
-    hist_scores = pd.concat([hist_scores, pd.Series([score])], ignore_index=True)
-    smooth = hist_scores.ewm(span=span, adjust=False).mean().iloc[-1]
-    # ❌ Remove this line:
-    # smooth = smooth + 0.03 * (75 - smooth)
-
-    # Then make the recency decay more aggressive:
+    # Recency decay — if no wellness logged recently, score degrades
     if "Date" in history_df.columns:
         last_entry = pd.to_datetime(history_df["Date"], errors="coerce").max()
         if pd.notna(last_entry):
-            days = (dt.datetime.now(ADL_TZ).date() - last_entry.date()).days
-            if days > 14:
-                smooth *= 0.55  # was 0.9 * 0.8 = 0.72 → floor ~54
-            elif days > 7:
-                smooth *= 0.75  # was 0.9 → floor ~67
+            days_stale = (dt.datetime.now(ADL_TZ).date() - last_entry.date()).days
+            if days_stale > 14:
+                smooth *= 0.55
+            elif days_stale > 7:
+                smooth *= 0.75
 
     return float(np.clip(smooth, 0, 100))
 
