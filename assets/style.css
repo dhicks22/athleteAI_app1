@@ -309,110 +309,50 @@ textarea, input, .form-control {
 }
 
 .dial-front { transform: rotateY(0deg); }
+.dial-back  { transform: rotateY(180deg); }
 
-.dial-back {
-  transform: rotateY(180deg);
-}
+/* Back card content hidden in DOM — flip.js clones it into a body overlay */
+.dial-back-content { display: none; }
 
-/* ── Back card: fixed to viewport centre when open ──────────
-   Hidden by default. Only shows when parent has .is-flipped.
-   position:fixed + translate(-50%,-50%) centres it on screen.
-   Tall enough to show all content; overflow-y:auto scrolls it.
-──────────────────────────────────────────────────────────── */
-.dial-back-content {
-  /* Hidden by default — shown only when flipped */
-  display: none;
-
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 1000;
-
-  width: min(320px, 88vw);
-  max-height: 72vh;
-
-  padding: 20px 18px 16px 18px;
-  border-radius: 20px;
-  background: var(--card-bg);
-  border: 1px solid rgba(0,0,0,0.12);
-  box-shadow:
-    0 4px 6px rgba(0,0,0,0.06),
-    0 20px 48px rgba(0,0,0,0.22);
-
-  display: none;           /* overridden below when flipped */
-  flex-direction: column;
-  justify-content: flex-start;
-  align-items: flex-start;
-  text-align: left;
-  overflow-y: auto;        /* scrollable body text */
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Show the back card only when .is-flipped is active */
-.dial-flip.is-flipped .dial-back-content {
-  display: flex;
-}
-
-/* Backdrop — dims the page, catches taps outside */
-.dial-flip.is-flipped::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.35);
-  z-index: 999;
-  backdrop-filter: blur(2px);
-}
-
-[data-theme="dark"] .dial-back-content {
-  border: 1px solid rgba(255,255,255,0.14);
-  box-shadow: 0 20px 50px rgba(0,0,0,0.60);
-}
-
-.dial-back-title {
+/* ── Body-level overlay (injected by flip.js) ── */
+#dial-overlay .dial-back-title {
   font-weight: 800;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--accent);
-  margin: 0 0 10px 0;
-  line-height: 1.2;
-  flex-shrink: 0;
+  color: #1e88e5;
+  margin: 0 0 12px 0;
+  display: block;
 }
 
-.dial-back-body {
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--text);
-  flex: 1;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  padding-right: 2px;
+#dial-overlay .dial-back-body {
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 8px;
+  display: block;
 }
 
-.dial-back-body strong { color: var(--accent); }
+#dial-overlay .dial-back-body div { margin-bottom: 4px; }
 
-.dial-back-reco {
+#dial-overlay .dial-back-reco {
   font-size: 13px;
   font-weight: 700;
-  color: var(--accent);
-  margin-top: 8px;
-  flex-shrink: 0;
+  color: #1e88e5;
+  margin-top: 10px;
+  display: block;
 }
 
-.dial-back-reco.high { color: #2fb344; }
-.dial-back-reco.mid  { color: #f5b301; }
-.dial-back-reco.low  { color: #f44336; }
+#dial-overlay .dial-back-reco.high { color: #2fb344; }
+#dial-overlay .dial-back-reco.mid  { color: #f5b301; }
+#dial-overlay .dial-back-reco.low  { color: #f44336; }
 
-.dial-back-list { margin-bottom: 4px; }
-.dial-back-list div { margin-bottom: 3px; font-size: 13px; line-height: 1.4; }
+#dial-overlay .dial-back-list div  { margin-bottom: 4px; font-size: 14px; }
 
-.dial-back-hint {
-  font-size: 10px;
-  opacity: 0.40;
-  margin-top: 12px;
-  color: var(--text-muted);
-  flex-shrink: 0;
+#dial-overlay .dial-back-hint {
+  font-size: 11px;
+  opacity: 0.45;
+  margin-top: 14px;
+  display: block;
 }
 
 /* ============================================================
