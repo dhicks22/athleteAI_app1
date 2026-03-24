@@ -2312,7 +2312,7 @@ def build_main_layout(auth_data):
 
             html.Hr(),
 
-            html.H3("Selected Session & Athlete Input", className="mt-3"),
+            html.H4("Selected Session & Athlete Input", className="mt-3"),
 
             # ===== SESSION CONTAINER =====
             html.Div(
@@ -2531,7 +2531,7 @@ def build_main_layout(auth_data):
         id="graphs-view",
         style={"display": "none"},
         children=[
-            html.H3("Training Load, Wellness & Speed/Tempo", className="mb-4"),
+            html.H4("Training Load, Wellness & Speed/Tempo", className="mt-3 mb-4"),
             dbc.Row(
                 [
                     dbc.Col(
@@ -2571,9 +2571,9 @@ def build_main_layout(auth_data):
                     html.Div(
                         className="d-flex align-items-center justify-content-between mb-1",
                         children=[
-                            html.H3(
+                            html.H4(
                                 "Training Session Builder",
-                                style={"margin": 0, "fontWeight": 600, "fontSize": "22px"},
+                                style={"margin": 0, "fontWeight": 600},
                             ),
                             html.Div(
                                 style={
