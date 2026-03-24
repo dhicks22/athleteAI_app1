@@ -2565,16 +2565,42 @@ def build_main_layout(auth_data):
 
     ai_view = html.Div(id="ai-view", style={"display": "none"}, children=[
         html.Div(className="page-wrap", children=[
-            html.Div(className="ai-hero", children=[
-                html.Div(className="d-flex align-items-start justify-content-between", children=[
-                    html.Div(children=[
-                        html.H3("Training Session Builder", className="ai-hero-title"),
-                        html.P("Warm-up → primary → secondary → tertiary → cool-down",
-                               className="ai-hero-sub"),
-                    ]),
-                    html.Div(className="pill", children=[html.Div(className="pill-dot"), html.Span("ACI", className="text-nowrap")]),
-                ]),
-            ]),
+            html.Div(
+                style={"marginBottom": "16px"},
+                children=[
+                    html.Div(
+                        className="d-flex align-items-center justify-content-between mb-1",
+                        children=[
+                            html.H3(
+                                "Training Session Builder",
+                                style={"margin": 0, "fontWeight": 600, "fontSize": "22px"},
+                            ),
+                            html.Div(
+                                style={
+                                    "background": "rgba(30,136,229,0.10)",
+                                    "border": "1px solid rgba(30,136,229,0.25)",
+                                    "color": "#1e88e5",
+                                    "fontSize": "11px",
+                                    "padding": "4px 10px",
+                                    "borderRadius": "999px",
+                                    "fontWeight": 700,
+                                    "display": "inline-flex",
+                                    "alignItems": "center",
+                                    "gap": "6px",
+                                },
+                                children=[
+                                    html.Div(className="pill-dot"),
+                                    html.Span("ACI"),
+                                ],
+                            ),
+                        ],
+                    ),
+                    html.P(
+                        "Build your next session — warm-up through cool-down.",
+                        style={"color": "#6e6e6e", "fontSize": "13px", "margin": "2px 0 0 0"},
+                    ),
+                ],
+            ),
             dbc.Row(className="g-3", children=[
                 dbc.Col(md=5, children=[
                     dbc.Card(className="premium-card", children=[
