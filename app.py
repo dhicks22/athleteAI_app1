@@ -2288,6 +2288,8 @@ def build_main_layout(auth_data):
         id="calendar-view",
         children=[
             html.H4("Training Program", className="mt-3"),
+            html.P("Your scheduled sessions and athlete logging",
+                   style={"color": "#6e6e6e", "fontSize": "13px", "margin": "-8px 0 12px 0"}),
 
             # ===== Calendar header + grid =====
             html.Div(
@@ -2312,7 +2314,9 @@ def build_main_layout(auth_data):
 
             html.Hr(),
 
-            html.H4("Selected Session & Athlete Input", className="mt-3"),
+            html.H4("Selected Session & Athlete Input", className="mt-3 mb-1"),
+            html.P("Log your session data and generate coaching feedback",
+                   style={"color": "#6e6e6e", "fontSize": "13px", "margin": "0 0 12px 0"}),
 
             # ===== SESSION CONTAINER =====
             html.Div(
@@ -2531,7 +2535,9 @@ def build_main_layout(auth_data):
         id="graphs-view",
         style={"display": "none"},
         children=[
-            html.H4("Training Load, Wellness & Speed/Tempo", className="mt-3 mb-4"),
+            html.H4("Training Analytics", className="mt-3 mb-1"),
+            html.P("Load, wellness trends and speed/tempo volumes",
+                   style={"color": "#6e6e6e", "fontSize": "13px", "margin": "0 0 20px 0"}),
             dbc.Row(
                 [
                     dbc.Col(
@@ -2596,9 +2602,9 @@ def build_main_layout(auth_data):
                         ],
                     ),
                     html.P(
-                        "Build your next session — warm-up through cool-down.",
+                        "AI-generated sessions built around your recent data.",
                         style={"color": "#6e6e6e", "fontSize": "13px", "margin": "2px 0 0 0"},
-                    ),
+                                        ),
                 ],
             ),
             dbc.Row(className="g-3", children=[
