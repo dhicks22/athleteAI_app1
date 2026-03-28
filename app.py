@@ -2133,6 +2133,34 @@ def build_main_layout(auth_data):
             html.Div(id="motivational-message"),
 
             html.Div(
+                dbc.Button(
+                    [html.I(className="bi bi-share me-2", style={"fontSize": "12px"}), "Share today's stats"],
+                    id="btn-share-card",
+                    color="primary",
+                    outline=True,
+                    size="sm",
+                    style={"fontSize": "12px", "padding": "5px 14px", "borderRadius": "20px"},
+                ),
+                style={"textAlign": "center", "marginTop": "12px"},
+            ),
+
+            dbc.Modal(
+                [
+                    dbc.ModalHeader(dbc.ModalTitle("Share today's stats"), close_button=True),
+                    dbc.ModalBody(
+                        [
+                            html.Div(id="share-card-container"),
+                        ],
+                        style={"padding": "0", "background": "#111"},
+                    ),
+                ],
+                id="share-card-modal",
+                is_open=False,
+                centered=True,
+                size="lg",
+            ),
+
+            html.Div(
                 logout_button,
                 style={"display": "flex", "justifyContent": "flex-end", "marginTop": "10px", "marginRight": "4px"},
             ),
@@ -3084,37 +3112,19 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
         body.append(html.Div(gym_track))
 
     # AI feedback
-    # -------------------------
-    # PRIMARY
-    # -------------------------
     if ai1 != "—":
         body.append(section_label("Primary Coaching Feedback"))
-
         body.append(html.Div(ai1, style={
-            "borderLeft": "3px solid #1565C0",
-            "background": "#e3f2fd",
-            "borderRadius": "0 8px 8px 0",
-            "padding": "10px 12px",
-            "fontSize": "12px",
-            "color": "#0d47a1",
-            "lineHeight": "1.5",
-            "marginBottom": "10px",
+            "borderLeft": "3px solid #1565C0", "background": "#e3f2fd",
+            "borderRadius": "0 8px 8px 0", "padding": "10px 12px",
+            "fontSize": "12px", "color": "#0d47a1", "lineHeight": "1.5",
         }))
-
-    # -------------------------
-    # SECONDARY
-    # -------------------------
     if ai2 != "—":
         body.append(section_label("Secondary Coaching Feedback"))
-
         body.append(html.Div(ai2, style={
-            "borderLeft": "3px solid #2E7D32",
-            "background": "#e8f5e9",
-            "borderRadius": "0 8px 8px 0",
-            "padding": "10px 12px",
-            "fontSize": "12px",
-            "color": "#1b5e20",
-            "lineHeight": "1.5",
+            "borderLeft": "3px solid #2E7D32", "background": "#e8f5e9",
+            "borderRadius": "0 8px 8px 0", "padding": "10px 12px",
+            "fontSize": "12px", "color": "#1b5e20", "lineHeight": "1.5",
         }))
 
     modal_title = html.Div([
@@ -3779,6 +3789,357 @@ def generate_session_plan(n_clicks, athlete_id, coach_style, goal, duration):
     ))
 
     return html.Div(cards), ""
+
+
+
+@app.callback(
+    Output("share-card-modal", "is_open"),
+    Output("share-card-container", "children"),
+    Input("btn-share-card", "n_clicks"),
+    State("athlete-dropdown", "value"),
+    State("share-card-modal", "is_open"),
+    prevent_initial_call=True,
+)
+def show_share_card(n, athlete_id, is_open):
+    if not n:
+        raise PreventUpdate
+    if is_open:
+        return False, no_update
+
+    today      = today_adl()
+    date_str   = today.strftime("%d %b %Y")
+    first_name = (athlete_id or "Athlete").strip().split()[0]
+
+    readiness_val = 0
+    neuro_val     = 0
+    streak        = 0
+    weekly_pct    = 0
+    rpe_v = load_v = acwr_v = None
+    sleep_v = fatigue_v = mood_v = soreness_v = None
+    session_label = "Training day"
+    session_sub   = ""
+
+    try:
+        df = load_tab(athlete_id)
+        if not df.empty:
+            streak, _ = compute_streaks(df)
+
+            dow = today.weekday()
+            days_since_sat = (dow - 5) % 7
+            week_start = today - dt.timedelta(days=days_since_sat)
+            week_end   = week_start + dt.timedelta(days=6)
+            planned    = count_planned_sessions_in_week(df, week_start, week_end)
+            logged_n   = count_logged_sessions_in_week(df, week_start, week_end)
+            weekly_pct = int(round(logged_n / planned * 100)) if planned > 0 else 0
+
+            dft = df.copy()
+            dft["Date"] = pd.to_datetime(dft["Date"], errors="coerce")
+            dft = dft.sort_values("Date").set_index("Date")
+            dft = dft.reindex(pd.date_range(dft.index.min(), today, freq="D"))
+
+            load_series    = pd.to_numeric(dft.get("Load"), errors="coerce")
+            rpe_col        = "RPE_Post_Session" if "RPE_Post_Session" in dft.columns else None
+            rpe_series     = pd.to_numeric(dft[rpe_col] if rpe_col else pd.Series(dtype=float), errors="coerce")
+            quality_series = pd.to_numeric(dft.get("Session_1_5"), errors="coerce")
+            readiness_val  = calc_daily_readiness(load_series, rpe_series, quality_series) or 0
+
+            df_neuro     = df.copy()
+            df_neuro["Date"] = pd.to_datetime(df_neuro["Date"], errors="coerce").dt.date
+            recent_neuro = df_neuro[df_neuro["Date"] >= today - dt.timedelta(days=14)]
+
+            def _last(col):
+                s = pd.to_numeric(recent_neuro.get(col, pd.Series(dtype=float)), errors="coerce").dropna()
+                return float(s.iloc[-1]) if not s.empty else None
+
+            sl = _last("Sleep_1_5")
+            fa = _last("Fatigue_1_5")
+            so = _last("Soreness_1_5")
+            mo = _last("Mood_1_5")
+
+            if all(v is not None for v in [sl, fa, so, mo]):
+                neuro_val  = calc_neuro_readiness(sl, fa, so, mo, history_df=recent_neuro) or 0
+                sleep_v    = int(sl)
+                fatigue_v  = int(fa)
+                soreness_v = int(so)
+                mood_v     = int(mo)
+
+            df2 = df.copy()
+            df2["Date"] = pd.to_datetime(df2["Date"], errors="coerce").dt.date
+            today_row = df2[df2["Date"] == today]
+            if not today_row.empty:
+                r = today_row.iloc[-1]
+                rpe_raw  = pd.to_numeric(r.get("RPE_Post_Session"), errors="coerce")
+                load_raw = pd.to_numeric(r.get("Load"), errors="coerce")
+                rpe_v    = rpe_raw  if pd.notna(rpe_raw)  else None
+                load_v   = load_raw if pd.notna(load_raw) else None
+                session_label = str(r.get("Workout") or "Training day")
+                focus = str(r.get("Focus") or "")
+                venue = str(r.get("Venue") or "")
+                session_sub = " · ".join(
+                    x for x in [venue, focus]
+                    if x and x.lower() not in ("nan", "none", "nil", "")
+                )
+
+            load_clean = load_series.dropna()
+            if len(load_clean) >= 28:
+                acwr_v = round(float(
+                    load_clean.ewm(span=7,  adjust=False).mean().iloc[-1] /
+                    load_clean.ewm(span=28, adjust=False).mean().iloc[-1]
+                ), 2)
+
+    except Exception as e:
+        print("Share card error:", e)
+
+    def safe_num(v, decimals=0):
+        try:
+            f = float(v)
+            if pd.isna(f):
+                return "—"
+            return str(round(f, decimals)) if decimals else str(int(round(f)))
+        except Exception:
+            return "—"
+
+    circ = 131.9
+
+    def ro(pct):
+        return round(circ * (1 - min(max(pct, 0), 100) / 100), 1)
+
+    d_r   = int(round(min(max(readiness_val or 0, 0), 100)))
+    d_n   = int(round(min(max(neuro_val     or 0, 0), 100)))
+    d_e   = int(round(min(max(weekly_pct    or 0, 0), 100)))
+    d_sp  = int(round(min((streak / 14) * 100, 100)))
+    d_sn  = streak
+    d_rpe = (safe_num(rpe_v) + "/5") if rpe_v is not None else "—"
+    d_ld  = safe_num(load_v)
+    d_aw  = safe_num(acwr_v, 2)
+    d_slp = safe_num(sleep_v)
+    d_fat = safe_num(fatigue_v)
+    d_mo  = safe_num(mood_v)
+    d_sor = safe_num(soreness_v)
+    p_slp = int(round((sleep_v    or 0) / 5 * 100)) if sleep_v    is not None else 0
+    p_fat = int(round((fatigue_v  or 0) / 5 * 100)) if fatigue_v  is not None else 0
+    p_mo  = int(round((mood_v     or 0) / 5 * 100)) if mood_v     is not None else 0
+    p_sor = int(round((soreness_v or 0) / 5 * 100)) if soreness_v is not None else 0
+    dl_name = date_str.replace(" ", "-")
+    s_lbl = session_label[:32]
+    s_sub = (session_sub[:44] or "Training day")
+
+
+    # ── get motivational quote for share card ────────────────
+    try:
+        mot_sys = (
+            "You are a high-performance coach. Write ONE short motivational sentence (max 12 words) "
+            "for an athlete's shareable training card. No hashtags, no exclamation marks. "
+            "Tone: sharp, personal, confident. Address them by first name."
+        )
+        mot_usr = f"Athlete: {first_name}. Readiness: {d_r}/100. Streak: {d_sn} days. Date: {date_str}."
+        mot_quote = call_openai_chat(
+            [{"role": "system", "content": mot_sys}, {"role": "user", "content": mot_usr}],
+            max_tokens=40,
+        )
+        if not mot_quote or "unavailable" in mot_quote.lower():
+            mot_quote = f"Every session builds the athlete you're becoming, {first_name}."
+    except Exception:
+        mot_quote = f"Every session builds the athlete you're becoming, {first_name}."
+
+
+    html_src = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:12px}}
+#card{{
+  width:100%;max-width:340px;
+  border-radius:24px;overflow:hidden;
+  background:rgba(0,0,0,0.55);
+  border:1px solid rgba(255,255,255,0.14);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  position:relative;
+}}
+#photoBg{{position:absolute;inset:0;z-index:0}}
+#bgCanvas{{width:100%;height:100%;display:block;object-fit:cover}}
+.card-content{{position:relative;z-index:1;padding:20px 18px 16px}}
+.topbar{{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}}
+.brand{{font-size:9px;letter-spacing:.16em;color:rgba(255,255,255,.45);text-transform:uppercase}}
+.datepill{{font-size:9px;color:rgba(255,255,255,.5);background:rgba(255,255,255,.1);
+  border:1px solid rgba(255,255,255,.15);padding:3px 8px;border-radius:20px}}
+.dials{{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}}
+.dial-item{{display:flex;flex-direction:column;align-items:center;gap:5px}}
+.dial-lbl{{font-size:7px;letter-spacing:.07em;text-transform:uppercase;
+  color:rgba(255,255,255,.38);text-align:center}}
+.divider{{height:1px;background:rgba(255,255,255,.08);margin:0 0 16px}}
+.quote{{font-size:13px;font-style:italic;color:rgba(255,255,255,.78);
+  line-height:1.55;text-align:center;padding:0 4px;margin-bottom:16px}}
+.footer{{display:flex;justify-content:space-between;align-items:center}}
+.aci-badge{{font-size:8px;letter-spacing:.1em;background:rgba(30,136,229,.25);
+  border:1px solid rgba(30,136,229,.4);color:#90caf9;padding:3px 8px;border-radius:20px}}
+.footer-date{{font-size:9px;color:rgba(255,255,255,.25)}}
+#controls{{width:100%;max-width:340px;margin-top:10px;display:flex;flex-direction:column;gap:7px}}
+#photolabel{{display:flex;align-items:center;justify-content:center;gap:7px;
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);
+  border-radius:10px;padding:10px;cursor:pointer;color:rgba(255,255,255,.65);font-size:11px}}
+#photolabel:hover{{background:rgba(255,255,255,.11)}}
+#photoInput{{display:none}}
+#dlBtn{{background:#1E88E5;border:none;border-radius:10px;padding:11px;
+  color:#fff;font-size:12px;font-weight:600;cursor:pointer;width:100%}}
+#dlBtn:hover{{background:#1565C0}}
+#hint{{text-align:center;font-size:9px;color:rgba(255,255,255,.28);margin-top:2px}}
+</style></head><body>
+
+<div id="card">
+  <div id="photoBg"><canvas id="bgCanvas"></canvas></div>
+  <div class="card-content">
+
+    <div class="topbar">
+      <span class="brand">ACI · Adaptive Coaching</span>
+      <span class="datepill">{date_str}</span>
+    </div>
+
+    <div class="dials">
+      <div class="dial-item">
+        <svg width="70" height="70" viewBox="0 0 52 52">
+          <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="4"/>
+          <circle cx="26" cy="26" r="21" fill="none" stroke="#1E88E5" stroke-width="4"
+            stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro(d_r)}"
+            transform="rotate(-90 26 26)"/>
+          <text x="26" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="system-ui">{d_r}</text>
+        </svg>
+        <div class="dial-lbl">Readiness</div>
+      </div>
+      <div class="dial-item">
+        <svg width="70" height="70" viewBox="0 0 52 52">
+          <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="4"/>
+          <circle cx="26" cy="26" r="21" fill="none" stroke="#43A047" stroke-width="4"
+            stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro(d_n)}"
+            transform="rotate(-90 26 26)"/>
+          <text x="26" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="system-ui">{d_n}</text>
+        </svg>
+        <div class="dial-lbl">Neuro</div>
+      </div>
+      <div class="dial-item">
+        <svg width="70" height="70" viewBox="0 0 52 52">
+          <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="4"/>
+          <circle cx="26" cy="26" r="21" fill="none" stroke="#FB8C00" stroke-width="4"
+            stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro(d_e)}"
+            transform="rotate(-90 26 26)"/>
+          <text x="26" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="system-ui">{d_e}</text>
+        </svg>
+        <div class="dial-lbl">Exposure</div>
+      </div>
+      <div class="dial-item">
+        <svg width="70" height="70" viewBox="0 0 52 52">
+          <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="4"/>
+          <circle cx="26" cy="26" r="21" fill="none" stroke="#E53935" stroke-width="4"
+            stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro(d_sp)}"
+            transform="rotate(-90 26 26)"/>
+          <text x="26" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="system-ui">{d_sn}</text>
+        </svg>
+        <div class="dial-lbl">Streak</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="quote">"{mot_quote}"</div>
+
+    <div class="footer">
+      <div class="footer-date">{date_str}</div>
+      <div class="aci-badge">ACI</div>
+    </div>
+
+  </div>
+</div>
+
+<div id="controls">
+  <label id="photolabel" for="photoInput">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/>
+      <polyline points="21 15 16 10 5 21"/>
+    </svg>
+    Choose a background photo
+  </label>
+  <input type="file" id="photoInput" accept="image/*">
+  <button id="dlBtn">Download to share</button>
+  <div id="hint">Works as an Instagram story, Strava post, or WhatsApp image</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+  const canvas = document.getElementById('bgCanvas');
+  const card   = document.getElementById('card');
+
+  function sizeCanvas() {{
+    canvas.width  = card.offsetWidth;
+    canvas.height = card.offsetHeight;
+    drawDefault();
+  }}
+
+  function drawDefault() {{
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    const g = ctx.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0,   '#0f2027');
+    g.addColorStop(0.5, '#203a43');
+    g.addColorStop(1,   '#2c5364');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }}
+
+  window.addEventListener('load', sizeCanvas);
+  window.addEventListener('resize', sizeCanvas);
+
+  document.getElementById('photoInput').addEventListener('change', function(e) {{
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {{
+      const img = new Image();
+      img.onload = function() {{
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width, h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        const scale = Math.max(w / img.width, h / img.height);
+        const dw = img.width * scale, dh = img.height * scale;
+        ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+      }};
+      img.src = ev.target.result;
+    }};
+    reader.readAsDataURL(file);
+    document.getElementById('photolabel').innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Change photo';
+  }});
+
+  document.getElementById('dlBtn').addEventListener('click', function() {{
+    const btn = this;
+    btn.textContent = 'Generating...';
+    btn.disabled = true;
+    html2canvas(document.getElementById('card'), {{
+      scale: 3, useCORS: true, backgroundColor: null, logging: false,
+    }}).then(function(c) {{
+      const a = document.createElement('a');
+      a.download = 'aci-{dl_name}.png';
+      a.href = c.toDataURL('image/png');
+      a.click();
+      btn.textContent = 'Download to share';
+      btn.disabled = false;
+    }}).catch(function() {{
+      btn.textContent = 'Download to share';
+      btn.disabled = false;
+    }});
+  }});
+</script>
+</body></html>"""
+
+    widget = html.Iframe(
+        srcDoc=html_src,
+        style={
+            "width": "100%",
+            "height": "720px",
+            "border": "none",
+            "background": "#111",
+        },
+    )
+
+    return True, widget
 
 
 if __name__ == "__main__":
