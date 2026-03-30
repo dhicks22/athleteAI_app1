@@ -25,6 +25,7 @@ from dash import Dash, html, dcc, Input, Output, State, ALL, callback_context, n
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 from dash.exceptions import PreventUpdate
+from flask import redirect, request as flask_request, jsonify
 
 # ============================================================
 #  JSON extraction helper
@@ -1313,6 +1314,252 @@ def send_email_payload(payload):
     print("✅ WEBHOOK RESPONSE =", r.text[:400])
     r.raise_for_status()
 
+
+# ============================================================
+#  Garmin Health API integration
+# ============================================================
+
+GARMIN_CONSUMER_KEY    = os.getenv("GARMIN_CONSUMER_KEY", "")
+GARMIN_CONSUMER_SECRET = os.getenv("GARMIN_CONSUMER_SECRET", "")
+GARMIN_ENABLED         = bool(GARMIN_CONSUMER_KEY and GARMIN_CONSUMER_SECRET)
+
+GARMIN_REQUEST_TOKEN_URL = "https://connectapi.garmin.com/oauth-service/oauth/request_token"
+GARMIN_AUTHORIZE_URL     = "https://connect.garmin.com/oauthConfirm"
+GARMIN_ACCESS_TOKEN_URL  = "https://connectapi.garmin.com/oauth-service/oauth/access_token"
+GARMIN_API_BASE          = "https://apis.garmin.com/wellness-api/rest"
+
+
+def _garmin_oauth1(user_token=None, user_secret=None, verifier=None):
+    """Build an OAuth1 auth object. Requires requests-oauthlib."""
+    try:
+        from requests_oauthlib import OAuth1
+    except ImportError:
+        raise RuntimeError("Install requests-oauthlib: pip install requests-oauthlib")
+    return OAuth1(
+        GARMIN_CONSUMER_KEY,
+        GARMIN_CONSUMER_SECRET,
+        resource_owner_key=user_token,
+        resource_owner_secret=user_secret,
+        verifier=verifier,
+    )
+
+
+def garmin_get_request_token():
+    auth = _garmin_oauth1()
+    r = requests.post(GARMIN_REQUEST_TOKEN_URL, auth=auth, timeout=10)
+    r.raise_for_status()
+    params = dict(p.split("=") for p in r.text.split("&"))
+    return params["oauth_token"], params["oauth_token_secret"]
+
+
+def garmin_get_access_token(oauth_token, oauth_token_secret, oauth_verifier):
+    auth = _garmin_oauth1(oauth_token, oauth_token_secret, oauth_verifier)
+    r = requests.post(GARMIN_ACCESS_TOKEN_URL, auth=auth, timeout=10)
+    r.raise_for_status()
+    params = dict(p.split("=") for p in r.text.split("&"))
+    return params["oauth_token"], params["oauth_token_secret"]
+
+
+def garmin_get_athlete_tokens(df: pd.DataFrame):
+    """
+    Read Garmin_Token and Garmin_Secret from the first row of the athlete sheet.
+    Returns (token, secret) or (None, None) if not linked.
+    """
+    if df is None or df.empty:
+        return None, None
+    for col_t, col_s in [("Garmin_Token", "Garmin_Secret"),
+                          ("garmin_token", "garmin_secret")]:
+        if col_t in df.columns and col_s in df.columns:
+            tok = df[col_t].dropna().astype(str)
+            sec = df[col_s].dropna().astype(str)
+            tok = tok[tok.str.strip().str.len() > 5]
+            sec = sec[sec.str.strip().str.len() > 5]
+            if not tok.empty and not sec.empty:
+                return tok.iloc[0].strip(), sec.iloc[0].strip()
+    return None, None
+
+
+def garmin_fetch_today(user_token: str, user_secret: str, date: dt.date) -> dict:
+    """
+    Pull today's data from Garmin for a linked athlete.
+    Returns raw dict of all available fields.
+    """
+    auth = _garmin_oauth1(user_token, user_secret)
+
+    # Garmin uses unix timestamps for range queries
+    start_ts = int(dt.datetime.combine(date, dt.time.min).timestamp())
+    end_ts   = int(dt.datetime.combine(date, dt.time.max).timestamp())
+
+    endpoints = {
+        "dailies":    f"{GARMIN_API_BASE}/dailies?uploadStartTimeInSeconds={start_ts}&uploadEndTimeInSeconds={end_ts}",
+        "sleeps":     f"{GARMIN_API_BASE}/sleeps?uploadStartTimeInSeconds={start_ts}&uploadEndTimeInSeconds={end_ts}",
+        "activities": f"{GARMIN_API_BASE}/activities?uploadStartTimeInSeconds={start_ts}&uploadEndTimeInSeconds={end_ts}",
+        "hrv":        f"{GARMIN_API_BASE}/hrv?uploadStartTimeInSeconds={start_ts}&uploadEndTimeInSeconds={end_ts}",
+        "bodyBattery": f"{GARMIN_API_BASE}/bodyBattery?uploadStartTimeInSeconds={start_ts}&uploadEndTimeInSeconds={end_ts}",
+        "stressDetails": f"{GARMIN_API_BASE}/stressDetails?uploadStartTimeInSeconds={start_ts}&uploadEndTimeInSeconds={end_ts}",
+    }
+
+    results = {}
+    for key, url in endpoints.items():
+        try:
+            r = requests.get(url, auth=auth, timeout=10)
+            if r.status_code == 200:
+                results[key] = r.json()
+            else:
+                results[key] = {}
+        except Exception:
+            results[key] = {}
+
+    return results
+
+
+def garmin_parse_to_scales(raw: dict) -> dict:
+    """
+    Convert Garmin API response → your app's column names.
+    Returns dict ready to be written to the Google Sheet row.
+
+    Mapping logic:
+      Sleep_1_5    ← Garmin sleep score (0-100) → 1-5
+      Fatigue_1_5  ← Body Battery high point (0-100) → 1-5 (high BB = energetic)
+      Soreness_1_5 ← Average stress level (0-100) → 1-5 (inverted: high stress = high soreness)
+      Mood_1_5     ← HRV status: POOR=1 LOW=2 UNBALANCED=2 BALANCED=4 HIGH=5
+      Load         ← activityTrainingLoad from activity
+      SPEED (m)    ← total distance for speed-type activities
+    """
+    out = {}
+
+    # ── Dailies ──────────────────────────────────────────────
+    dailies = raw.get("dailies", [])
+    if dailies:
+        d = dailies[0]
+        out["Garmin_Steps"]           = d.get("steps")
+        out["Garmin_Resting_HR"]      = d.get("restingHeartRateInBeatsPerMinute")
+        out["Garmin_Avg_HR"]          = d.get("averageHeartRateInBeatsPerMinute")
+        out["Garmin_Stress_Avg"]      = d.get("averageStressLevel")
+        out["Garmin_BB_Low"]          = d.get("bodyBatteryLowestValue")
+        out["Garmin_BB_High"]         = d.get("bodyBatteryHighestValue")
+        out["Garmin_Intensity_Mins"]  = (
+            (d.get("moderateIntensityMinutes") or 0) +
+            (d.get("vigorousIntensityMinutes") or 0)
+        )
+
+        # Fatigue_1_5 from body battery high (high BB = energetic = high score)
+        bb_high = d.get("bodyBatteryHighestValue")
+        if bb_high is not None:
+            out["Fatigue_1_5"] = max(1, min(5, round(bb_high / 20)))
+
+        # Soreness proxy from stress (inverted)
+        stress = d.get("averageStressLevel")
+        if stress is not None:
+            out["Soreness_1_5"] = max(1, min(5, 6 - round(stress / 20)))
+
+    # ── Sleep ────────────────────────────────────────────────
+    sleeps = raw.get("sleeps", [])
+    if sleeps:
+        s = sleeps[0]
+        out["Garmin_Sleep_Dur_s"]   = s.get("durationInSeconds")
+        out["Garmin_Sleep_Deep_s"]  = s.get("deepSleepDurationInSeconds")
+        out["Garmin_Sleep_REM_s"]   = s.get("remSleepInSeconds")
+        out["Garmin_Sleep_Score"]   = (s.get("overallSleepScore") or {}).get("value")
+        out["Garmin_SpO2_Avg"]      = s.get("averageSpO2Value")
+
+        sleep_score = out.get("Garmin_Sleep_Score")
+        if sleep_score is not None:
+            out["Sleep_1_5"] = max(1, min(5, round(sleep_score / 20)))
+
+    # ── HRV ──────────────────────────────────────────────────
+    hrv_list = raw.get("hrv", [])
+    if hrv_list:
+        h = hrv_list[0].get("hrvSummary", {})
+        out["Garmin_HRV_Weekly_Avg"] = h.get("weeklyAvg")
+        out["Garmin_HRV_LastNight"]  = h.get("lastNight")
+        out["Garmin_HRV_Status"]     = h.get("status")
+
+        hrv_map = {"POOR": 1, "LOW": 2, "UNBALANCED": 2, "BALANCED": 4, "HIGH": 5}
+        hrv_status = (h.get("status") or "").upper()
+        if hrv_status in hrv_map:
+            out["Mood_1_5"] = hrv_map[hrv_status]
+
+    # ── Activities ───────────────────────────────────────────
+    activities = raw.get("activities", [])
+    if activities:
+        a = activities[0]
+        out["Garmin_Activity_Name"]  = a.get("activityName")
+        out["Garmin_Activity_Type"]  = a.get("activityType")
+        out["Garmin_Duration_s"]     = a.get("durationInSeconds")
+        out["Garmin_Distance_m"]     = a.get("distanceInMeters")
+        out["Garmin_Activity_HR"]    = a.get("averageHeartRateInBeatsPerMinute")
+        out["Garmin_Training_Effect"] = a.get("aerobicTrainingEffect")
+
+        garmin_load = a.get("activityTrainingLoad")
+        if garmin_load is not None:
+            out["Load"] = round(float(garmin_load), 1)
+
+        dist_m = a.get("distanceInMeters")
+        if dist_m is not None:
+            out["SPEED (m)"] = round(float(dist_m), 0)
+
+    out["Garmin_Synced"] = "yes"
+    return out
+
+
+def garmin_enrich_df_row(df: pd.DataFrame, date: dt.date) -> dict:
+    """
+    For a given athlete df and date, return the best available
+    values for dial computation — preferring Garmin data where
+    present, falling back to manual slider entries.
+    """
+    result = {
+        "sleep":    None, "fatigue":  None,
+        "mood":     None, "soreness": None,
+        "load":     None, "rpe":      None,
+        "quality":  None,
+        "source":   "manual",
+    }
+
+    if df is None or df.empty or "Date" not in df.columns:
+        return result
+
+    d = df.copy()
+    d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
+    rows = d[d["Date"] == date]
+    if rows.empty:
+        return result
+
+    row = rows.iloc[-1]
+
+    def _n(col):
+        v = pd.to_numeric(row.get(col, np.nan), errors="coerce")
+        return float(v) if pd.notna(v) and v > 0 else None
+
+    # Check if Garmin data is present for this row
+    garmin_synced = str(row.get("Garmin_Synced", "")).strip().lower() == "yes"
+
+    # Always prefer manual if athlete entered it (RPE_Post_Session written by athlete)
+    manual_rpe = _n("RPE_Post_Session")
+
+    if garmin_synced:
+        result["source"]  = "garmin"
+        result["sleep"]   = _n("Sleep_1_5")    # already mapped from sleep score
+        result["fatigue"] = _n("Fatigue_1_5")  # from body battery
+        result["soreness"]= _n("Soreness_1_5") # from stress
+        result["mood"]    = _n("Mood_1_5")     # from HRV status
+        result["load"]    = _n("Load")          # from training load
+        result["rpe"]     = manual_rpe          # RPE stays manual always
+        result["quality"] = _n("Session_1_5")
+    else:
+        result["source"]  = "manual"
+        result["sleep"]   = _n("Sleep_1_5")
+        result["fatigue"] = _n("Fatigue_1_5")
+        result["soreness"]= _n("Soreness_1_5")
+        result["mood"]    = _n("Mood_1_5")
+        result["load"]    = _n("Load")
+        result["rpe"]     = manual_rpe
+        result["quality"] = _n("Session_1_5")
+
+    return result
+
+
 # ============================================================
 #  Plot builders
 # ============================================================
@@ -2132,6 +2379,8 @@ def build_main_layout(auth_data):
             html.Div(id="welcome-message", className="mt-3"),
             html.Div(id="motivational-message"),
 
+            html.Div(id="garmin-status-badge", className="mt-2"),
+
             html.Div(
                 dbc.Button(
                     [html.I(className="bi bi-share me-2", style={"fontSize": "12px"}), "Share today's stats"],
@@ -2833,6 +3082,33 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     NEURO_DECAY_RATE = 3.5
     NEURO_MAX_PENALTY = 35.0
 
+    # ── Check if this athlete has Garmin linked ───────────────
+    garmin_token, garmin_secret = garmin_get_athlete_tokens(df)
+    garmin_linked = bool(garmin_token and garmin_secret)
+
+    # ── Try to fetch live Garmin data for today ───────────────
+    garmin_source_today = False
+    if garmin_linked:
+        try:
+            raw_garmin = garmin_fetch_today(garmin_token, garmin_secret, today)
+            parsed     = garmin_parse_to_scales(raw_garmin)
+            if parsed.get("Garmin_Synced") == "yes":
+                # Write to today's sheet row so it persists
+                df2 = df.copy()
+                df2["Date"] = pd.to_datetime(df2["Date"], errors="coerce").dt.date
+                today_matches = df2.index[df2["Date"] == today].tolist()
+                if today_matches:
+                    write_row(athlete_id, today_matches[0], parsed)
+                    # Reload df with Garmin data written in
+                    df = load_tab(athlete_id)
+                garmin_source_today = True
+        except Exception as e:
+            print(f"⚠️ Garmin fetch failed for {athlete_id}: {e}")
+
+    # ── Get today's enriched row (Garmin or manual) ──────────
+    today_enriched = garmin_enrich_df_row(df, today)
+    data_source = today_enriched["source"]  # "garmin" or "manual"
+
     df_neuro = df.copy()
     df_neuro["Date"] = pd.to_datetime(df_neuro["Date"], errors="coerce").dt.date
     df_neuro = df_neuro.sort_values("Date")
@@ -2845,10 +3121,11 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
         valid = s.dropna()
         return float(valid.iloc[-1]) if not valid.empty else None
 
-    sleep_last = _last_wellness_col(recent_neuro, "Sleep_1_5")
-    fatigue_last = _last_wellness_col(recent_neuro, "Fatigue_1_5")
-    soreness_last = _last_wellness_col(recent_neuro, "Soreness_1_5")
-    mood_last = _last_wellness_col(recent_neuro, "Mood_1_5")
+    # Use today's enriched values if available, otherwise scan recent history
+    sleep_last    = today_enriched["sleep"]    or _last_wellness_col(recent_neuro, "Sleep_1_5")
+    fatigue_last  = today_enriched["fatigue"]  or _last_wellness_col(recent_neuro, "Fatigue_1_5")
+    soreness_last = today_enriched["soreness"] or _last_wellness_col(recent_neuro, "Soreness_1_5")
+    mood_last     = today_enriched["mood"]     or _last_wellness_col(recent_neuro, "Mood_1_5")
 
     if any(v is None for v in [sleep_last, fatigue_last, soreness_last, mood_last]):
         neuro_val = None
@@ -2887,8 +3164,8 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     df_time = df_time.reindex(full_range)
 
     load_series = pd.to_numeric(df_time.get("Load"), errors="coerce")
-    rpe_col = "RPE_Post_Session" if "RPE_Post_Session" in df_time.columns else None
-    rpe_series = pd.to_numeric(
+    rpe_col     = "RPE_Post_Session" if "RPE_Post_Session" in df_time.columns else None
+    rpe_series  = pd.to_numeric(
         df_time[rpe_col] if rpe_col else pd.Series(dtype=float),
         errors="coerce"
     )
@@ -2922,16 +3199,18 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
         )
     )
 
+    _src_badge = " · via Garmin" if data_source == "garmin" else " · manual entry"
+
     neuro_ui = dial_flip(
         apple_neuromuscular_ring(neuro_val),
         " ",
-        "Neuromuscular Readiness reflects nervous system and movement state using fatigue, mood, sleep, and soreness. Lower scores indicate neuromuscular fatigue and reduced coordination."
+        f"Neuromuscular Readiness reflects nervous system and movement state using fatigue, mood, sleep, and soreness. Lower scores indicate neuromuscular fatigue and reduced coordination.{_src_badge}"
     )
 
     readiness_ui = dial_flip(
         apple_readiness_ring(readiness_val),
         " ",
-        "Daily Readiness Reflects how well you're coping with recent training. Combines load, post-session effort, and session quality, compared against your recent baseline. Lower scores suggest accumulated fatigue."
+        f"Daily Readiness reflects how well you're coping with recent training. Combines load, post-session effort, and session quality, compared against your recent baseline. Lower scores suggest accumulated fatigue.{_src_badge}"
     )
 
     return today_date_str, weekly_ui, streak_ui, neuro_ui, readiness_ui, load_fig, wellness_fig, speed_fig
@@ -3909,6 +4188,17 @@ def show_share_card(n, athlete_id, is_open):
     d_e   = int(round(min(max(weekly_pct    or 0, 0), 100)))
     d_sp  = int(round(min((streak / 14) * 100, 100)))
     d_sn  = streak
+
+    def _dial_hex(score: int) -> str:
+        if score >= 80: return "#1E88E5"   # blue
+        elif score >= 60: return "#43A047" # green
+        elif score >= 40: return "#FB8C00" # amber
+        else: return "#E53935"             # red
+
+    c_r  = _dial_hex(d_r)
+    c_n  = _dial_hex(d_n)
+    c_e  = _dial_hex(d_e)
+    c_sp = _dial_hex(d_sp)
     d_rpe = (safe_num(rpe_v) + "/5") if rpe_v is not None else "—"
     d_ld  = safe_num(load_v)
     d_aw  = safe_num(acwr_v, 2)
@@ -3943,38 +4233,70 @@ def show_share_card(n, athlete_id, is_open):
         mot_quote = f"Every session builds the athlete you're becoming, {first_name}."
 
 
+
     html_src = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:12px}}
-#card{{
-  width:100%;max-width:340px;
-  border-radius:24px;overflow:hidden;
-  background:rgba(0,0,0,0.55);
-  border:1px solid rgba(255,255,255,0.14);
-  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
-  position:relative;
+
+/* Preview area — 9:16 ratio */
+#preview{{
+  width:100%;max-width:320px;
+  aspect-ratio:9/16;
+  border-radius:18px;overflow:hidden;
+  position:relative;background:#111;
+  border:1px solid rgba(255,255,255,0.1);
 }}
-#photoBg{{position:absolute;inset:0;z-index:0}}
-#bgCanvas{{width:100%;height:100%;display:block;object-fit:cover}}
-.card-content{{position:relative;z-index:1;padding:20px 18px 16px}}
-.topbar{{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}}
-.brand{{font-size:9px;letter-spacing:.16em;color:rgba(255,255,255,.45);text-transform:uppercase}}
-.datepill{{font-size:9px;color:rgba(255,255,255,.5);background:rgba(255,255,255,.1);
-  border:1px solid rgba(255,255,255,.15);padding:3px 8px;border-radius:20px}}
-.dials{{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}}
-.dial-item{{display:flex;flex-direction:column;align-items:center;gap:5px}}
+
+/* Full-frame photo background */
+#bgCanvas{{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  object-fit:cover;display:block;
+}}
+
+/* Gradient scrim — fades photo to dark at bottom for readability */
+#scrim{{
+  position:absolute;inset:0;
+  background:linear-gradient(
+    to bottom,
+    rgba(0,0,0,0.15) 0%,
+    rgba(0,0,0,0.05) 35%,
+    rgba(0,0,0,0.55) 60%,
+    rgba(0,0,0,0.80) 100%
+  );
+}}
+
+/* Card content — pinned to bottom of preview */
+#card-overlay{{
+  position:absolute;bottom:0;left:0;right:0;
+  padding:16px 18px 22px;
+}}
+
+.topbar{{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}}
+.brand{{font-size:8px;letter-spacing:.16em;color:rgba(255,255,255,.55);text-transform:uppercase}}
+.datepill{{font-size:8px;color:rgba(255,255,255,.55);background:rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.18);padding:2px 7px;border-radius:20px}}
+
+.dials{{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:16px}}
+.dial-item{{display:flex;flex-direction:column;align-items:center;gap:4px}}
 .dial-lbl{{font-size:7px;letter-spacing:.07em;text-transform:uppercase;
-  color:rgba(255,255,255,.38);text-align:center}}
-.divider{{height:1px;background:rgba(255,255,255,.08);margin:0 0 16px}}
-.quote{{font-size:13px;font-style:italic;color:rgba(255,255,255,.78);
-  line-height:1.55;text-align:center;padding:0 4px;margin-bottom:16px}}
+  color:rgba(255,255,255,.5);text-align:center}}
+
+.divider{{height:1px;background:rgba(255,255,255,.15);margin:0 0 14px}}
+
+.quote{{font-size:12px;font-style:italic;color:rgba(255,255,255,.88);
+  line-height:1.5;text-align:center;padding:0 4px;margin-bottom:14px;
+  text-shadow:0 1px 4px rgba(0,0,0,0.5)}}
+
 .footer{{display:flex;justify-content:space-between;align-items:center}}
-.aci-badge{{font-size:8px;letter-spacing:.1em;background:rgba(30,136,229,.25);
-  border:1px solid rgba(30,136,229,.4);color:#90caf9;padding:3px 8px;border-radius:20px}}
-.footer-date{{font-size:9px;color:rgba(255,255,255,.25)}}
-#controls{{width:100%;max-width:340px;margin-top:10px;display:flex;flex-direction:column;gap:7px}}
+.aci-badge{{font-size:8px;letter-spacing:.1em;background:rgba(30,136,229,.3);
+  border:1px solid rgba(30,136,229,.5);color:#90caf9;padding:3px 8px;border-radius:20px}}
+.footer-date{{font-size:9px;color:rgba(255,255,255,.35)}}
+
+/* Controls below preview */
+#controls{{width:100%;max-width:320px;margin-top:10px;display:flex;flex-direction:column;gap:7px}}
 #photolabel{{display:flex;align-items:center;justify-content:center;gap:7px;
   background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);
   border-radius:10px;padding:10px;cursor:pointer;color:rgba(255,255,255,.65);font-size:11px}}
@@ -3983,12 +4305,13 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 #dlBtn{{background:#1E88E5;border:none;border-radius:10px;padding:11px;
   color:#fff;font-size:12px;font-weight:600;cursor:pointer;width:100%}}
 #dlBtn:hover{{background:#1565C0}}
-#hint{{text-align:center;font-size:9px;color:rgba(255,255,255,.28);margin-top:2px}}
+#hint{{text-align:center;font-size:9px;color:rgba(255,255,255,.3);margin-top:2px}}
 </style></head><body>
 
-<div id="card">
-  <div id="photoBg"><canvas id="bgCanvas"></canvas></div>
-  <div class="card-content">
+<div id="preview">
+  <canvas id="bgCanvas"></canvas>
+  <div id="scrim"></div>
+  <div id="card-overlay">
 
     <div class="topbar">
       <span class="brand">ACI · Adaptive Coaching</span>
@@ -3997,9 +4320,9 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 
     <div class="dials">
       <div class="dial-item">
-        <svg width="70" height="70" viewBox="0 0 52 52">
-          <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="4"/>
-          <circle cx="26" cy="26" r="21" fill="none" stroke="#1E88E5" stroke-width="4"
+        <svg width="64" height="64" viewBox="0 0 52 52">
+          <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
+          <circle cx="26" cy="26" r="21" fill="none" stroke="{c_r}" stroke-width="4"
             stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro(d_r)}"
             transform="rotate(-90 26 26)"/>
           <text x="26" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="system-ui">{d_r}</text>
@@ -4007,9 +4330,9 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
         <div class="dial-lbl">Readiness</div>
       </div>
       <div class="dial-item">
-        <svg width="70" height="70" viewBox="0 0 52 52">
-          <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="4"/>
-          <circle cx="26" cy="26" r="21" fill="none" stroke="#43A047" stroke-width="4"
+        <svg width="64" height="64" viewBox="0 0 52 52">
+          <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
+          <circle cx="26" cy="26" r="21" fill="none" stroke="{c_n}" stroke-width="4"
             stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro(d_n)}"
             transform="rotate(-90 26 26)"/>
           <text x="26" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="system-ui">{d_n}</text>
@@ -4017,9 +4340,9 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
         <div class="dial-lbl">Neuro</div>
       </div>
       <div class="dial-item">
-        <svg width="70" height="70" viewBox="0 0 52 52">
-          <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="4"/>
-          <circle cx="26" cy="26" r="21" fill="none" stroke="#FB8C00" stroke-width="4"
+        <svg width="64" height="64" viewBox="0 0 52 52">
+          <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
+          <circle cx="26" cy="26" r="21" fill="none" stroke="{c_e}" stroke-width="4"
             stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro(d_e)}"
             transform="rotate(-90 26 26)"/>
           <text x="26" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="system-ui">{d_e}</text>
@@ -4027,9 +4350,9 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
         <div class="dial-lbl">Exposure</div>
       </div>
       <div class="dial-item">
-        <svg width="70" height="70" viewBox="0 0 52 52">
-          <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="4"/>
-          <circle cx="26" cy="26" r="21" fill="none" stroke="#E53935" stroke-width="4"
+        <svg width="64" height="64" viewBox="0 0 52 52">
+          <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
+          <circle cx="26" cy="26" r="21" fill="none" stroke="{c_sp}" stroke-width="4"
             stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro(d_sp)}"
             transform="rotate(-90 26 26)"/>
           <text x="26" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="system-ui">{d_sn}</text>
@@ -4039,7 +4362,6 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     </div>
 
     <div class="divider"></div>
-
     <div class="quote">"{mot_quote}"</div>
 
     <div class="footer">
@@ -4059,73 +4381,245 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     Choose a background photo
   </label>
   <input type="file" id="photoInput" accept="image/*">
-  <button id="dlBtn">Download to share</button>
-  <div id="hint">Works as an Instagram story, Strava post, or WhatsApp image</div>
+  <button id="dlBtn">Download story (1080×1920)</button>
+  <div id="hint">Full phone story size — ready for Instagram, Strava or WhatsApp</div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
-  const canvas = document.getElementById('bgCanvas');
-  const card   = document.getElementById('card');
+  const EXPORT_W = 1080;
+  const EXPORT_H = 1920;
 
-  function sizeCanvas() {{
-    canvas.width  = card.offsetWidth;
-    canvas.height = card.offsetHeight;
-    drawDefault();
+  const previewEl  = document.getElementById('preview');
+  const canvasEl   = document.getElementById('bgCanvas');
+  let   userImage  = null;
+
+  function drawPreviewBg() {{
+    const ctx = canvasEl.getContext('2d');
+    const w = canvasEl.width  = previewEl.offsetWidth;
+    const h = canvasEl.height = previewEl.offsetHeight;
+    if (userImage) {{
+      const scale = Math.max(w / userImage.width, h / userImage.height);
+      const dw = userImage.width * scale, dh = userImage.height * scale;
+      ctx.drawImage(userImage, (w-dw)/2, (h-dh)/2, dw, dh);
+    }} else {{
+      const g = ctx.createLinearGradient(0,0,w,h);
+      g.addColorStop(0,   '#0f2027');
+      g.addColorStop(0.5, '#203a43');
+      g.addColorStop(1,   '#2c5364');
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,w,h);
+    }}
   }}
 
-  function drawDefault() {{
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width, h = canvas.height;
-    const g = ctx.createLinearGradient(0, 0, w, h);
-    g.addColorStop(0,   '#0f2027');
-    g.addColorStop(0.5, '#203a43');
-    g.addColorStop(1,   '#2c5364');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
-  }}
-
-  window.addEventListener('load', sizeCanvas);
-  window.addEventListener('resize', sizeCanvas);
+  window.addEventListener('load', () => {{ drawPreviewBg(); }});
+  window.addEventListener('resize', drawPreviewBg);
 
   document.getElementById('photoInput').addEventListener('change', function(e) {{
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = function(ev) {{
+    reader.onload = ev => {{
       const img = new Image();
-      img.onload = function() {{
-        const ctx = canvas.getContext('2d');
-        const w = canvas.width, h = canvas.height;
-        ctx.clearRect(0, 0, w, h);
-        const scale = Math.max(w / img.width, h / img.height);
-        const dw = img.width * scale, dh = img.height * scale;
-        ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
-      }};
+      img.onload = () => {{ userImage = img; drawPreviewBg(); }};
       img.src = ev.target.result;
     }};
     reader.readAsDataURL(file);
-    document.getElementById('photolabel').innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Change photo';
+    document.getElementById('photolabel').innerHTML =
+      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Change photo';
   }});
 
   document.getElementById('dlBtn').addEventListener('click', function() {{
     const btn = this;
     btn.textContent = 'Generating...';
     btn.disabled = true;
-    html2canvas(document.getElementById('card'), {{
-      scale: 3, useCORS: true, backgroundColor: null, logging: false,
-    }}).then(function(c) {{
-      const a = document.createElement('a');
-      a.download = 'aci-{dl_name}.png';
-      a.href = c.toDataURL('image/png');
-      a.click();
-      btn.textContent = 'Download to share';
-      btn.disabled = false;
-    }}).catch(function() {{
-      btn.textContent = 'Download to share';
-      btn.disabled = false;
+
+    // Build a full 1080×1920 canvas manually for crisp output
+    const out = document.createElement('canvas');
+    out.width  = EXPORT_W;
+    out.height = EXPORT_H;
+    const ctx  = out.getContext('2d');
+
+    // 1. Draw photo (or gradient) full frame
+    if (userImage) {{
+      const scale = Math.max(EXPORT_W / userImage.width, EXPORT_H / userImage.height);
+      const dw = userImage.width * scale, dh = userImage.height * scale;
+      ctx.drawImage(userImage, (EXPORT_W-dw)/2, (EXPORT_H-dh)/2, dw, dh);
+    }} else {{
+      const g = ctx.createLinearGradient(0, 0, EXPORT_W, EXPORT_H);
+      g.addColorStop(0,   '#0f2027');
+      g.addColorStop(0.5, '#203a43');
+      g.addColorStop(1,   '#2c5364');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, EXPORT_W, EXPORT_H);
+    }}
+
+    // 2. Gradient scrim over photo
+    const scrim = ctx.createLinearGradient(0, 0, 0, EXPORT_H);
+    scrim.addColorStop(0,    'rgba(0,0,0,0.15)');
+    scrim.addColorStop(0.35, 'rgba(0,0,0,0.05)');
+    scrim.addColorStop(0.60, 'rgba(0,0,0,0.55)');
+    scrim.addColorStop(1.0,  'rgba(0,0,0,0.82)');
+    ctx.fillStyle = scrim;
+    ctx.fillRect(0, 0, EXPORT_W, EXPORT_H);
+
+    const PAD  = 72;   // side padding px at 1080 wide
+    const CARD_TOP = EXPORT_H * 0.42; // card content starts ~42% down
+
+    // 3. Top bar
+    ctx.font = '28px system-ui';
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.letterSpacing = '6px';
+    ctx.fillText('ACI · ADAPTIVE COACHING', PAD, 90);
+    ctx.letterSpacing = '0px';
+
+    // Date pill
+    const dateStr = '{date_str}';
+    ctx.font = '28px system-ui';
+    const dtW = ctx.measureText(dateStr).width + 48;
+    const dtX = EXPORT_W - PAD - dtW;
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 2;
+    roundRect(ctx, dtX, 58, dtW, 44, 22);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    roundRect(ctx, dtX, 58, dtW, 44, 22);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.textAlign = 'center';
+    ctx.fillText(dateStr, dtX + dtW/2, 88);
+    ctx.textAlign = 'left';
+
+    // 4. Draw 4 dials
+    const DIAL_R    = 110;   // ring radius px at export resolution
+    const DIAL_SW   = 22;    // stroke width
+    const DIAL_Y    = CARD_TOP + 80;
+    const dialData  = [
+      {{ val:{d_r},  color:'{c_r}',  label:'READINESS' }},
+      {{ val:{d_n},  color:'{c_n}',  label:'NEURO' }},
+      {{ val:{d_e},  color:'{c_e}',  label:'EXPOSURE' }},
+      {{ val:{d_sn}, color:'{c_sp}', label:'STREAK' }},
+    ];
+    const dialSpacing = (EXPORT_W - PAD*2) / 4;
+
+    dialData.forEach((d, i) => {{
+      const cx = PAD + dialSpacing * i + dialSpacing / 2;
+      const cy = DIAL_Y;
+
+      // Track ring
+      ctx.beginPath();
+      ctx.arc(cx, cy, DIAL_R, 0, Math.PI*2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      ctx.lineWidth   = DIAL_SW;
+      ctx.stroke();
+
+      // Value arc
+      const pct    = Math.min(Math.max(d.val, 0), 100) / 100;
+      const start  = -Math.PI / 2;
+      const end    = start + pct * Math.PI * 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, DIAL_R, start, end);
+      ctx.strokeStyle = d.color;
+      ctx.lineWidth   = DIAL_SW;
+      ctx.lineCap     = 'round';
+      ctx.stroke();
+      ctx.lineCap     = 'butt';
+
+      // Number
+      ctx.font        = 'bold 72px system-ui';
+      ctx.fillStyle   = '#ffffff';
+      ctx.textAlign   = 'center';
+      ctx.textBaseline= 'middle';
+      ctx.fillText(String(d.val), cx, cy);
+
+      // Label
+      ctx.font        = '24px system-ui';
+      ctx.fillStyle   = 'rgba(255,255,255,0.5)';
+      ctx.letterSpacing = '3px';
+      ctx.fillText(d.label, cx, cy + DIAL_R + 44);
+      ctx.letterSpacing = '0px';
+      ctx.textBaseline= 'alphabetic';
     }});
+
+    // 5. Divider line
+    const divY = DIAL_Y + DIAL_R + 90;
+    ctx.beginPath();
+    ctx.moveTo(PAD, divY);
+    ctx.lineTo(EXPORT_W - PAD, divY);
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+
+    // 6. Quote
+    const quote    = `"{mot_quote}"`;
+    const quoteY   = divY + 60;
+    const maxWidth = EXPORT_W - PAD * 2.5;
+    ctx.font       = 'italic 44px system-ui';
+    ctx.fillStyle  = 'rgba(255,255,255,0.88)';
+    ctx.textAlign  = 'center';
+    wrapText(ctx, quote, EXPORT_W/2, quoteY, maxWidth, 60);
+
+    // 7. Footer
+    const footY = EXPORT_H - 80;
+    ctx.font      = '28px system-ui';
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.textAlign = 'left';
+    ctx.fillText(dateStr, PAD, footY);
+
+    // ACI badge
+    const badgeW = 140, badgeH = 48, badgeX = EXPORT_W - PAD - badgeW, badgeY = footY - 34;
+    ctx.strokeStyle = 'rgba(30,136,229,0.5)';
+    ctx.lineWidth   = 2;
+    roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 24);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(30,136,229,0.25)';
+    roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 24);
+    ctx.fill();
+    ctx.font      = 'bold 26px system-ui';
+    ctx.fillStyle = '#90caf9';
+    ctx.textAlign = 'center';
+    ctx.fillText('ACI', badgeX + badgeW/2, badgeY + 32);
+
+    // Download
+    const a = document.createElement('a');
+    a.download = 'aci-{dl_name}.png';
+    a.href = out.toDataURL('image/png');
+    a.click();
+    btn.textContent = 'Download story (1080×1920)';
+    btn.disabled = false;
   }});
+
+  // Helpers
+  function roundRect(ctx, x, y, w, h, r) {{
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.lineTo(x+w-r, y);
+    ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+    ctx.lineTo(x+w, y+h-r);
+    ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+    ctx.lineTo(x+r, y+h);
+    ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+    ctx.lineTo(x, y+r);
+    ctx.quadraticCurveTo(x, y, x+r, y);
+    ctx.closePath();
+  }}
+
+  function wrapText(ctx, text, x, y, maxWidth, lineHeight) {{
+    const words = text.split(' ');
+    let line = '';
+    let cy = y;
+    for (let i = 0; i < words.length; i++) {{
+      const testLine  = line + words[i] + ' ';
+      const metrics   = ctx.measureText(testLine);
+      if (metrics.width > maxWidth && i > 0) {{
+        ctx.fillText(line.trim(), x, cy);
+        line = words[i] + ' ';
+        cy  += lineHeight;
+      }} else {{
+        line = testLine;
+      }}
+    }}
+    ctx.fillText(line.trim(), x, cy);
+  }}
 </script>
 </body></html>"""
 
@@ -4140,6 +4634,214 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     )
 
     return True, widget
+
+
+@app.callback(
+    Output("garmin-status-badge", "children"),
+    Input("athlete-dropdown", "value"),
+    prevent_initial_call=True,
+)
+def update_garmin_badge(athlete_id):
+    if not athlete_id:
+        raise PreventUpdate
+
+    try:
+        df = load_tab(athlete_id)
+        token, _ = garmin_get_athlete_tokens(df)
+        garmin_linked = bool(token)
+    except Exception:
+        garmin_linked = False
+
+    if garmin_linked:
+        badge = html.Div(
+            [
+                html.Span(
+                    "⌚ Garmin connected",
+                    style={
+                        "fontSize": "11px",
+                        "background": "#e8f5e9",
+                        "color": "#2E7D32",
+                        "padding": "3px 10px",
+                        "borderRadius": "20px",
+                        "fontWeight": "600",
+                        "border": "1px solid #a5d6a7",
+                    }
+                ),
+                html.Span(
+                    " · dials powered by device data",
+                    style={"fontSize": "11px", "color": "#888", "marginLeft": "4px"},
+                ),
+            ],
+            style={"textAlign": "center", "marginTop": "4px"},
+        )
+    else:
+        badge = html.Div(
+            [
+                html.A(
+                    "⌚ Connect Garmin",
+                    href=f"/garmin/connect?athlete={athlete_id}",
+                    target="_blank",
+                    style={
+                        "fontSize": "11px",
+                        "color": "#1565C0",
+                        "textDecoration": "none",
+                        "background": "#e3f2fd",
+                        "padding": "3px 10px",
+                        "borderRadius": "20px",
+                        "border": "1px solid #90caf9",
+                        "fontWeight": "500",
+                    }
+                ),
+                html.Span(
+                    " · optional — dials will use device data",
+                    style={"fontSize": "11px", "color": "#aaa", "marginLeft": "4px"},
+                ),
+            ],
+            style={"textAlign": "center", "marginTop": "4px"},
+        )
+
+    return badge
+
+
+# ============================================================
+#  Garmin OAuth + Push webhook routes (Flask)
+# ============================================================
+
+# Temp store for OAuth secrets during handshake
+_garmin_temp_secrets = {}
+
+
+@server.route("/garmin/connect")
+def garmin_connect():
+    """
+    Send athlete to this URL to link their Garmin account.
+    e.g. https://yourapp.com/garmin/connect?athlete=Dylan+Hicks
+    """
+    if not GARMIN_ENABLED:
+        return "Garmin integration not configured (missing API keys).", 503
+
+    athlete_id = flask_request.args.get("athlete", "unknown")
+    try:
+        token, secret = garmin_get_request_token()
+        _garmin_temp_secrets[athlete_id] = (token, secret)
+        auth_url = f"https://connect.garmin.com/oauthConfirm?oauth_token={token}&state={athlete_id}"
+        return redirect(auth_url)
+    except Exception as e:
+        return f"Error starting Garmin OAuth: {e}", 500
+
+
+@server.route("/garmin/callback")
+def garmin_callback():
+    """
+    Garmin redirects here after the athlete approves access.
+    Exchanges the verifier for permanent access tokens and
+    stores them in the athlete's Google Sheet.
+    """
+    oauth_token    = flask_request.args.get("oauth_token", "")
+    oauth_verifier = flask_request.args.get("oauth_verifier", "")
+    athlete_id     = flask_request.args.get("state", "unknown")
+
+    temp = _garmin_temp_secrets.get(athlete_id)
+    if not temp:
+        return "Session expired. Please try linking again.", 400
+
+    req_token, req_secret = temp
+
+    try:
+        user_token, user_secret = garmin_get_access_token(
+            req_token, req_secret, oauth_verifier
+        )
+    except Exception as e:
+        return f"OAuth error: {e}", 500
+
+    # Store tokens in row 0 of the athlete sheet
+    try:
+        df = load_tab(athlete_id)
+        if not df.empty:
+            write_row(athlete_id, 0, {
+                "Garmin_Token":  user_token,
+                "Garmin_Secret": user_secret,
+            })
+            print(f"✅ Garmin tokens stored for {athlete_id}")
+    except Exception as e:
+        print(f"⚠️ Could not store Garmin tokens for {athlete_id}: {e}")
+
+    _garmin_temp_secrets.pop(athlete_id, None)
+
+    return """
+    <html><body style="font-family:system-ui;text-align:center;padding:60px;background:#f0f4f8">
+      <h2 style="color:#2E7D32">&#10003; Garmin connected!</h2>
+      <p>Your Garmin account is now linked to ACI.</p>
+      <p>Data will sync automatically each time you sync your Garmin device.</p>
+      <p style="color:#888;font-size:13px">You can close this tab.</p>
+    </body></html>
+    """
+
+
+@server.route("/garmin/push", methods=["POST"])
+def garmin_push():
+    """
+    Garmin POSTs data here after every device sync.
+    Register this URL in the Garmin Developer Portal as the
+    push endpoint for: Dailies, Sleeps, Activities, HRV, Body Battery.
+
+    URL to register: https://yourapp.com/garmin/push
+    """
+    try:
+        payload = flask_request.get_json(force=True) or {}
+        parsed  = garmin_parse_to_scales(payload)
+        scales  = {k: v for k, v in parsed.items() if v is not None}
+
+        # Identify which athlete this belongs to using the Garmin userId
+        # The userId comes in the dailies/activities array
+        garmin_user_id = None
+        for key in ["dailies", "activities", "sleeps"]:
+            items = payload.get(key, [])
+            if items and "userId" in items[0]:
+                garmin_user_id = str(items[0]["userId"])
+                break
+
+        if garmin_user_id and sh is not None:
+            # Find which athlete sheet has this Garmin userId
+            for ws in sh.worksheets():
+                try:
+                    df = load_tab(ws.title)
+                    tok, _ = garmin_get_athlete_tokens(df)
+                    if tok:
+                        # Write today's Garmin data to the matching date row
+                        today = today_adl()
+                        df["Date"] = pd.to_datetime(df.get("Date", pd.Series(dtype=str)),
+                                                     errors="coerce").dt.date
+                        matches = df.index[df["Date"] == today].tolist()
+                        if matches:
+                            write_row(ws.title, matches[0], scales)
+                            print(f"✅ Garmin push written to {ws.title} row {matches[0]}")
+                            break
+                except Exception:
+                    continue
+
+    except Exception as e:
+        print(f"❌ Garmin push error: {e}")
+
+    # Always return 200 — Garmin will retry on non-200
+    return jsonify({"status": "ok"}), 200
+
+
+@server.route("/garmin/status")
+def garmin_status():
+    """Quick check endpoint — shows which athletes have Garmin linked."""
+    if sh is None:
+        return jsonify({"error": "Google Sheets not connected"}), 503
+    linked = []
+    for ws in sh.worksheets():
+        try:
+            df = load_tab(ws.title)
+            tok, _ = garmin_get_athlete_tokens(df)
+            linked.append({"athlete": ws.title, "garmin_linked": tok is not None})
+        except Exception:
+            pass
+    return jsonify(linked)
+
 
 
 if __name__ == "__main__":
