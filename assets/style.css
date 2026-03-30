@@ -808,3 +808,7 @@ body {
   z-index: 9999 !important;
   max-height: 280px !important;
 }
+
+.dial-pink .dial-circle {
+  --dial-color: #E91E8C;
+}

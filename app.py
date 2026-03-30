@@ -308,7 +308,7 @@ def apple_readiness_ring(score_0_100: float | None):
 
 def streak_dial(streak: int):
     s = max(0, int(streak))
-    percent = min(s, 14) / 14 * 100
+    percent = min(s, 31) / 31 * 100
     colour = streak_colour_from_days(s)
 
     display = "0" if s == 0 else str(s)
@@ -351,14 +351,8 @@ def dial_flip(front_child, back_title: str, back_body):
 # ============================================================
 
 def streak_colour_from_days(days: int):
-    if days >= 10:
-        return "dial-green"
-    elif days >= 6:
-        return "dial-blue"
-    elif days >= 3:
-        return "dial-amber"
-    else:
-        return "dial-red"
+    # Streak dial is always hot pink — intensity reflects length via fill %
+    return "dial-pink"
 
 
 def calc_daily_readiness(load_series, rpe_series, quality_series, span=7):
@@ -4186,19 +4180,15 @@ def show_share_card(n, athlete_id, is_open):
     d_r   = int(round(min(max(readiness_val or 0, 0), 100)))
     d_n   = int(round(min(max(neuro_val     or 0, 0), 100)))
     d_e   = int(round(min(max(weekly_pct    or 0, 0), 100)))
-    d_sp  = int(round(min((streak / 14) * 100, 100)))
+    d_sp  = int(round(min((streak / 31) * 100, 100)))
     d_sn  = streak
 
-    def _dial_hex(score: int) -> str:
-        if score >= 80: return "#1E88E5"   # blue
-        elif score >= 60: return "#43A047" # green
-        elif score >= 40: return "#FB8C00" # amber
-        else: return "#E53935"             # red
-
-    c_r  = _dial_hex(d_r)
-    c_n  = _dial_hex(d_n)
-    c_e  = _dial_hex(d_e)
-    c_sp = _dial_hex(d_sp)
+    # Share card: fixed colours per dial position, streak = pink
+    # These are intentionally different from the app dials which are score-dynamic
+    c_r  = "#1E88E5"   # readiness  — always blue
+    c_n  = "#43A047"   # neuro      — always green
+    c_e  = "#FB8C00"   # exposure   — always orange
+    c_sp = "#E91E8C"   # streak     — hot pink
     d_rpe = (safe_num(rpe_v) + "/5") if rpe_v is not None else "—"
     d_ld  = safe_num(load_v)
     d_aw  = safe_num(acwr_v, 2)
@@ -4276,8 +4266,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 
 .topbar{{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}}
 .brand{{font-size:8px;letter-spacing:.16em;color:rgba(255,255,255,.55);text-transform:uppercase}}
-.datepill{{font-size:8px;color:rgba(255,255,255,.55);background:rgba(255,255,255,.12);
-  border:1px solid rgba(255,255,255,.18);padding:2px 7px;border-radius:20px}}
+
 
 .dials{{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:16px}}
 .dial-item{{display:flex;flex-direction:column;align-items:center;gap:4px}}
@@ -4315,12 +4304,11 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 
     <div class="topbar">
       <span class="brand">ACI · Adaptive Coaching</span>
-      <span class="datepill">{date_str}</span>
     </div>
 
     <div class="dials">
       <div class="dial-item">
-        <svg width="64" height="64" viewBox="0 0 52 52">
+        <svg width="52" height="52" viewBox="0 0 52 52">
           <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
           <circle cx="26" cy="26" r="21" fill="none" stroke="{c_r}" stroke-width="4"
             stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro(d_r)}"
@@ -4330,7 +4318,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
         <div class="dial-lbl">Readiness</div>
       </div>
       <div class="dial-item">
-        <svg width="64" height="64" viewBox="0 0 52 52">
+        <svg width="52" height="52" viewBox="0 0 52 52">
           <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
           <circle cx="26" cy="26" r="21" fill="none" stroke="{c_n}" stroke-width="4"
             stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro(d_n)}"
@@ -4340,7 +4328,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
         <div class="dial-lbl">Neuro</div>
       </div>
       <div class="dial-item">
-        <svg width="64" height="64" viewBox="0 0 52 52">
+        <svg width="52" height="52" viewBox="0 0 52 52">
           <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
           <circle cx="26" cy="26" r="21" fill="none" stroke="{c_e}" stroke-width="4"
             stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro(d_e)}"
@@ -4350,7 +4338,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
         <div class="dial-lbl">Exposure</div>
       </div>
       <div class="dial-item">
-        <svg width="64" height="64" viewBox="0 0 52 52">
+        <svg width="52" height="52" viewBox="0 0 52 52">
           <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
           <circle cx="26" cy="26" r="21" fill="none" stroke="{c_sp}" stroke-width="4"
             stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro(d_sp)}"
@@ -4366,7 +4354,6 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 
     <div class="footer">
       <div class="footer-date">{date_str}</div>
-      <div class="aci-badge">ACI</div>
     </div>
 
   </div>
@@ -4465,34 +4452,17 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     const PAD  = 72;   // side padding px at 1080 wide
     const CARD_TOP = EXPORT_H * 0.42; // card content starts ~42% down
 
-    // 3. Top bar
+    // 3. Top bar — brand only, no date pill, no ACI badge
     ctx.font = '28px system-ui';
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.letterSpacing = '6px';
     ctx.fillText('ACI · ADAPTIVE COACHING', PAD, 90);
     ctx.letterSpacing = '0px';
 
-    // Date pill
-    const dateStr = '{date_str}';
-    ctx.font = '28px system-ui';
-    const dtW = ctx.measureText(dateStr).width + 48;
-    const dtX = EXPORT_W - PAD - dtW;
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-    ctx.lineWidth = 2;
-    roundRect(ctx, dtX, 58, dtW, 44, 22);
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    roundRect(ctx, dtX, 58, dtW, 44, 22);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.textAlign = 'center';
-    ctx.fillText(dateStr, dtX + dtW/2, 88);
-    ctx.textAlign = 'left';
-
-    // 4. Draw 4 dials
-    const DIAL_R    = 110;   // ring radius px at export resolution
-    const DIAL_SW   = 22;    // stroke width
-    const DIAL_Y    = CARD_TOP + 80;
+    // 4. Draw 4 dials — smaller to avoid bunching
+    const DIAL_R    = 88;    // smaller radius
+    const DIAL_SW   = 18;    // thinner stroke
+    const DIAL_Y    = CARD_TOP + 60;
     const dialData  = [
       {{ val:{d_r},  color:'{c_r}',  label:'READINESS' }},
       {{ val:{d_n},  color:'{c_n}',  label:'NEURO' }},
@@ -4525,23 +4495,23 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       ctx.lineCap     = 'butt';
 
       // Number
-      ctx.font        = 'bold 72px system-ui';
+      ctx.font        = 'bold 58px system-ui';
       ctx.fillStyle   = '#ffffff';
       ctx.textAlign   = 'center';
       ctx.textBaseline= 'middle';
       ctx.fillText(String(d.val), cx, cy);
 
       // Label
-      ctx.font        = '24px system-ui';
+      ctx.font        = '22px system-ui';
       ctx.fillStyle   = 'rgba(255,255,255,0.5)';
       ctx.letterSpacing = '3px';
-      ctx.fillText(d.label, cx, cy + DIAL_R + 44);
+      ctx.fillText(d.label, cx, cy + DIAL_R + 38);
       ctx.letterSpacing = '0px';
       ctx.textBaseline= 'alphabetic';
     }});
 
     // 5. Divider line
-    const divY = DIAL_Y + DIAL_R + 90;
+    const divY = DIAL_Y + DIAL_R + 80;
     ctx.beginPath();
     ctx.moveTo(PAD, divY);
     ctx.lineTo(EXPORT_W - PAD, divY);
@@ -4558,26 +4528,12 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     ctx.textAlign  = 'center';
     wrapText(ctx, quote, EXPORT_W/2, quoteY, maxWidth, 60);
 
-    // 7. Footer
+    // 7. Footer — date only, bottom left, no ACI badge
     const footY = EXPORT_H - 80;
     ctx.font      = '28px system-ui';
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.textAlign = 'left';
-    ctx.fillText(dateStr, PAD, footY);
-
-    // ACI badge
-    const badgeW = 140, badgeH = 48, badgeX = EXPORT_W - PAD - badgeW, badgeY = footY - 34;
-    ctx.strokeStyle = 'rgba(30,136,229,0.5)';
-    ctx.lineWidth   = 2;
-    roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 24);
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(30,136,229,0.25)';
-    roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 24);
-    ctx.fill();
-    ctx.font      = 'bold 26px system-ui';
-    ctx.fillStyle = '#90caf9';
-    ctx.textAlign = 'center';
-    ctx.fillText('ACI', badgeX + badgeW/2, badgeY + 32);
+    ctx.fillText('{date_str}', PAD, footY);
 
     // Download
     const a = document.createElement('a');
