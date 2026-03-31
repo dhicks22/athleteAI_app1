@@ -4224,13 +4224,12 @@ def show_share_card(n, athlete_id, is_open):
 
 
 
+
     html_src = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:12px}}
-
-/* Preview area — 9:16 ratio */
 #preview{{
   width:100%;max-width:320px;
   aspect-ratio:9/16;
@@ -4238,61 +4237,33 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
   position:relative;background:#111;
   border:1px solid rgba(255,255,255,0.1);
 }}
-
-/* Full-frame photo background */
 #bgCanvas{{
   position:absolute;inset:0;
   width:100%;height:100%;
-  object-fit:cover;display:block;
+  display:block;
 }}
-
-/* Gradient scrim — fades photo to dark at bottom for readability */
 #scrim{{
   position:absolute;inset:0;
-  background:linear-gradient(
-    to bottom,
-    rgba(0,0,0,0.15) 0%,
-    rgba(0,0,0,0.05) 35%,
-    rgba(0,0,0,0.55) 60%,
-    rgba(0,0,0,0.80) 100%
-  );
+  background:linear-gradient(to bottom,rgba(0,0,0,0.12) 0%,rgba(0,0,0,0.04) 30%,rgba(0,0,0,0.55) 58%,rgba(0,0,0,0.82) 100%);
 }}
-
-/* Card content — pinned to bottom of preview */
 #card-overlay{{
   position:absolute;bottom:0;left:0;right:0;
   padding:16px 18px 22px;
 }}
-
-.topbar{{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}}
+.topbar{{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}}
 .brand{{font-size:8px;letter-spacing:.16em;color:rgba(255,255,255,.55);text-transform:uppercase}}
-
-
-.dials{{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:16px}}
+.dials{{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px}}
 .dial-item{{display:flex;flex-direction:column;align-items:center;gap:4px}}
-.dial-lbl{{font-size:7px;letter-spacing:.07em;text-transform:uppercase;
-  color:rgba(255,255,255,.5);text-align:center}}
-
-.divider{{height:1px;background:rgba(255,255,255,.15);margin:0 0 14px}}
-
-.quote{{font-size:12px;font-style:italic;color:rgba(255,255,255,.88);
-  line-height:1.5;text-align:center;padding:0 4px;margin-bottom:14px;
-  text-shadow:0 1px 4px rgba(0,0,0,0.5)}}
-
-.footer{{display:flex;justify-content:space-between;align-items:center}}
-.aci-badge{{font-size:8px;letter-spacing:.1em;background:rgba(30,136,229,.3);
-  border:1px solid rgba(30,136,229,.5);color:#90caf9;padding:3px 8px;border-radius:20px}}
-.footer-date{{font-size:9px;color:rgba(255,255,255,.35)}}
-
-/* Controls below preview */
+.dial-lbl{{font-size:7px;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.5);text-align:center}}
+.divider{{height:1px;background:rgba(255,255,255,.15);margin:0 0 12px}}
+.quote{{font-size:12px;font-style:italic;color:rgba(255,255,255,.9);line-height:1.5;text-align:center;padding:0 4px;margin-bottom:14px;text-shadow:0 1px 4px rgba(0,0,0,0.5)}}
+.footer{{display:flex;justify-content:flex-start;align-items:center}}
+.footer-date{{font-size:9px;color:rgba(255,255,255,.32)}}
 #controls{{width:100%;max-width:320px;margin-top:10px;display:flex;flex-direction:column;gap:7px}}
-#photolabel{{display:flex;align-items:center;justify-content:center;gap:7px;
-  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);
-  border-radius:10px;padding:10px;cursor:pointer;color:rgba(255,255,255,.65);font-size:11px}}
+#photolabel{{display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:10px;cursor:pointer;color:rgba(255,255,255,.65);font-size:11px}}
 #photolabel:hover{{background:rgba(255,255,255,.11)}}
 #photoInput{{display:none}}
-#dlBtn{{background:#1E88E5;border:none;border-radius:10px;padding:11px;
-  color:#fff;font-size:12px;font-weight:600;cursor:pointer;width:100%}}
+#dlBtn{{background:#1E88E5;border:none;border-radius:10px;padding:11px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;width:100%}}
 #dlBtn:hover{{background:#1565C0}}
 #hint{{text-align:center;font-size:9px;color:rgba(255,255,255,.3);margin-top:2px}}
 </style></head><body>
@@ -4303,7 +4274,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
   <div id="card-overlay">
 
     <div class="topbar">
-      <span class="brand">ACI · Adaptive Coaching</span>
+      <span class="brand">ACI &middot; Adaptive Coaching</span>
     </div>
 
     <div class="dials">
@@ -4350,7 +4321,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     </div>
 
     <div class="divider"></div>
-    <div class="quote">"{mot_quote}"</div>
+    <div class="quote">&ldquo;{mot_quote}&rdquo;</div>
 
     <div class="footer">
       <div class="footer-date">{date_str}</div>
@@ -4368,69 +4339,78 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     Choose a background photo
   </label>
   <input type="file" id="photoInput" accept="image/*">
-  <button id="dlBtn">Download story (1080×1920)</button>
-  <div id="hint">Full phone story size — ready for Instagram, Strava or WhatsApp</div>
+  <button id="dlBtn">Download story (1080&times;1920)</button>
+  <div id="hint">Full phone story size &mdash; ready for Instagram, Strava or WhatsApp</div>
 </div>
 
 <script>
   const EXPORT_W = 1080;
   const EXPORT_H = 1920;
-
-  const previewEl  = document.getElementById('preview');
-  const canvasEl   = document.getElementById('bgCanvas');
-  let   userImage  = null;
+  const previewEl = document.getElementById('preview');
+  const canvasEl  = document.getElementById('bgCanvas');
+  let userImage   = null;
 
   function drawPreviewBg() {{
+    const w = previewEl.offsetWidth;
+    const h = previewEl.offsetHeight;
+    canvasEl.width  = w;
+    canvasEl.height = h;
     const ctx = canvasEl.getContext('2d');
-    const w = canvasEl.width  = previewEl.offsetWidth;
-    const h = canvasEl.height = previewEl.offsetHeight;
+    ctx.clearRect(0, 0, w, h);
     if (userImage) {{
       const scale = Math.max(w / userImage.width, h / userImage.height);
-      const dw = userImage.width * scale, dh = userImage.height * scale;
-      ctx.drawImage(userImage, (w-dw)/2, (h-dh)/2, dw, dh);
+      const dw = userImage.width * scale;
+      const dh = userImage.height * scale;
+      ctx.drawImage(userImage, (w - dw) / 2, (h - dh) / 2, dw, dh);
     }} else {{
-      const g = ctx.createLinearGradient(0,0,w,h);
+      const g = ctx.createLinearGradient(0, 0, w, h);
       g.addColorStop(0,   '#0f2027');
       g.addColorStop(0.5, '#203a43');
       g.addColorStop(1,   '#2c5364');
       ctx.fillStyle = g;
-      ctx.fillRect(0,0,w,h);
+      ctx.fillRect(0, 0, w, h);
     }}
   }}
 
-  window.addEventListener('load', () => {{ drawPreviewBg(); }});
+  window.addEventListener('load', drawPreviewBg);
   window.addEventListener('resize', drawPreviewBg);
 
   document.getElementById('photoInput').addEventListener('change', function(e) {{
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => {{
+    reader.onload = function(ev) {{
       const img = new Image();
-      img.onload = () => {{ userImage = img; drawPreviewBg(); }};
+      img.onload = function() {{
+        userImage = img;
+        drawPreviewBg();
+      }};
       img.src = ev.target.result;
     }};
     reader.readAsDataURL(file);
     document.getElementById('photolabel').innerHTML =
-      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Change photo';
+      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+      '<rect x="3" y="3" width="18" height="18" rx="3"/>' +
+      '<circle cx="8.5" cy="8.5" r="1.5"/>' +
+      '<polyline points="21 15 16 10 5 21"/></svg> Change photo';
   }});
 
   document.getElementById('dlBtn').addEventListener('click', function() {{
     const btn = this;
-    btn.textContent = 'Generating...';
+    btn.textContent = 'Generating\u2026';
     btn.disabled = true;
 
-    // Build a full 1080×1920 canvas manually for crisp output
     const out = document.createElement('canvas');
     out.width  = EXPORT_W;
     out.height = EXPORT_H;
     const ctx  = out.getContext('2d');
 
-    // 1. Draw photo (or gradient) full frame
+    // 1. Background photo or gradient
     if (userImage) {{
       const scale = Math.max(EXPORT_W / userImage.width, EXPORT_H / userImage.height);
-      const dw = userImage.width * scale, dh = userImage.height * scale;
-      ctx.drawImage(userImage, (EXPORT_W-dw)/2, (EXPORT_H-dh)/2, dw, dh);
+      const dw = userImage.width * scale;
+      const dh = userImage.height * scale;
+      ctx.drawImage(userImage, (EXPORT_W - dw) / 2, (EXPORT_H - dh) / 2, dw, dh);
     }} else {{
       const g = ctx.createLinearGradient(0, 0, EXPORT_W, EXPORT_H);
       g.addColorStop(0,   '#0f2027');
@@ -4440,50 +4420,54 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       ctx.fillRect(0, 0, EXPORT_W, EXPORT_H);
     }}
 
-    // 2. Gradient scrim over photo
+    // 2. Scrim
     const scrim = ctx.createLinearGradient(0, 0, 0, EXPORT_H);
-    scrim.addColorStop(0,    'rgba(0,0,0,0.15)');
-    scrim.addColorStop(0.35, 'rgba(0,0,0,0.05)');
-    scrim.addColorStop(0.60, 'rgba(0,0,0,0.55)');
+    scrim.addColorStop(0,    'rgba(0,0,0,0.12)');
+    scrim.addColorStop(0.30, 'rgba(0,0,0,0.04)');
+    scrim.addColorStop(0.58, 'rgba(0,0,0,0.55)');
     scrim.addColorStop(1.0,  'rgba(0,0,0,0.82)');
     ctx.fillStyle = scrim;
     ctx.fillRect(0, 0, EXPORT_W, EXPORT_H);
 
-    const PAD  = 72;   // side padding px at 1080 wide
-    const CARD_TOP = EXPORT_H * 0.52; // card content starts ~52% down
+    const PAD      = 80;
+    const CARD_TOP = EXPORT_H * 0.52;
 
-    // 3. Top bar — brand only, no date pill, no ACI badge
-    ctx.font = '28px system-ui';
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.fillText('ACI · ADAPTIVE COACHING', PAD, 90);
+    // 3. Brand text top-left
+    ctx.font         = '26px system-ui';
+    ctx.fillStyle    = 'rgba(255,255,255,0.55)';
+    ctx.textAlign    = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('ACI \u00b7 ADAPTIVE COACHING', PAD, 92);
 
-    // 4. Draw 4 dials — smaller to avoid bunching
-    const DIAL_R    = 88;    // smaller radius
-    const DIAL_SW   = 18;    // thinner stroke
-    const DIAL_Y    = CARD_TOP + 60;
-    const dialData  = [
-      {{ val:{d_r},  color:'{c_r}',  label:'READINESS' }},
-      {{ val:{d_n},  color:'{c_n}',  label:'NEURO' }},
-      {{ val:{d_e},  color:'{c_e}',  label:'EXPOSURE' }},
-      {{ val:{d_sn}, color:'{c_sp}', label:'STREAK' }},
+    // 4. Four dials
+    const DIAL_R  = 90;
+    const DIAL_SW = 18;
+    const DIAL_Y  = CARD_TOP + 70;
+    const dialSpacing = (EXPORT_W - PAD * 2) / 4;
+
+    const dialData = [
+      {{ val: {d_r},  pct: {d_r},  color: '{c_r}',  label: 'READINESS' }},
+      {{ val: {d_n},  pct: {d_n},  color: '{c_n}',  label: 'NEURO' }},
+      {{ val: {d_e},  pct: {d_e},  color: '{c_e}',  label: 'EXPOSURE' }},
+      {{ val: {d_sn}, pct: {d_sp}, color: '{c_sp}', label: 'STREAK' }},
     ];
-    const dialSpacing = (EXPORT_W - PAD*2) / 4;
 
-    dialData.forEach((d, i) => {{
+    dialData.forEach(function(d, i) {{
       const cx = PAD + dialSpacing * i + dialSpacing / 2;
       const cy = DIAL_Y;
 
-      // Track ring
+      // Track
       ctx.beginPath();
-      ctx.arc(cx, cy, DIAL_R, 0, Math.PI*2);
+      ctx.arc(cx, cy, DIAL_R, 0, Math.PI * 2);
       ctx.strokeStyle = 'rgba(255,255,255,0.12)';
       ctx.lineWidth   = DIAL_SW;
+      ctx.lineCap     = 'butt';
       ctx.stroke();
 
-      // Value arc
-      const pct    = Math.min(Math.max(d.val, 0), 100) / 100;
-      const start  = -Math.PI / 2;
-      const end    = start + pct * Math.PI * 2;
+      // Arc
+      const pct   = Math.min(Math.max(d.pct, 0), 100) / 100;
+      const start = -Math.PI / 2;
+      const end   = start + pct * Math.PI * 2;
       ctx.beginPath();
       ctx.arc(cx, cy, DIAL_R, start, end);
       ctx.strokeStyle = d.color;
@@ -4493,20 +4477,21 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       ctx.lineCap     = 'butt';
 
       // Number
-      ctx.font        = 'bold 58px system-ui';
-      ctx.fillStyle   = '#ffffff';
-      ctx.textAlign   = 'center';
-      ctx.textBaseline= 'middle';
+      ctx.font         = 'bold 60px system-ui';
+      ctx.fillStyle    = '#ffffff';
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'middle';
       ctx.fillText(String(d.val), cx, cy);
 
       // Label
-      ctx.textBaseline = 'alphabetic';
-      ctx.font         = '22px system-ui';
+      ctx.font         = '21px system-ui';
       ctx.fillStyle    = 'rgba(255,255,255,0.5)';
-      ctx.fillText(d.label, cx, cy + DIAL_R + 42);
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(d.label, cx, cy + DIAL_R + 40);
     }});
 
-    // 5. Divider line
+    // 5. Divider
     const divY = DIAL_Y + DIAL_R + 80;
     ctx.beginPath();
     ctx.moveTo(PAD, divY);
@@ -4516,59 +4501,44 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     ctx.stroke();
 
     // 6. Quote
-    const quote    = '\u201c{mot_quote}\u201d';
-    const quoteY   = divY + 70;
-    const maxWidth = EXPORT_W - PAD * 2;
-    ctx.font        = 'italic 46px Georgia, serif';
-    ctx.fillStyle   = 'rgba(255,255,255,0.90)';
-    ctx.textAlign   = 'center';
+    const quoteText = '\u201c{mot_quote}\u201d';
+    const quoteY    = divY + 72;
+    const maxWidth  = EXPORT_W - PAD * 2;
+    ctx.font         = 'italic 44px Georgia,serif';
+    ctx.fillStyle    = 'rgba(255,255,255,0.90)';
+    ctx.textAlign    = 'center';
     ctx.textBaseline = 'alphabetic';
-    wrapText(ctx, quote, EXPORT_W/2, quoteY, maxWidth, 66);
+    wrapText(ctx, quoteText, EXPORT_W / 2, quoteY, maxWidth, 64);
 
-    // 7. Footer — date only, bottom left, no ACI badge
+    // 7. Footer date
     const footY = EXPORT_H - 80;
-    ctx.font      = '28px system-ui';
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.textAlign = 'left';
+    ctx.font         = '26px system-ui';
+    ctx.fillStyle    = 'rgba(255,255,255,0.30)';
+    ctx.textAlign    = 'left';
+    ctx.textBaseline = 'alphabetic';
     ctx.fillText('{date_str}', PAD, footY);
 
-    // Download
+    // Export
     const a = document.createElement('a');
     a.download = 'aci-{dl_name}.png';
     a.href = out.toDataURL('image/png');
     a.click();
-    btn.textContent = 'Download story (1080×1920)';
+    btn.textContent = 'Download story (1080\u00d71920)';
     btn.disabled = false;
   }});
-
-  // Helpers
-  function roundRect(ctx, x, y, w, h, r) {{
-    ctx.beginPath();
-    ctx.moveTo(x+r, y);
-    ctx.lineTo(x+w-r, y);
-    ctx.quadraticCurveTo(x+w, y, x+w, y+r);
-    ctx.lineTo(x+w, y+h-r);
-    ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
-    ctx.lineTo(x+r, y+h);
-    ctx.quadraticCurveTo(x, y+h, x, y+h-r);
-    ctx.lineTo(x, y+r);
-    ctx.quadraticCurveTo(x, y, x+r, y);
-    ctx.closePath();
-  }}
 
   function wrapText(ctx, text, x, y, maxWidth, lineHeight) {{
     const words = text.split(' ');
     let line = '';
-    let cy = y;
+    let cy   = y;
     for (let i = 0; i < words.length; i++) {{
-      const testLine  = line + words[i] + ' ';
-      const metrics   = ctx.measureText(testLine);
-      if (metrics.width > maxWidth && i > 0) {{
+      const test = line + words[i] + ' ';
+      if (ctx.measureText(test).width > maxWidth && i > 0) {{
         ctx.fillText(line.trim(), x, cy);
         line = words[i] + ' ';
         cy  += lineHeight;
       }} else {{
-        line = testLine;
+        line = test;
       }}
     }}
     ctx.fillText(line.trim(), x, cy);
