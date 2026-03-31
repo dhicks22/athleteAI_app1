@@ -4450,14 +4450,12 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     ctx.fillRect(0, 0, EXPORT_W, EXPORT_H);
 
     const PAD  = 72;   // side padding px at 1080 wide
-    const CARD_TOP = EXPORT_H * 0.42; // card content starts ~42% down
+    const CARD_TOP = EXPORT_H * 0.52; // card content starts ~52% down
 
     // 3. Top bar — brand only, no date pill, no ACI badge
     ctx.font = '28px system-ui';
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.letterSpacing = '6px';
     ctx.fillText('ACI · ADAPTIVE COACHING', PAD, 90);
-    ctx.letterSpacing = '0px';
 
     // 4. Draw 4 dials — smaller to avoid bunching
     const DIAL_R    = 88;    // smaller radius
@@ -4502,12 +4500,10 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       ctx.fillText(String(d.val), cx, cy);
 
       // Label
-      ctx.font        = '22px system-ui';
-      ctx.fillStyle   = 'rgba(255,255,255,0.5)';
-      ctx.letterSpacing = '3px';
-      ctx.fillText(d.label, cx, cy + DIAL_R + 38);
-      ctx.letterSpacing = '0px';
-      ctx.textBaseline= 'alphabetic';
+      ctx.textBaseline = 'alphabetic';
+      ctx.font         = '22px system-ui';
+      ctx.fillStyle    = 'rgba(255,255,255,0.5)';
+      ctx.fillText(d.label, cx, cy + DIAL_R + 42);
     }});
 
     // 5. Divider line
@@ -4520,13 +4516,14 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     ctx.stroke();
 
     // 6. Quote
-    const quote    = `"{mot_quote}"`;
-    const quoteY   = divY + 60;
-    const maxWidth = EXPORT_W - PAD * 2.5;
-    ctx.font       = 'italic 44px system-ui';
-    ctx.fillStyle  = 'rgba(255,255,255,0.88)';
-    ctx.textAlign  = 'center';
-    wrapText(ctx, quote, EXPORT_W/2, quoteY, maxWidth, 60);
+    const quote    = '\u201c{mot_quote}\u201d';
+    const quoteY   = divY + 70;
+    const maxWidth = EXPORT_W - PAD * 2;
+    ctx.font        = 'italic 46px Georgia, serif';
+    ctx.fillStyle   = 'rgba(255,255,255,0.90)';
+    ctx.textAlign   = 'center';
+    ctx.textBaseline = 'alphabetic';
+    wrapText(ctx, quote, EXPORT_W/2, quoteY, maxWidth, 66);
 
     // 7. Footer — date only, bottom left, no ACI badge
     const footY = EXPORT_H - 80;
