@@ -4504,7 +4504,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     const quoteText = '\u201c{mot_quote}\u201d';
     const quoteY    = divY + 72;
     const maxWidth  = EXPORT_W - PAD * 2;
-    ctx.font         = 'italic 44px Georgia,serif';
+    ctx.font         = 'italic 44px system-ui,sans-serif';
     ctx.fillStyle    = 'rgba(255,255,255,0.90)';
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'alphabetic';
