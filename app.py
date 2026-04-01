@@ -4183,12 +4183,6 @@ def show_share_card(n, athlete_id, is_open):
     d_sp  = int(round(min((streak / 31) * 100, 100)))
     d_sn  = streak
 
-    # Pre-compute stroke-dashoffset values for SVG dials
-    ro_r  = round(circ * (1 - min(max(d_r,  0), 100) / 100), 1)
-    ro_n  = round(circ * (1 - min(max(d_n,  0), 100) / 100), 1)
-    ro_e  = round(circ * (1 - min(max(d_e,  0), 100) / 100), 1)
-    ro_sp = round(circ * (1 - min(max(d_sp, 0), 100) / 100), 1)
-
     # Share card: fixed colours per dial position, streak = pink
     # These are intentionally different from the app dials which are score-dynamic
     c_r  = "#1E88E5"   # readiness  — always blue
@@ -4214,24 +4208,11 @@ def show_share_card(n, athlete_id, is_open):
     # ── get motivational quote for share card ────────────────
     try:
         mot_sys = (
-            "You are a high-performance sprint and strength coach. "
-            "Write ONE sentence for an athlete's shareable training card. "
-            "Rules:\n"
-            "- Max 14 words.\n"
-            "- Address the athlete by first name.\n"
-            "- Blend something concrete (streak, readiness, sessions completed) with one sharp image or phrase that lands emotionally.\n"
-            "- Rotate between styles: sometimes data-led ('10 days, 78 readiness — the track is yours'), sometimes identity-led ('Dylan, this is what consistent looks like'), sometimes forward-looking ('the work compounds, Dylan — keep going').\n"
-            "- BANNED words: greatness, dedication, potential, journey, warrior, beast, grind, hustle, amazing, incredible, champion.\n"
-            "- No hashtags. No exclamation marks. Never generic fitness-brand filler.\n"
-            "- Tone: sharp, personal — like a coach texting an athlete they know well."
+            "You are a high-performance coach. Write ONE short motivational sentence (max 12 words) "
+            "for an athlete's shareable training card. No hashtags, no exclamation marks. "
+            "Tone: sharp, personal, confident. Address them by first name."
         )
-        mot_usr = (
-            f"Athlete: {first_name}. "
-            f"Readiness: {d_r}/100. "
-            f"Streak: {d_sn} consecutive days. "
-            f"Date: {date_str}. "
-            f"Exposure (sessions completed this week): {d_e}%."
-        )
+        mot_usr = f"Athlete: {first_name}. Readiness: {d_r}/100. Streak: {d_sn} days. Date: {date_str}."
         mot_quote = call_openai_chat(
             [{"role": "system", "content": mot_sys}, {"role": "user", "content": mot_usr}],
             max_tokens=40,
@@ -4301,7 +4282,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
         <svg width="52" height="52" viewBox="0 0 52 52">
           <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
           <circle cx="26" cy="26" r="21" fill="none" stroke="{c_r}" stroke-width="4"
-            stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro_r}"
+            stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro(d_r)}"
             transform="rotate(-90 26 26)"/>
           <text x="26" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="system-ui">{d_r}</text>
         </svg>
@@ -4311,7 +4292,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
         <svg width="52" height="52" viewBox="0 0 52 52">
           <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
           <circle cx="26" cy="26" r="21" fill="none" stroke="{c_n}" stroke-width="4"
-            stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro_n}"
+            stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro(d_n)}"
             transform="rotate(-90 26 26)"/>
           <text x="26" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="system-ui">{d_n}</text>
         </svg>
@@ -4321,7 +4302,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
         <svg width="52" height="52" viewBox="0 0 52 52">
           <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
           <circle cx="26" cy="26" r="21" fill="none" stroke="{c_e}" stroke-width="4"
-            stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro_e}"
+            stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro(d_e)}"
             transform="rotate(-90 26 26)"/>
           <text x="26" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="system-ui">{d_e}</text>
         </svg>
@@ -4331,7 +4312,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
         <svg width="52" height="52" viewBox="0 0 52 52">
           <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
           <circle cx="26" cy="26" r="21" fill="none" stroke="{c_sp}" stroke-width="4"
-            stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro_sp}"
+            stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro(d_sp)}"
             transform="rotate(-90 26 26)"/>
           <text x="26" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="system-ui">{d_sn}</text>
         </svg>
