@@ -2232,19 +2232,15 @@ app.index_string = """
         <style>
           /* Dropdown menus — full height, scrollable, above everything */
           .aw-dropdown .Select-menu-outer,
-          .aw-dropdown .Select-menu,
-          .dd-top .Select-menu-outer,
-          .dd-top .Select-menu {
+          .dd-top .Select-menu-outer {
             max-height: 300px !important;
             overflow-y: auto !important;
             -webkit-overflow-scrolling: touch !important;
             position: absolute !important;
+            z-index: 9999 !important;
           }
-          /* Primary opens upward so it clears the secondary below */
-          .dd-top .VirtualizedSelectFocusedOption,
-          .dd-top .VirtualizedSelectOption,
-          .dd-top .Select-option,
-          .aw-dropdown .Select-option {
+          .aw-dropdown .Select-option,
+          .dd-top .Select-option {
             min-height: 48px !important;
             padding: 12px 14px !important;
             font-size: 14px !important;
@@ -2253,13 +2249,10 @@ app.index_string = """
             align-items: center !important;
             white-space: normal !important;
           }
-          /* Prevent parent containers from clipping the open menu */
-          .session-input-container,
-          .session-input-container * {
-            overflow: visible !important;
-          }
-          .session-input-container .row,
-          .session-input-container .col {
+          /* Only the dropdown wrapper divs need overflow visible, not everything */
+          .dd-top,
+          .dd-top .Select,
+          .dd-top .Select-control {
             overflow: visible !important;
           }
         </style>
