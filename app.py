@@ -2598,7 +2598,7 @@ def build_main_layout(auth_data):
                         dbc.Col([
 
                             html.Div([
-                                dbc.Label("Primary Coaching Feedback"),
+                                dbc.Label("Primary Coaching Feedback (select)"),
                                 dcc.RadioItems(
                                     id="ai-mode-1",
                                     options=[
@@ -2615,7 +2615,7 @@ def build_main_layout(auth_data):
                                 ),
                             ], style={"marginBottom": "16px"}),
                             html.Div([
-                                dbc.Label("Secondary Coaching Feedback"),
+                                dbc.Label("Secondary Coaching Feedback (select)"),
                                 dcc.RadioItems(
                                     id="ai-mode-2",
                                     options=[
