@@ -2230,21 +2230,30 @@ app.index_string = """
 
         <title>Adaptive Coaching Intelligence</title>
         <style>
-          /* Force dropdown menus to show all options and scroll on mobile */
+          /* Dropdown menus — full height, scrollable, above everything */
           .aw-dropdown .Select-menu-outer,
-          .aw-dropdown .Select-menu,
-          .Select-menu-outer {
-            max-height: 280px !important;
+          .dd-top .Select-menu-outer {
+            max-height: 300px !important;
             overflow-y: auto !important;
             -webkit-overflow-scrolling: touch !important;
+            position: absolute !important;
             z-index: 9999 !important;
           }
-          .VirtualizedSelectOption,
-          .Select-option {
-            min-height: 44px !important;
-            line-height: 44px !important;
-            padding: 0 12px !important;
+          .aw-dropdown .Select-option,
+          .dd-top .Select-option {
+            min-height: 48px !important;
+            padding: 12px 14px !important;
             font-size: 14px !important;
+            line-height: 1.3 !important;
+            display: flex !important;
+            align-items: center !important;
+            white-space: normal !important;
+          }
+          /* Only the dropdown wrapper divs need overflow visible, not everything */
+          .dd-top,
+          .dd-top .Select,
+          .dd-top .Select-control {
+            overflow: visible !important;
           }
         </style>
         {%css%}
@@ -2579,11 +2588,11 @@ def build_main_layout(auth_data):
                                     placeholder="Select coach type",
                                     searchable=False,
                                     clearable=False,
-                                    optionHeight=48,
-                                    style={"fontSize": "14px"},
-                                    className="aw-dropdown",
+                                    optionHeight=52,
+                                    style={"fontSize": "14px", "zIndex": 2000},
+                                    className="aw-dropdown dd-top",
                                 ),
-                            ], style={"marginBottom": "12px"}),
+                            ], style={"marginBottom": "12px", "position": "relative", "zIndex": 2000}),
                             html.Div([
                                 dbc.Label("Secondary Coaching Feedback"),
                                 dcc.Dropdown(
@@ -2599,11 +2608,11 @@ def build_main_layout(auth_data):
                                     placeholder="Select coach type",
                                     searchable=False,
                                     clearable=False,
-                                    optionHeight=48,
-                                    style={"fontSize": "14px"},
-                                    className="aw-dropdown",
+                                    optionHeight=52,
+                                    style={"fontSize": "14px", "zIndex": 1000},
+                                    className="aw-dropdown dd-top",
                                 ),
-                            ], style={"marginBottom": "4px"}),
+                            ], style={"marginBottom": "4px", "position": "relative", "zIndex": 1000}),
                             dbc.Button(
                                 "Log Session & Generate Coaching Feedback",
                                 id="btn-generate-ai",
@@ -4440,6 +4449,17 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       '<polyline points="21 15 16 10 5 21"/></svg> Change photo';
   }});
 
+    // Detect iOS Safari — can't auto-download canvas images
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  const isiOSSafari = isIOS || isSafari;
+
+  if (isiOSSafari) {{
+    document.getElementById('hint').innerHTML =
+      '\u26a0\ufe0f iPhone: tap Download, then long-press the image \u2192 Save to Photos';
+    document.getElementById('hint').style.color = 'rgba(255,200,80,0.9)';
+  }}
+
   document.getElementById('dlBtn').addEventListener('click', function() {{
     const btn = this;
     btn.textContent = 'Generating\u2026';
@@ -4565,10 +4585,28 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 
     // Export
     const a = document.createElement('a');
-    a.download = 'aci-{dl_name}.png';
-    a.href = out.toDataURL('image/png');
-    a.click();
-    btn.textContent = 'Download story (1080\u00d71920)';
+    const imgData = out.toDataURL('image/png');
+    if (isiOSSafari) {{
+      const newTab = window.open();
+      if (newTab) {{
+        newTab.document.write(
+          '<html><head><title>ACI Share Card</title><meta name=\"viewport\" content=\"width=device-width\"></head>' +
+          '<body style=\"margin:0;background:#111;display:flex;flex-direction:column;align-items:center;padding:16px;\">' +
+          '<p style=\"color:#fff;font-size:14px;margin-bottom:12px;\">Long-press the image below \u2192 Save to Photos</p>' +
+          '<img src=\"' + imgData + '\" style=\"max-width:100%;border-radius:12px;\" />' +
+          '</body></html>'
+        );
+        newTab.document.close();
+      }}
+      btn.textContent = '\u2705 Opened \u2014 save from new tab';
+      btn.style.background = '#2E7D32';
+    }} else {{
+      const a = document.createElement('a');
+      a.download = 'aci-{dl_name}.png';
+      a.href = imgData;
+      a.click();
+      btn.textContent = 'Download story (1080\u00d71920)';
+    }}
     btn.disabled = false;
   }});
 
