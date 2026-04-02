@@ -2230,37 +2230,21 @@ app.index_string = """
 
         <title>Adaptive Coaching Intelligence</title>
         <style>
-          /* Dropdown menus — full height, scrollable, above everything */
+          /* Force dropdown menus to show all options and scroll on mobile */
           .aw-dropdown .Select-menu-outer,
           .aw-dropdown .Select-menu,
-          .dd-top .Select-menu-outer,
-          .dd-top .Select-menu {
-            max-height: 300px !important;
+          .Select-menu-outer {
+            max-height: 280px !important;
             overflow-y: auto !important;
             -webkit-overflow-scrolling: touch !important;
-            position: absolute !important;
+            z-index: 9999 !important;
           }
-          /* Primary opens upward so it clears the secondary below */
-          .dd-top .VirtualizedSelectFocusedOption,
-          .dd-top .VirtualizedSelectOption,
-          .dd-top .Select-option,
-          .aw-dropdown .Select-option {
-            min-height: 48px !important;
-            padding: 12px 14px !important;
+          .VirtualizedSelectOption,
+          .Select-option {
+            min-height: 44px !important;
+            line-height: 44px !important;
+            padding: 0 12px !important;
             font-size: 14px !important;
-            line-height: 1.3 !important;
-            display: flex !important;
-            align-items: center !important;
-            white-space: normal !important;
-          }
-          /* Prevent parent containers from clipping the open menu */
-          .session-input-container,
-          .session-input-container * {
-            overflow: visible !important;
-          }
-          .session-input-container .row,
-          .session-input-container .col {
-            overflow: visible !important;
           }
         </style>
         {%css%}
@@ -2595,11 +2579,11 @@ def build_main_layout(auth_data):
                                     placeholder="Select coach type",
                                     searchable=False,
                                     clearable=False,
-                                    optionHeight=52,
-                                    style={"fontSize": "14px", "zIndex": 2000},
-                                    className="aw-dropdown dd-top",
+                                    optionHeight=48,
+                                    style={"fontSize": "14px"},
+                                    className="aw-dropdown",
                                 ),
-                            ], style={"marginBottom": "12px", "position": "relative", "zIndex": 2000}),
+                            ], style={"marginBottom": "12px"}),
                             html.Div([
                                 dbc.Label("Secondary Coaching Feedback"),
                                 dcc.Dropdown(
@@ -2615,11 +2599,11 @@ def build_main_layout(auth_data):
                                     placeholder="Select coach type",
                                     searchable=False,
                                     clearable=False,
-                                    optionHeight=52,
-                                    style={"fontSize": "14px", "zIndex": 1000},
-                                    className="aw-dropdown dd-top",
+                                    optionHeight=48,
+                                    style={"fontSize": "14px"},
+                                    className="aw-dropdown",
                                 ),
-                            ], style={"marginBottom": "4px", "position": "relative", "zIndex": 1000}),
+                            ], style={"marginBottom": "4px"}),
                             dbc.Button(
                                 "Log Session & Generate Coaching Feedback",
                                 id="btn-generate-ai",
