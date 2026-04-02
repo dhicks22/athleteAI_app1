@@ -2230,37 +2230,54 @@ app.index_string = """
 
         <title>Adaptive Coaching Intelligence</title>
         <style>
-          /* Dropdown menus — full height, scrollable, above everything */
-          .aw-dropdown .Select-menu-outer,
-          .aw-dropdown .Select-menu,
-          .dd-top .Select-menu-outer,
-          .dd-top .Select-menu {
+          /* Coach selector — pill-style radio buttons, fully touch-friendly */
+          .coach-radio {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 6px;
+          }
+          .coach-radio-input {
+            display: none !important;
+          }
+          .coach-radio-label {
+            display: inline-block;
+            padding: 8px 12px;
+            border-radius: 20px;
+            border: 1.5px solid #d0d0d0;
+            background: #f8f8f8;
+            color: #444;
+            font-size: 13px;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+          }
+          .coach-radio-label:active {
+            transform: scale(0.97);
+          }
+          /* Selected state — Dash adds class to the label's parent span */
+          .coach-radio .radio-items .radio-inline input:checked + label,
+          input[type="radio"]:checked ~ .coach-radio-label,
+          .coach-radio label:has(input:checked) {
+            background: #1E88E5;
+            border-color: #1E88E5;
+            color: white;
+            font-weight: 600;
+          }
+          /* Dash-specific selected label styling */
+          .coach-radio [class*="selected"] .coach-radio-label,
+          .coach-radio .radio-item-selected .coach-radio-label {
+            background: #1E88E5 !important;
+            border-color: #1E88E5 !important;
+            color: white !important;
+          }
+          /* Keep old dropdown CSS for the AI plan coach dropdown */
+          .aw-dropdown .Select-menu-outer {
             max-height: 300px !important;
             overflow-y: auto !important;
-            -webkit-overflow-scrolling: touch !important;
-            position: absolute !important;
-          }
-          /* Primary opens upward so it clears the secondary below */
-          .dd-top .VirtualizedSelectFocusedOption,
-          .dd-top .VirtualizedSelectOption,
-          .dd-top .Select-option,
-          .aw-dropdown .Select-option {
-            min-height: 48px !important;
-            padding: 12px 14px !important;
-            font-size: 14px !important;
-            line-height: 1.3 !important;
-            display: flex !important;
-            align-items: center !important;
-            white-space: normal !important;
-          }
-          /* Prevent parent containers from clipping the open menu */
-          .session-input-container,
-          .session-input-container * {
-            overflow: visible !important;
-          }
-          .session-input-container .row,
-          .session-input-container .col {
-            overflow: visible !important;
+            z-index: 9999 !important;
           }
         </style>
         {%css%}
@@ -2582,44 +2599,38 @@ def build_main_layout(auth_data):
 
                             html.Div([
                                 dbc.Label("Primary Coaching Feedback"),
-                                dcc.Dropdown(
+                                dcc.RadioItems(
                                     id="ai-mode-1",
                                     options=[
-                                        {"label": "Acceleration & Speed Coach", "value": "Acceleration & Speed Coach"},
-                                        {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
-                                        {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
-                                        {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
-                                        {"label": "Recovery & Readiness Coach", "value": "Recovery & Readiness Coach"},
+                                        {"label": "Acceleration & Speed", "value": "Acceleration & Speed Coach"},
+                                        {"label": "Tempo & Endurance", "value": "Tempo & Endurance Coach"},
+                                        {"label": "Technical Sprint", "value": "Technical Sprint Coach"},
+                                        {"label": "Strength & Power", "value": "Strength & Power Coach"},
+                                        {"label": "Recovery & Readiness", "value": "Recovery & Readiness Coach"},
                                     ],
                                     value=None,
-                                    placeholder="Select coach type",
-                                    searchable=False,
-                                    clearable=False,
-                                    optionHeight=52,
-                                    style={"fontSize": "14px", "zIndex": 2000},
-                                    className="aw-dropdown dd-top",
+                                    className="coach-radio",
+                                    inputClassName="coach-radio-input",
+                                    labelClassName="coach-radio-label",
                                 ),
-                            ], style={"marginBottom": "12px", "position": "relative", "zIndex": 2000}),
+                            ], style={"marginBottom": "16px"}),
                             html.Div([
                                 dbc.Label("Secondary Coaching Feedback"),
-                                dcc.Dropdown(
+                                dcc.RadioItems(
                                     id="ai-mode-2",
                                     options=[
-                                        {"label": "Acceleration & Speed Coach", "value": "Acceleration & Speed Coach"},
-                                        {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
-                                        {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
-                                        {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
-                                        {"label": "Recovery & Readiness Coach", "value": "Recovery & Readiness Coach"},
+                                        {"label": "Acceleration & Speed", "value": "Acceleration & Speed Coach"},
+                                        {"label": "Tempo & Endurance", "value": "Tempo & Endurance Coach"},
+                                        {"label": "Technical Sprint", "value": "Technical Sprint Coach"},
+                                        {"label": "Strength & Power", "value": "Strength & Power Coach"},
+                                        {"label": "Recovery & Readiness", "value": "Recovery & Readiness Coach"},
                                     ],
                                     value=None,
-                                    placeholder="Select coach type",
-                                    searchable=False,
-                                    clearable=False,
-                                    optionHeight=52,
-                                    style={"fontSize": "14px", "zIndex": 1000},
-                                    className="aw-dropdown dd-top",
+                                    className="coach-radio",
+                                    inputClassName="coach-radio-input",
+                                    labelClassName="coach-radio-label",
                                 ),
-                            ], style={"marginBottom": "4px", "position": "relative", "zIndex": 1000}),
+                            ], style={"marginBottom": "4px"}),
                             dbc.Button(
                                 "Log Session & Generate Coaching Feedback",
                                 id="btn-generate-ai",
@@ -3703,6 +3714,34 @@ def reset_inputs(n):
         raise PreventUpdate
     return no_update, 3, 3, 3, 3, 3, 3, "", "", ""
 
+
+app.clientside_callback(
+    """
+    function(val1, val2) {
+        // Style primary coach radio pills
+        var radios1 = document.querySelectorAll('.coach-radio .coach-radio-label');
+        radios1.forEach(function(lbl) {
+            var inp = lbl.previousElementSibling;
+            if (inp && inp.checked) {
+                lbl.style.background = '#1E88E5';
+                lbl.style.borderColor = '#1E88E5';
+                lbl.style.color = 'white';
+                lbl.style.fontWeight = '600';
+            } else {
+                lbl.style.background = '#f8f8f8';
+                lbl.style.borderColor = '#d0d0d0';
+                lbl.style.color = '#444';
+                lbl.style.fontWeight = 'normal';
+            }
+        });
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("active-tab-store", "data", allow_duplicate=True),
+    Input("ai-mode-1", "value"),
+    Input("ai-mode-2", "value"),
+    prevent_initial_call=True,
+)
 
 app.clientside_callback(
     """
