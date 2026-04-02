@@ -2229,6 +2229,24 @@ app.index_string = """
         <link rel="apple-touch-icon" href="/assets/icon-192.png">
 
         <title>Adaptive Coaching Intelligence</title>
+        <style>
+          /* Force dropdown menus to show all options and scroll on mobile */
+          .aw-dropdown .Select-menu-outer,
+          .aw-dropdown .Select-menu,
+          .Select-menu-outer {
+            max-height: 280px !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            z-index: 9999 !important;
+          }
+          .VirtualizedSelectOption,
+          .Select-option {
+            min-height: 44px !important;
+            line-height: 44px !important;
+            padding: 0 12px !important;
+            font-size: 14px !important;
+          }
+        </style>
         {%css%}
     </head>
     <body>
@@ -2546,57 +2564,46 @@ def build_main_layout(auth_data):
 
                         dbc.Col([
 
-                            dbc.Row(
-                                [
-                                    dbc.Col(
-                                        [
-                                            dbc.Label("Primary Coaching Feedback"),
-                                            dcc.Dropdown(
-                                                id="ai-mode-1",
-                                                options=[
-                                                    {"label": "Acceleration & Speed Coach", "value": "Acceleration & Speed Coach"},
-                                                    {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
-                                                    {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
-                                                    {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
-                                                    {"label": "Recovery & Readiness Coach", "value": "Recovery & Readiness Coach"},
-                                                ],
-                                                value=None,
-                                                placeholder="Select Coach Feedback",
-                                                searchable=False,
-                                                clearable=False,
-                                                optionHeight=44,
-                                                style={"fontSize": "13px"},
-                                                className="aw-dropdown",
-                                            ),
-                                        ],
-                                        md=6,
-                                    ),
-                                    dbc.Col(
-                                        [
-                                            dbc.Label("Secondary Coaching Feedback"),
-                                            dcc.Dropdown(
-                                                id="ai-mode-2",
-                                                options=[
-                                                    {"label": "Acceleration & Speed Coach", "value": "Acceleration & Speed Coach"},
-                                                    {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
-                                                    {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
-                                                    {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
-                                                    {"label": "Recovery & Readiness Coach", "value": "Recovery & Readiness Coach"},
-                                                ],
-                                                value=None,
-                                                placeholder="Select Coach Feedback",
-                                                searchable=False,
-                                                clearable=False,
-                                                optionHeight=44,
-                                                style={"fontSize": "13px"},
-                                                className="aw-dropdown",
-                                            ),
-                                        ],
-                                        md=6,
-                                    ),
-                                ],
-                                className="g-3",
-                            ),
+                            html.Div([
+                                dbc.Label("Primary Coaching Feedback"),
+                                dcc.Dropdown(
+                                    id="ai-mode-1",
+                                    options=[
+                                        {"label": "Acceleration & Speed Coach", "value": "Acceleration & Speed Coach"},
+                                        {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
+                                        {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
+                                        {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
+                                        {"label": "Recovery & Readiness Coach", "value": "Recovery & Readiness Coach"},
+                                    ],
+                                    value=None,
+                                    placeholder="Select coach type",
+                                    searchable=False,
+                                    clearable=False,
+                                    optionHeight=48,
+                                    style={"fontSize": "14px"},
+                                    className="aw-dropdown",
+                                ),
+                            ], style={"marginBottom": "12px"}),
+                            html.Div([
+                                dbc.Label("Secondary Coaching Feedback"),
+                                dcc.Dropdown(
+                                    id="ai-mode-2",
+                                    options=[
+                                        {"label": "Acceleration & Speed Coach", "value": "Acceleration & Speed Coach"},
+                                        {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
+                                        {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
+                                        {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
+                                        {"label": "Recovery & Readiness Coach", "value": "Recovery & Readiness Coach"},
+                                    ],
+                                    value=None,
+                                    placeholder="Select coach type",
+                                    searchable=False,
+                                    clearable=False,
+                                    optionHeight=48,
+                                    style={"fontSize": "14px"},
+                                    className="aw-dropdown",
+                                ),
+                            ], style={"marginBottom": "4px"}),
                             dbc.Button(
                                 "Log Session & Generate Coaching Feedback",
                                 id="btn-generate-ai",
