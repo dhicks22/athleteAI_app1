@@ -2229,40 +2229,6 @@ app.index_string = """
         <link rel="apple-touch-icon" href="/assets/icon-192.png">
 
         <title>Adaptive Coaching Intelligence</title>
-        <style>
-          /* Dropdown menus — full height, scrollable, above everything */
-          .aw-dropdown .Select-menu-outer,
-          .aw-dropdown .Select-menu,
-          .dd-top .Select-menu-outer,
-          .dd-top .Select-menu {
-            max-height: 300px !important;
-            overflow-y: auto !important;
-            -webkit-overflow-scrolling: touch !important;
-            position: absolute !important;
-          }
-          /* Primary opens upward so it clears the secondary below */
-          .dd-top .VirtualizedSelectFocusedOption,
-          .dd-top .VirtualizedSelectOption,
-          .dd-top .Select-option,
-          .aw-dropdown .Select-option {
-            min-height: 48px !important;
-            padding: 12px 14px !important;
-            font-size: 14px !important;
-            line-height: 1.3 !important;
-            display: flex !important;
-            align-items: center !important;
-            white-space: normal !important;
-          }
-          /* Prevent parent containers from clipping the open menu */
-          .session-input-container,
-          .session-input-container * {
-            overflow: visible !important;
-          }
-          .session-input-container .row,
-          .session-input-container .col {
-            overflow: visible !important;
-          }
-        </style>
         {%css%}
     </head>
     <body>
@@ -2580,46 +2546,57 @@ def build_main_layout(auth_data):
 
                         dbc.Col([
 
-                            html.Div([
-                                dbc.Label("Primary Coaching Feedback"),
-                                dcc.Dropdown(
-                                    id="ai-mode-1",
-                                    options=[
-                                        {"label": "Acceleration & Speed Coach", "value": "Acceleration & Speed Coach"},
-                                        {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
-                                        {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
-                                        {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
-                                        {"label": "Recovery & Readiness Coach", "value": "Recovery & Readiness Coach"},
-                                    ],
-                                    value=None,
-                                    placeholder="Select coach type",
-                                    searchable=False,
-                                    clearable=False,
-                                    optionHeight=52,
-                                    style={"fontSize": "14px", "zIndex": 2000},
-                                    className="aw-dropdown dd-top",
-                                ),
-                            ], style={"marginBottom": "12px", "position": "relative", "zIndex": 2000}),
-                            html.Div([
-                                dbc.Label("Secondary Coaching Feedback"),
-                                dcc.Dropdown(
-                                    id="ai-mode-2",
-                                    options=[
-                                        {"label": "Acceleration & Speed Coach", "value": "Acceleration & Speed Coach"},
-                                        {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
-                                        {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
-                                        {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
-                                        {"label": "Recovery & Readiness Coach", "value": "Recovery & Readiness Coach"},
-                                    ],
-                                    value=None,
-                                    placeholder="Select coach type",
-                                    searchable=False,
-                                    clearable=False,
-                                    optionHeight=52,
-                                    style={"fontSize": "14px", "zIndex": 1000},
-                                    className="aw-dropdown dd-top",
-                                ),
-                            ], style={"marginBottom": "4px", "position": "relative", "zIndex": 1000}),
+                            dbc.Row(
+                                [
+                                    dbc.Col(
+                                        [
+                                            dbc.Label("Primary Coaching Feedback"),
+                                            dcc.Dropdown(
+                                                id="ai-mode-1",
+                                                options=[
+                                                    {"label": "Acceleration & Speed Coach", "value": "Acceleration & Speed Coach"},
+                                                    {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
+                                                    {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
+                                                    {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
+                                                    {"label": "Recovery & Readiness Coach", "value": "Recovery & Readiness Coach"},
+                                                ],
+                                                value=None,
+                                                placeholder="Select Coach Feedback",
+                                                searchable=False,
+                                                clearable=False,
+                                                optionHeight=44,
+                                                style={"fontSize": "13px"},
+                                                className="aw-dropdown",
+                                            ),
+                                        ],
+                                        md=6,
+                                    ),
+                                    dbc.Col(
+                                        [
+                                            dbc.Label("Secondary Coaching Feedback"),
+                                            dcc.Dropdown(
+                                                id="ai-mode-2",
+                                                options=[
+                                                    {"label": "Acceleration & Speed Coach", "value": "Acceleration & Speed Coach"},
+                                                    {"label": "Tempo & Endurance Coach", "value": "Tempo & Endurance Coach"},
+                                                    {"label": "Technical Sprint Coach", "value": "Technical Sprint Coach"},
+                                                    {"label": "Strength & Power Coach", "value": "Strength & Power Coach"},
+                                                    {"label": "Recovery & Readiness Coach", "value": "Recovery & Readiness Coach"},
+                                                ],
+                                                value=None,
+                                                placeholder="Select Coach Feedback",
+                                                searchable=False,
+                                                clearable=False,
+                                                optionHeight=44,
+                                                style={"fontSize": "13px"},
+                                                className="aw-dropdown",
+                                            ),
+                                        ],
+                                        md=6,
+                                    ),
+                                ],
+                                className="g-3",
+                            ),
                             dbc.Button(
                                 "Log Session & Generate Coaching Feedback",
                                 id="btn-generate-ai",
@@ -4456,17 +4433,6 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       '<polyline points="21 15 16 10 5 21"/></svg> Change photo';
   }});
 
-    // Detect iOS Safari — can't auto-download canvas images
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-  const isiOSSafari = isIOS || isSafari;
-
-  if (isiOSSafari) {{
-    document.getElementById('hint').innerHTML =
-      '\u26a0\ufe0f iPhone: tap Download, then long-press the image \u2192 Save to Photos';
-    document.getElementById('hint').style.color = 'rgba(255,200,80,0.9)';
-  }}
-
   document.getElementById('dlBtn').addEventListener('click', function() {{
     const btn = this;
     btn.textContent = 'Generating\u2026';
@@ -4592,28 +4558,10 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 
     // Export
     const a = document.createElement('a');
-    const imgData = out.toDataURL('image/png');
-    if (isiOSSafari) {{
-      const newTab = window.open();
-      if (newTab) {{
-        newTab.document.write(
-          '<html><head><title>ACI Share Card</title><meta name=\"viewport\" content=\"width=device-width\"></head>' +
-          '<body style=\"margin:0;background:#111;display:flex;flex-direction:column;align-items:center;padding:16px;\">' +
-          '<p style=\"color:#fff;font-size:14px;margin-bottom:12px;\">Long-press the image below \u2192 Save to Photos</p>' +
-          '<img src=\"' + imgData + '\" style=\"max-width:100%;border-radius:12px;\" />' +
-          '</body></html>'
-        );
-        newTab.document.close();
-      }}
-      btn.textContent = '\u2705 Opened \u2014 save from new tab';
-      btn.style.background = '#2E7D32';
-    }} else {{
-      const a = document.createElement('a');
-      a.download = 'aci-{dl_name}.png';
-      a.href = imgData;
-      a.click();
-      btn.textContent = 'Download story (1080\u00d71920)';
-    }}
+    a.download = 'aci-{dl_name}.png';
+    a.href = out.toDataURL('image/png');
+    a.click();
+    btn.textContent = 'Download story (1080\u00d71920)';
     btn.disabled = false;
   }});
 
