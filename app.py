@@ -4456,6 +4456,17 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       '<polyline points="21 15 16 10 5 21"/></svg> Change photo';
   }});
 
+    // Detect iOS Safari — can't auto-download canvas images
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  const isiOSSafari = isIOS || isSafari;
+
+  if (isiOSSafari) {{
+    document.getElementById('hint').innerHTML =
+      '\u26a0\ufe0f iPhone: tap Download, then long-press the image \u2192 Save to Photos';
+    document.getElementById('hint').style.color = 'rgba(255,200,80,0.9)';
+  }}
+
   document.getElementById('dlBtn').addEventListener('click', function() {{
     const btn = this;
     btn.textContent = 'Generating\u2026';
@@ -4581,10 +4592,28 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 
     // Export
     const a = document.createElement('a');
-    a.download = 'aci-{dl_name}.png';
-    a.href = out.toDataURL('image/png');
-    a.click();
-    btn.textContent = 'Download story (1080\u00d71920)';
+    const imgData = out.toDataURL('image/png');
+    if (isiOSSafari) {{
+      const newTab = window.open();
+      if (newTab) {{
+        newTab.document.write(
+          '<html><head><title>ACI Share Card</title><meta name=\"viewport\" content=\"width=device-width\"></head>' +
+          '<body style=\"margin:0;background:#111;display:flex;flex-direction:column;align-items:center;padding:16px;\">' +
+          '<p style=\"color:#fff;font-size:14px;margin-bottom:12px;\">Long-press the image below \u2192 Save to Photos</p>' +
+          '<img src=\"' + imgData + '\" style=\"max-width:100%;border-radius:12px;\" />' +
+          '</body></html>'
+        );
+        newTab.document.close();
+      }}
+      btn.textContent = '\u2705 Opened \u2014 save from new tab';
+      btn.style.background = '#2E7D32';
+    }} else {{
+      const a = document.createElement('a');
+      a.download = 'aci-{dl_name}.png';
+      a.href = imgData;
+      a.click();
+      btn.textContent = 'Download story (1080\u00d71920)';
+    }}
     btn.disabled = false;
   }});
 
