@@ -701,9 +701,17 @@ def compute_streaks(df: pd.DataFrame):
             logged_days.add(d)
 
     today = today_adl()
+    yesterday = today - dt.timedelta(days=1)
 
     streak = 0
-    cursor = today
+    # Grace period: if today isn't logged yet, start from yesterday.
+    # The streak only resets if BOTH today and yesterday are unlogged.
+    # This prevents the streak dropping to zero first thing in the morning.
+    if today in logged_days:
+        cursor = today
+    else:
+        cursor = yesterday
+
     while cursor in logged_days:
         streak += 1
         cursor -= dt.timedelta(days=1)
@@ -1648,7 +1656,7 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
 
         fig.update_layout(
             title="Weekly Training Load & Balance",
-            xaxis_title="Week (Sat–Fri)",
+            xaxis_title="",
             yaxis=dict(title="Load"),
             yaxis2=dict(
                 title="ACWR",
@@ -1725,7 +1733,7 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
 
     fig.update_layout(
         title="Daily Training Load & Balance",
-        xaxis_title="Date",
+        xaxis_title="",
         yaxis=dict(title="Load"),
         yaxis2=dict(
             title="ACWR",
@@ -1799,7 +1807,7 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
 
         fig.update_layout(
             title="Weekly Wellness Trends",
-            xaxis_title="Week",
+            xaxis_title="",
             yaxis=dict(
                 title="Scale (1–5)",
                 range=[0.8, 5.2],
@@ -1852,7 +1860,7 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
 
     fig.update_layout(
         title="Daily Wellness Trends",
-        xaxis_title="Date",
+        xaxis_title="",
         yaxis=dict(
             title="Scale (1–5)",
             range=[0.8, 5.2],
@@ -1956,7 +1964,7 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
 
         fig.update_layout(
             title="Daily Speed & Tempo Volumes",
-            xaxis_title="Date",
+            xaxis_title="",
             yaxis_title="Metres",
             barmode="stack",
             hovermode="x unified",
@@ -2042,7 +2050,7 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
 
     fig.update_layout(
         title="Weekly Speed & Tempo Volumes",
-        xaxis_title="Week",
+        xaxis_title="",
         yaxis_title="Metres",
         barmode="stack",
         hovermode="x unified",
@@ -2556,6 +2564,8 @@ def build_main_layout(auth_data):
                                                 placeholder="Select Coach Feedback",
                                                 searchable=False,
                                                 clearable=False,
+                                                optionHeight=44,
+                                                style={"fontSize": "13px"},
                                                 className="aw-dropdown",
                                             ),
                                         ],
@@ -2577,6 +2587,8 @@ def build_main_layout(auth_data):
                                                 placeholder="Select Coach Feedback",
                                                 searchable=False,
                                                 clearable=False,
+                                                optionHeight=44,
+                                                style={"fontSize": "13px"},
                                                 className="aw-dropdown",
                                             ),
                                         ],
