@@ -2234,46 +2234,43 @@ app.index_string = """
           .coach-radio {
             display: flex;
             flex-wrap: wrap;
-            gap: 6px;
-            margin-top: 6px;
+            gap: 8px;
+            margin-top: 8px;
           }
+          /* Hide the actual radio input circle */
           .coach-radio-input {
-            display: none !important;
+            position: absolute !important;
+            opacity: 0 !important;
+            width: 0 !important;
+            height: 0 !important;
+            pointer-events: none !important;
           }
           .coach-radio-label {
             display: inline-block;
-            padding: 8px 12px;
-            border-radius: 20px;
+            padding: 9px 14px;
+            border-radius: 22px;
             border: 1.5px solid #d0d0d0;
-            background: #f8f8f8;
-            color: #444;
+            background: #f5f5f5;
+            color: #555;
             font-size: 13px;
             cursor: pointer;
             user-select: none;
             -webkit-user-select: none;
-            transition: all 0.15s ease;
+            transition: background 0.12s, border-color 0.12s, color 0.12s;
             white-space: nowrap;
+            -webkit-tap-highlight-color: transparent;
           }
           .coach-radio-label:active {
-            transform: scale(0.97);
+            opacity: 0.8;
           }
-          /* Selected state — Dash adds class to the label's parent span */
-          .coach-radio .radio-items .radio-inline input:checked + label,
-          input[type="radio"]:checked ~ .coach-radio-label,
-          .coach-radio label:has(input:checked) {
-            background: #1E88E5;
-            border-color: #1E88E5;
-            color: white;
-            font-weight: 600;
-          }
-          /* Dash-specific selected label styling */
-          .coach-radio [class*="selected"] .coach-radio-label,
-          .coach-radio .radio-item-selected .coach-radio-label {
+          /* CSS fallback for browsers that support :has() */
+          .coach-radio div:has(input:checked) .coach-radio-label {
             background: #1E88E5 !important;
             border-color: #1E88E5 !important;
             color: white !important;
+            font-weight: 600 !important;
           }
-          /* Keep old dropdown CSS for the AI plan coach dropdown */
+          /* Keep dropdown CSS for AI plan coach dropdown */
           .aw-dropdown .Select-menu-outer {
             max-height: 300px !important;
             overflow-y: auto !important;
@@ -2598,7 +2595,7 @@ def build_main_layout(auth_data):
                         dbc.Col([
 
                             html.Div([
-                                dbc.Label("Primary Coaching Feedback (select)"),
+                                dbc.Label("Primary Coaching Feedback (select one)"),
                                 dcc.RadioItems(
                                     id="ai-mode-1",
                                     options=[
@@ -2615,7 +2612,7 @@ def build_main_layout(auth_data):
                                 ),
                             ], style={"marginBottom": "16px"}),
                             html.Div([
-                                dbc.Label("Secondary Coaching Feedback (select)"),
+                                dbc.Label("Secondary Coaching Feedback (select one)"),
                                 dcc.RadioItems(
                                     id="ai-mode-2",
                                     options=[
@@ -3718,22 +3715,36 @@ def reset_inputs(n):
 app.clientside_callback(
     """
     function(val1, val2) {
-        // Style primary coach radio pills
-        var radios1 = document.querySelectorAll('.coach-radio .coach-radio-label');
-        radios1.forEach(function(lbl) {
-            var inp = lbl.previousElementSibling;
-            if (inp && inp.checked) {
-                lbl.style.background = '#1E88E5';
-                lbl.style.borderColor = '#1E88E5';
-                lbl.style.color = 'white';
-                lbl.style.fontWeight = '600';
-            } else {
-                lbl.style.background = '#f8f8f8';
-                lbl.style.borderColor = '#d0d0d0';
-                lbl.style.color = '#444';
-                lbl.style.fontWeight = 'normal';
-            }
-        });
+        function styleRadioPills(containerSelector) {
+            var labels = document.querySelectorAll(containerSelector + ' .coach-radio-label');
+            var inputs = document.querySelectorAll(containerSelector + ' .coach-radio-input');
+            labels.forEach(function(lbl, i) {
+                var inp = inputs[i];
+                var isChecked = inp && inp.checked;
+                lbl.style.background    = isChecked ? '#1E88E5' : '#f8f8f8';
+                lbl.style.borderColor   = isChecked ? '#1E88E5' : '#d0d0d0';
+                lbl.style.color         = isChecked ? 'white'   : '#444';
+                lbl.style.fontWeight    = isChecked ? '600'     : 'normal';
+            });
+        }
+        // Small delay to let Dash finish updating the DOM
+        setTimeout(function() {
+            styleRadioPills('#ai-mode-1');
+            styleRadioPills('#ai-mode-2');
+            // Also target by parent div since Dash wraps in a div with the id
+            document.querySelectorAll('.coach-radio').forEach(function(el) {
+                var inputs = el.querySelectorAll('.coach-radio-input');
+                var labels = el.querySelectorAll('.coach-radio-label');
+                inputs.forEach(function(inp, i) {
+                    if (labels[i]) {
+                        labels[i].style.background  = inp.checked ? '#1E88E5' : '#f8f8f8';
+                        labels[i].style.borderColor = inp.checked ? '#1E88E5' : '#d0d0d0';
+                        labels[i].style.color       = inp.checked ? 'white'   : '#444';
+                        labels[i].style.fontWeight  = inp.checked ? '600'     : 'normal';
+                    }
+                });
+            });
+        }, 50);
         return window.dash_clientside.no_update;
     }
     """,
