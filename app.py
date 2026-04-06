@@ -4543,23 +4543,28 @@ def show_share_card(n, athlete_id, is_open):
     # ── get motivational quote for share card ────────────────
     try:
         mot_sys = (
-            "You are a high-performance sprint and strength coach. "
-            "Write ONE sentence for an athlete's shareable training card. "
+            "You are an elite performance analytics platform — think WHOOP, Oura, and Strava combined. "
+            "Write ONE sentence for an athlete's shareable training card that sounds like it came from a data-driven wearable insight. "
             "Rules:\n"
             "- Max 14 words.\n"
             "- Address the athlete by first name.\n"
-            "- Blend something concrete (streak, readiness, sessions completed) with one sharp image or phrase that lands emotionally.\n"
-            "- Rotate between styles: sometimes data-led ('10 days, 78 readiness — the track is yours'), sometimes identity-led ('Dylan, this is what consistent looks like'), sometimes forward-looking ('the work compounds, Dylan — keep going').\n"
-            "- BANNED words: greatness, dedication, potential, journey, warrior, beast, grind, hustle, amazing, incredible, champion.\n"
-            "- No hashtags. No exclamation marks. Never generic fitness-brand filler.\n"
-            "- Tone: sharp, personal — like a coach texting an athlete they know well."
+            "- Lead with the number — readiness score, streak, or exposure — then give it meaning.\n"
+            "- Style: clinical but motivating. Like a WHOOP recovery insight or Oura readiness summary.\n"
+            "- Examples of the tone: 'Dylan, 84 readiness — your body is primed, use it.', "
+            "'9 days logged, {first_name} — your strain is building exactly as it should.', "
+            "'{first_name}, 91% exposure this week — the data says you showed up.', "
+            "'HRV trending up, {first_name} — recovery is doing its job.'\n"
+            "- BANNED words: warrior, beast, grind, hustle, champion, journey, dedication, incredible, amazing, greatness.\n"
+            "- No hashtags. No exclamation marks. No emoji.\n"
+            "- Never vague or generic — every sentence must reference a specific number from the data."
         )
         mot_usr = (
             f"Athlete: {first_name}. "
-            f"Readiness: {d_r}/100. "
-            f"Streak: {d_sn} consecutive days. "
-            f"Date: {date_str}. "
-            f"Exposure (sessions completed this week): {d_e}%."
+            f"Readiness score: {d_r}/100. "
+            f"Neuromuscular score: {d_n}/100. "
+            f"Training streak: {d_sn} consecutive days. "
+            f"Weekly session exposure: {d_e}%. "
+            f"Date: {date_str}."
         )
         mot_quote = call_openai_chat(
             [{"role": "system", "content": mot_sys}, {"role": "user", "content": mot_usr}],
@@ -4688,7 +4693,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
   </label>
   <input type="file" id="photoInput" accept="image/*">
   <button id="dlBtn">Download story (1080&times;1920)</button>
-  <div id="hint">Full phone story size &mdash; ready for Instagram, Strava or WhatsApp</div>
+  <div id="hint">Full phone story size &mdash; ready for Instagram, Strava or WhatsApp &nbsp;&middot;&nbsp; Pinch to zoom preview &middot; Double-tap to reset</div>
 </div>
 
 <script>
@@ -4722,6 +4727,106 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 
   window.addEventListener('load', drawPreviewBg);
   window.addEventListener('resize', drawPreviewBg);
+
+  // ── Pinch-to-zoom on the preview (like Strava) ──────────
+  let currentScale = 1;
+  let startDist    = 0;
+  let startScale   = 1;
+  let originX      = 0;
+  let originY      = 0;
+  let translateX   = 0;
+  let translateY   = 0;
+  let isDragging   = false;
+  let dragStartX   = 0;
+  let dragStartY   = 0;
+  let lastTX       = 0;
+  let lastTY       = 0;
+
+  function applyTransform() {{
+    previewEl.style.transform =
+      `translate(${{translateX}}px, ${{translateY}}px) scale(${{currentScale}})`;
+    previewEl.style.transformOrigin = '50% 50%';
+  }}
+
+  function midpoint(t1, t2) {{
+    return {{
+      x: (t1.clientX + t2.clientX) / 2,
+      y: (t1.clientY + t2.clientY) / 2,
+    }};
+  }}
+
+  function dist(t1, t2) {{
+    const dx = t1.clientX - t2.clientX;
+    const dy = t1.clientY - t2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  }}
+
+  previewEl.style.transition = 'transform 0.05s ease-out';
+  previewEl.style.cursor = 'grab';
+  previewEl.style.touchAction = 'none';
+
+  previewEl.addEventListener('touchstart', function(e) {{
+    if (e.touches.length === 2) {{
+      e.preventDefault();
+      startDist  = dist(e.touches[0], e.touches[1]);
+      startScale = currentScale;
+      const mid  = midpoint(e.touches[0], e.touches[1]);
+      originX = mid.x;
+      originY = mid.y;
+    }} else if (e.touches.length === 1 && currentScale > 1) {{
+      isDragging = true;
+      dragStartX = e.touches[0].clientX - translateX;
+      dragStartY = e.touches[0].clientY - translateY;
+    }}
+  }}, {{ passive: false }});
+
+  previewEl.addEventListener('touchmove', function(e) {{
+    if (e.touches.length === 2) {{
+      e.preventDefault();
+      const newDist = dist(e.touches[0], e.touches[1]);
+      currentScale  = Math.min(4, Math.max(1, startScale * (newDist / startDist)));
+      applyTransform();
+    }} else if (e.touches.length === 1 && isDragging) {{
+      e.preventDefault();
+      translateX = e.touches[0].clientX - dragStartX;
+      translateY = e.touches[0].clientY - dragStartY;
+      applyTransform();
+    }}
+  }}, {{ passive: false }});
+
+  previewEl.addEventListener('touchend', function(e) {{
+    isDragging = false;
+    if (currentScale <= 1.05) {{
+      currentScale = 1;
+      translateX   = 0;
+      translateY   = 0;
+      previewEl.style.transition = 'transform 0.2s ease-out';
+      applyTransform();
+      setTimeout(() => previewEl.style.transition = 'transform 0.05s ease-out', 200);
+    }}
+  }});
+
+  // Mouse wheel zoom for desktop
+  previewEl.addEventListener('wheel', function(e) {{
+    e.preventDefault();
+    const delta  = e.deltaY > 0 ? 0.9 : 1.1;
+    currentScale = Math.min(4, Math.max(1, currentScale * delta));
+    if (currentScale <= 1) {{ translateX = 0; translateY = 0; }}
+    applyTransform();
+  }}, {{ passive: false }});
+
+  // Double-tap to reset
+  let lastTap = 0;
+  previewEl.addEventListener('touchend', function(e) {{
+    const now = Date.now();
+    if (now - lastTap < 300) {{
+      currentScale = 1; translateX = 0; translateY = 0;
+      previewEl.style.transition = 'transform 0.2s ease-out';
+      applyTransform();
+      setTimeout(() => previewEl.style.transition = 'transform 0.05s ease-out', 200);
+    }}
+    lastTap = now;
+  }});
 
   document.getElementById('photoInput').addEventListener('change', function(e) {{
     const file = e.target.files[0];
