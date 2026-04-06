@@ -595,6 +595,41 @@ def write_row(tab_name: str, row_idx_0: int, payload: dict):
     ws.update(values=[row], range_name=f"A{row_number}")
 
 
+def append_row_for_date(tab_name: str, date_obj: dt.date, payload: dict) -> int:
+    """
+    Appends a new row for the given date if one does not already exist.
+    Returns the 0-based pandas DataFrame index of the new row.
+    """
+    if sh is None:
+        raise RuntimeError("Google Sheets not connected")
+    ws = sh.worksheet(tab_name)
+    sheet_vals = ws.get_all_values()
+    if not sheet_vals:
+        raise RuntimeError("Sheet is empty — no headers found")
+
+    headers = sheet_vals[0]
+    new_row = [""] * len(headers)
+
+    # Always set the date
+    if "Date" in headers:
+        new_row[headers.index("Date")] = str(date_obj)
+
+    # Set athlete name from sheet name if column exists
+    if "Athlete" in headers:
+        new_row[headers.index("Athlete")] = tab_name
+
+    # Fill in all payload values that match headers
+    for col_name, value in payload.items():
+        if col_name in headers:
+            new_row[headers.index(col_name)] = "" if value is None else str(value)
+
+    ws.append_row(new_row, value_input_option="USER_ENTERED")
+
+    # After appending, the new row is at sheet row (len(sheet_vals) + 1) in 1-based terms.
+    # In 0-based DataFrame index terms (header excluded): len(sheet_vals) - 1
+    return len(sheet_vals) - 1
+
+
 def safe(df: pd.DataFrame, row_idx: int, col: str, default: str = "") -> str:
     try:
         if col in df.columns:
@@ -2572,6 +2607,92 @@ def build_main_layout(auth_data):
                                 ),
                             ]),
 
+                            # ── Session detail fields: shown when Workout is blank ───
+                            html.Div(
+                                id="unplanned-session-fields",
+                                style={"display": "none"},
+                                children=[
+                                    html.Div(
+                                        [
+                                            html.I(className="bi bi-pencil-square me-2"),
+                                            html.Strong("Session details not yet filled — please complete below"),
+                                        ],
+                                        style={
+                                            "background": "#fff8e1",
+                                            "border": "1px solid #ffe082",
+                                            "borderRadius": "8px",
+                                            "padding": "9px 13px",
+                                            "marginBottom": "12px",
+                                            "fontSize": "13px",
+                                            "color": "#5d4037",
+                                        }
+                                    ),
+                                    input_card([
+                                        html.Label("Workout / Session Type"),
+                                        dcc.Input(
+                                            id="unplanned-workout",
+                                            type="text",
+                                            placeholder="e.g., Speed session, Gym, Tempo run",
+                                            style={"width": "100%", "border": "none", "fontSize": "14px", "padding": "4px 0"},
+                                        ),
+                                    ]),
+                                    input_card([
+                                        html.Label("Focus"),
+                                        dcc.Input(
+                                            id="unplanned-focus",
+                                            type="text",
+                                            placeholder="e.g., Max velocity, Lower body strength",
+                                            style={"width": "100%", "border": "none", "fontSize": "14px", "padding": "4px 0"},
+                                        ),
+                                    ]),
+                                    input_card([
+                                        html.Label("Venue / Location"),
+                                        dcc.Input(
+                                            id="unplanned-venue",
+                                            type="text",
+                                            placeholder="e.g., Track, Gym, Park",
+                                            style={"width": "100%", "border": "none", "fontSize": "14px", "padding": "4px 0"},
+                                        ),
+                                    ]),
+                                    input_card([
+                                        html.Label("Key Distance (m)"),
+                                        dcc.Input(
+                                            id="unplanned-key-distance",
+                                            type="text",
+                                            placeholder="e.g., 30, 60, 100",
+                                            style={"width": "100%", "border": "none", "fontSize": "14px", "padding": "4px 0"},
+                                        ),
+                                    ]),
+                                    dbc.Row([
+                                        dbc.Col([
+                                            input_card([
+                                                html.Label("Duration (min)"),
+                                                dcc.Input(
+                                                    id="unplanned-duration",
+                                                    type="number",
+                                                    min=1, max=300, step=1,
+                                                    placeholder="e.g., 60",
+                                                    style={"width": "100%", "border": "none", "fontSize": "14px", "padding": "4px 0"},
+                                                ),
+                                            ]),
+                                        ], width=6),
+                                        dbc.Col([
+                                            input_card([
+                                                html.Label("Planned sRPE"),
+                                                dcc.Input(
+                                                    id="unplanned-srpe",
+                                                    type="number",
+                                                    min=1, max=10, step=0.5,
+                                                    placeholder="e.g., 6",
+                                                    style={"width": "100%", "border": "none", "fontSize": "14px", "padding": "4px 0"},
+                                                ),
+                                            ]),
+                                        ], width=6),
+                                    ]),
+                                ],
+                            ),
+
+
                             dbc.Label("Session RPE (1 = very easy, 5 = maximal)"),
                             dcc.Slider(id="slider-session-rpe", min=1, max=5, step=1, value=3),
 
@@ -3325,6 +3446,11 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
 
     # ── Not yet logged → open the input form directly ──
     if not status.get("logged", False):
+        # Check if this date has a planned row in the sheet
+        date_has_row = not df[df["Date"] == clicked_date].empty
+        # Show extra fields if no planned session exists for this date
+        unplanned_style = {"display": "none"} if date_has_row else {"display": "block"}
+        # We return no_update for unplanned-session-fields via a separate callback
         return False, no_update, no_update, {"display": "block"}, clicked_date_str, header
 
     # ── Already logged → build and show the read-only popup ──
@@ -3470,6 +3596,43 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
 # ============================================================
 
 @app.callback(
+    Output("unplanned-session-fields", "style"),
+    Input("selected-date-store", "data"),
+    State("athlete-dropdown", "value"),
+    prevent_initial_call=True,
+)
+def toggle_unplanned_fields(selected_date, athlete_name):
+    """
+    Show session detail fields (Workout, Focus, Venue, Key_Distance, sRPE, Duration)
+    only when the row for this date has no Workout value filled in by the coach.
+    If Workout is already populated, hide them — the standard form is sufficient.
+    """
+    if not selected_date or not athlete_name:
+        raise PreventUpdate
+    try:
+        df = load_tab(athlete_name)
+        if df is None or df.empty or "Date" not in df.columns:
+            return {"display": "block"}
+        df = df.copy()
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
+        d = pd.to_datetime(selected_date, errors="coerce").date()
+        match = df[df["Date"] == d]
+
+        # No row at all → show fields so athlete can describe their session
+        if match.empty:
+            return {"display": "block"}
+
+        # Row exists — only show if Workout is blank
+        row = match.iloc[-1]
+        workout_val = str(row.get("Workout", "")).strip().lower()
+        invalid = {"", "nan", "none", "nil", "-", "—", "tbc"}
+        workout_filled = workout_val not in invalid
+        return {"display": "none"} if workout_filled else {"display": "block"}
+    except Exception:
+        return {"display": "none"}
+
+
+@app.callback(
     Output("ctx-workout", "children"),
     Output("ctx-focus", "children"),
     Output("ctx-venue", "children"),
@@ -3550,6 +3713,12 @@ def populate_session_context(selected_date, athlete_name):
      State("athlete-notes", "value"),
      State("sets-reps-load", "value"),
      State("track-reps-times", "value"),
+     State("unplanned-workout", "value"),
+     State("unplanned-focus", "value"),
+     State("unplanned-venue", "value"),
+     State("unplanned-key-distance", "value"),
+     State("unplanned-duration", "value"),
+     State("unplanned-srpe", "value"),
      Input("slider-session-rpe", "value"),
      Input("slider-session-quality", "value"),
      Input("slider-sleep", "value"),
@@ -3562,6 +3731,7 @@ def save_and_ai(
     n_clicks, athlete_name, selected_date,
     ai_mode_1, ai_mode_2,
     notes, sets_reps_load, track_reps_times,
+    unplanned_workout, unplanned_focus, unplanned_venue, unplanned_key_distance, unplanned_duration, unplanned_srpe,
     rpe, session_quality, sleep, fatigue, mood, soreness,
 ):
     if not n_clicks:
@@ -3601,8 +3771,63 @@ def save_and_ai(
 
     row_matches = df.index[df["Date"] == selected_date_dt].tolist()
     if not row_matches:
-        return no_update, no_update, "⚠️ No session entry exists for this date."
-    row_idx = row_matches[0]
+        # No pre-planned row — create one from the athlete's inputs
+        try:
+            # Calculate sRPE = RPE × Duration if both provided
+            _dur       = int(unplanned_duration) if unplanned_duration else None
+            _srpe_plan = float(unplanned_srpe) if unplanned_srpe else None
+            # Load = planned sRPE × duration (session load model)
+            _load      = round(_srpe_plan * _dur, 1) if (_srpe_plan and _dur) else None
+
+            new_payload = {
+                "Date":         str(selected_date_dt),
+                "Workout":      (unplanned_workout or "").strip() or "Unplanned session",
+                "Focus":        (unplanned_focus or "").strip(),
+                "Venue":        (unplanned_venue or "").strip(),
+                "Key_Distance": str((unplanned_key_distance or "")).strip(),
+                "Duration":     str(_dur) if _dur else "",
+                "sRPE":         str(_srpe_plan) if _srpe_plan else "",
+                "Load":         str(_load) if _load else "",
+            }
+            row_idx = append_row_for_date(athlete_name, selected_date_dt, new_payload)
+            # Reload df so downstream code has the new row
+            df = load_tab(athlete_name)
+            if df is not None and not df.empty:
+                df = df.copy()
+                df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
+                row_matches = df.index[df["Date"] == selected_date_dt].tolist()
+                if row_matches:
+                    row_idx = row_matches[0]
+        except Exception as e:
+            return no_update, no_update, f"❌ Could not create row: {e}"
+    else:
+        row_idx = row_matches[0]
+        # If Workout was blank, write the athlete-entered session details into existing row
+        row = df.iloc[row_idx]
+        existing_workout = str(row.get("Workout", "")).strip().lower()
+        invalid_vals = {"", "nan", "none", "nil", "-", "—", "tbc"}
+        if existing_workout in invalid_vals and any([
+            unplanned_workout, unplanned_focus, unplanned_venue,
+            unplanned_key_distance, unplanned_duration, unplanned_srpe
+        ]):
+            _dur2       = int(unplanned_duration) if unplanned_duration else None
+            _srpe2      = float(unplanned_srpe) if unplanned_srpe else None
+            _load2      = round(_srpe2 * _dur2, 1) if (_srpe2 and _dur2) else None
+            detail_payload = {
+                "Workout":      (unplanned_workout or "").strip(),
+                "Focus":        (unplanned_focus or "").strip(),
+                "Venue":        (unplanned_venue or "").strip(),
+                "Key_Distance": str((unplanned_key_distance or "")).strip(),
+                "Duration":     str(_dur2) if _dur2 else "",
+                "sRPE":         str(_srpe2) if _srpe2 else "",
+                "Load":         str(_load2) if _load2 else "",
+            }
+            # Remove empty values so we don't overwrite pre-filled coach data with blanks
+            detail_payload = {k: v for k, v in detail_payload.items() if v}
+            try:
+                write_row(athlete_name, row_idx, detail_payload)
+            except Exception as e:
+                print(f"⚠️ Could not write session details: {e}")
 
     ai1, ai2 = make_ai_suggestions(
         athlete_name=athlete_name,
@@ -3620,7 +3845,19 @@ def save_and_ai(
         ai_mode_2=ai_mode_2,
     )
 
+    # Include unplanned session fields in payload if provided
+    unplanned_extras = {}
+    if unplanned_workout and unplanned_workout.strip():
+        unplanned_extras["Workout"]  = unplanned_workout.strip()
+    if unplanned_focus and unplanned_focus.strip():
+        unplanned_extras["Focus"]    = unplanned_focus.strip()
+    if unplanned_venue and unplanned_venue.strip():
+        unplanned_extras["Venue"]    = unplanned_venue.strip()
+    if unplanned_duration:
+        unplanned_extras["Duration"] = str(int(unplanned_duration))
+
     payload = {
+        **unplanned_extras,
         "RPE_Post_Session": rpe,
         "Session_1_5": session_quality,
         "Sleep_1_5": sleep,
