@@ -1545,9 +1545,12 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
         g = g[g["Load"] > 0].reset_index(drop=True)
         # Weekly data: span=4 weeks ≈ 28-day chronic, span=1 ≈ 7-day acute
         # Use min_periods=1 so lines show from first data point
-        g["Acute"]   = g["Load"].ewm(span=4,  adjust=False, min_periods=1).mean()
-        g["Chronic"] = g["Load"].ewm(span=16, adjust=False, min_periods=1).mean()
-        g["ACWR"]    = (g["Acute"] / g["Chronic"].replace(0, float("nan"))).clip(0, 2.5)
+        # alpha=1/N convention on weekly data: 4wk acute, 16wk chronic
+        g["Acute"]   = g["Load"].ewm(alpha=1/4,  adjust=False, min_periods=1).mean()
+        g["Chronic"] = g["Load"].ewm(alpha=1/16, adjust=False, min_periods=1).mean()
+        g["ACWR"]    = np.where(g["Chronic"] > 50,
+                                (g["Acute"] / g["Chronic"]).clip(0, 2.5),
+                                np.nan)
         x = g["Week"]
 
         fig.add_bar(x=x, y=g["Load"], name="Load",
@@ -1578,10 +1581,10 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
     d = d.reindex(full_idx)
     d["Load"] = pd.to_numeric(d["Load"], errors="coerce")
 
-    # Manually compute decaying EWMA through NaN gaps:
-    # On rest days (NaN), the EWMA decays by the alpha factor rather than resetting
-    alpha7  = 2 / (7  + 1)
-    alpha28 = 2 / (28 + 1)
+    # Sports-science EWMA convention: alpha = 1/N (matches Google Sheets EW formulas)
+    # This gives slower, more realistic decay through rest periods
+    alpha7  = 1 / 7
+    alpha28 = 1 / 28
     load_vals = d["Load"].values
     n = len(load_vals)
     ewma7  = np.full(n, np.nan)
@@ -1589,7 +1592,7 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
 
     for i in range(n):
         v = load_vals[i]
-        load_i = 0.0 if np.isnan(v) else float(v)  # rest day = 0 load contribution
+        load_i = 0.0 if np.isnan(v) else float(v)  # rest day contributes 0
         if i == 0:
             ewma7[i]  = load_i
             ewma28[i] = load_i
@@ -1599,9 +1602,12 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
 
     d["EWMA7"]  = ewma7
     d["EWMA28"] = ewma28
-    d["ACWR"]   = np.where(d["EWMA28"] > 10,
+
+    # Only show ACWR once chronic load is established (suppress first ~4 weeks)
+    # Use 50 as threshold — well below typical session loads of 300-900
+    d["ACWR"]   = np.where(d["EWMA28"] > 50,
                            (d["EWMA7"] / d["EWMA28"]).clip(0, 2.5),
-                           np.nan)  # suppress ACWR when chronic load too low to be meaningful
+                           np.nan)
 
     # Bars only on training days (NaN = no bar)
     d = d.reset_index().rename(columns={"index": "Date"})
