@@ -1535,21 +1535,23 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
     if view_mode == "weekly":
         d["Week"] = _week_agg_date(d["Date"])
         g = d.groupby("Week", as_index=False).agg(Load=("Load", lambda s: s.sum(min_count=1)))
-        g["EWMA7"]  = g["Load"].ewm(span=7,  adjust=False, min_periods=3).mean()
-        g["EWMA28"] = g["Load"].ewm(span=28, adjust=False, min_periods=10).mean()
-        g["ACWR"]   = g["EWMA7"] / g["EWMA28"]
+        # Weekly data: span=4 weeks ≈ 28-day chronic, span=1 ≈ 7-day acute
+        # Use min_periods=1 so lines show from first data point
+        g["Acute"]   = g["Load"].ewm(span=4,  adjust=False, min_periods=1).mean()
+        g["Chronic"] = g["Load"].ewm(span=16, adjust=False, min_periods=1).mean()
+        g["ACWR"]    = (g["Acute"] / g["Chronic"].replace(0, float("nan"))).clip(0, 2.5)
         x = g["Week"]
 
         fig.add_bar(x=x, y=g["Load"], name="Load",
                     marker=dict(color="rgba(30,107,214,0.35)", line=dict(color=_BLUE, width=1.8)),
                     hovertemplate="Load: %{y:,.0f}<extra></extra>")
-        fig.add_trace(go.Scatter(x=x, y=g["EWMA7"], name="Short-term Load", mode="lines",
+        fig.add_trace(go.Scatter(x=x, y=g["Acute"], name="4-wk Acute", mode="lines",
                                  line=dict(color=_TEAL, width=2.6), line_shape="spline", line_smoothing=0.75,
-                                 showlegend=False, hovertemplate="Short-term: %{y:,.0f}<extra></extra>"))
-        fig.add_trace(go.Scatter(x=x, y=g["EWMA28"], name="Long-term Load", mode="lines",
+                                 showlegend=True, hovertemplate="Acute (4wk): %{y:,.0f}<extra></extra>"))
+        fig.add_trace(go.Scatter(x=x, y=g["Chronic"], name="16-wk Chronic", mode="lines",
                                  line=dict(color=_GREEN_DARK, width=2, dash="dot"), line_shape="spline",
-                                 line_smoothing=0.75, opacity=0.5, visible="legendonly", showlegend=False,
-                                 hovertemplate="Long-term: %{y:,.0f}<extra></extra>"))
+                                 line_smoothing=0.75, opacity=0.7, showlegend=True,
+                                 hovertemplate="Chronic (16wk): %{y:,.0f}<extra></extra>"))
         fig.add_trace(go.Scatter(x=x, y=g["ACWR"], name="ACWR", mode="lines", yaxis="y2",
                                  line=dict(color=_PURPLE, width=1.6), line_shape="spline", line_smoothing=0.75,
                                  opacity=0.7, hovertemplate="ACWR: %{y:.2f}<extra></extra>"))
@@ -2727,13 +2729,26 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
     mood_v     = num("Mood_1_5");     soreness_v = num("Soreness_1_5")
     rpe_v      = num("RPE_Post_Session"); quality_v = num("Session_1_5")
 
-    def metric_box(label, val):
+    def metric_box(label, val, invert=False):
+        # Traffic light: higher=better for sleep/fatigue/mood/quality
+        # invert=True for soreness/RPE where lower=better
+        if val is None:
+            bg, dot, txt = "#f5f5f5", "#ccc", "#ccc"
+        else:
+            score = (6 - val) if invert else val  # flip so 1=worst always
+            if score >= 4:
+                bg, dot, txt = "#e8f5e9", "#2E7D32", "#1b5e20"   # green
+            elif score == 3:
+                bg, dot, txt = "#fff8e1", "#F9A825", "#5d4037"   # amber
+            else:
+                bg, dot, txt = "#ffebee", "#C62828", "#B71C1C"   # red
         return html.Div([
             html.Div(label, style={"fontSize": "11px", "color": "#888", "marginBottom": "2px"}),
-            html.Div([str(val), html.Span("/5", style={"fontSize": "11px", "color": "#aaa"})],
-                     style={"fontSize": "20px", "fontWeight": "600"})
+            html.Div([str(val), html.Span("/5", style={"fontSize": "11px", "color": txt, "opacity": "0.7"})],
+                     style={"fontSize": "20px", "fontWeight": "700", "color": txt})
             if val is not None else html.Div("—", style={"fontSize": "16px", "color": "#ccc"}),
-        ], style={"background": "#f5f5f5", "borderRadius": "8px", "padding": "8px 10px"})
+        ], style={"background": bg, "borderRadius": "8px", "padding": "8px 10px",
+                  "border": f"1px solid {dot}33"})
 
     def section_label(text):
         return html.Div(text, style={"fontSize": "11px", "fontWeight": "600", "color": "#999",
@@ -2758,9 +2773,12 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
     body.append(html.Hr(style={"margin": "6px 0 4px 0"}))
     body.append(section_label("Wellness"))
     body.append(html.Div([
-        metric_box("Sleep", sleep_v), metric_box("Fatigue", fatigue_v),
-        metric_box("Mood",  mood_v),  metric_box("Soreness", soreness_v),
-        metric_box("Post RPE", rpe_v), metric_box("Quality", quality_v),
+        metric_box("Sleep",    sleep_v,    invert=False),
+        metric_box("Fatigue",  fatigue_v,  invert=False),
+        metric_box("Mood",     mood_v,     invert=False),
+        metric_box("Soreness", soreness_v, invert=True),
+        metric_box("Post RPE", rpe_v,      invert=True),
+        metric_box("Quality",  quality_v,  invert=False),
     ], style={"display": "grid", "gridTemplateColumns": "repeat(3, 1fr)", "gap": "8px"}))
 
     if notes != "—":
@@ -2771,24 +2789,48 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
 
     sets_url  = str(row.get("Sets_Reps_Load_url",  "") or "").strip()
     track_url = str(row.get("Track_Reps_Times_url","") or "").strip()
-    gym_track = []
+
+    # Rectangle style matching athlete notes — no pills
+    rect_base = {"background": "#f5f5f5", "borderRadius": "8px", "padding": "10px 12px",
+                 "fontSize": "13px", "color": "#444", "lineHeight": "1.5", "marginBottom": "6px"}
+    rect_link = {"background": "#e3f2fd", "borderRadius": "8px", "padding": "10px 12px",
+                 "fontSize": "13px", "color": "#1565C0", "lineHeight": "1.5", "marginBottom": "6px",
+                 "textDecoration": "none", "display": "block"}
+
+    gym_items = []
     if sets != "—":
         if sets_url and sets_url != "None":
-            gym_track.append(html.A(f"Gym: {sets}", href=sets_url, target="_blank",
-                                    style={**pill_style, "color": "#1565C0", "textDecoration": "none",
-                                           "border": "1px solid #90caf9", "background": "#e3f2fd"}))
+            gym_items.append(html.A([
+                html.Span("Gym  ", style={"fontWeight": "600", "fontSize": "11px",
+                                          "color": "#1565C0", "textTransform": "uppercase",
+                                          "letterSpacing": "0.04em", "marginRight": "6px"}),
+                sets,
+            ], href=sets_url, target="_blank", style=rect_link))
         else:
-            gym_track.append(html.Span(f"Gym: {sets}", style=pill_style))
+            gym_items.append(html.Div([
+                html.Span("Gym  ", style={"fontWeight": "600", "fontSize": "11px",
+                                          "color": "#888", "textTransform": "uppercase",
+                                          "letterSpacing": "0.04em", "marginRight": "6px"}),
+                sets,
+            ], style=rect_base))
     if track != "—":
         if track_url and track_url != "None":
-            gym_track.append(html.A(f"Track: {track}", href=track_url, target="_blank",
-                                    style={**pill_style, "color": "#1565C0", "textDecoration": "none",
-                                           "border": "1px solid #90caf9", "background": "#e3f2fd"}))
+            gym_items.append(html.A([
+                html.Span("Track  ", style={"fontWeight": "600", "fontSize": "11px",
+                                             "color": "#1565C0", "textTransform": "uppercase",
+                                             "letterSpacing": "0.04em", "marginRight": "6px"}),
+                track,
+            ], href=track_url, target="_blank", style=rect_link))
         else:
-            gym_track.append(html.Span(f"Track: {track}", style=pill_style))
-    if gym_track:
+            gym_items.append(html.Div([
+                html.Span("Track  ", style={"fontWeight": "600", "fontSize": "11px",
+                                             "color": "#888", "textTransform": "uppercase",
+                                             "letterSpacing": "0.04em", "marginRight": "6px"}),
+                track,
+            ], style=rect_base))
+    if gym_items:
         body.append(section_label("Gym / Track"))
-        body.append(html.Div(gym_track))
+        body.append(html.Div(gym_items))
 
     if ai1 != "—":
         body.append(section_label("Primary Coaching Feedback"))
@@ -3648,7 +3690,16 @@ def show_share_card(n, athlete_id, is_open):
         mot_quote = f"Every session builds the athlete you're becoming, {first_name}."
 
     # Logo is served by Dash from /assets/ — load it in the iframe via URL, no disk read needed
-    logo_b64 = ""  # kept for canvas export fallback; loaded via JS fetch instead
+    # Read logo server-side — no CORS issues, guaranteed to work on Render
+    import base64, os
+    logo_b64 = ""
+    for _lp in ["assets/app_icon.png", "/app/assets/app_icon.png", "app/assets/app_icon.png"]:
+        try:
+            with open(_lp, "rb") as _lf:
+                logo_b64 = base64.b64encode(_lf.read()).decode("utf-8")
+            break
+        except Exception:
+            pass
 
     html_src = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -3686,7 +3737,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     <div id="card-overlay">
       <div class="topbar">
         <span class="brand">
-          <img src="/assets/app_icon.png" alt="ACI" onerror="this.style.display='none'"/>
+          {"<img src='data:image/png;base64," + logo_b64 + "' alt='ACI' style='width:18px;height:18px;object-fit:contain;filter:brightness(0) invert(1);opacity:0.85'/>" if logo_b64 else ""}
           ACI &middot; Adaptive Coaching
         </span>
       </div>
@@ -3741,35 +3792,15 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 <script>
   const EXPORT_W=1080,EXPORT_H=1920;
   const wrap=document.getElementById('previewWrap'),previewEl=document.getElementById('preview'),canvasEl=document.getElementById('bgCanvas');
-  let userImage=null,logoWhiteImg=null;
+  let userImage=null,logoImg=null;
   let userImageDataURL=null; // persist across redraws
 
-  // Build white logo from inline SVG — no cross-origin issues
-  (function(){{
-    const svgSrc='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📊</text></svg>';
-    // Try loading from parent assets first; fall back to nothing (text drawn in canvas)
-    const li=new Image();
-    li.onload=function(){{
-      const oc=document.createElement('canvas');
-      oc.width=li.naturalWidth||128;oc.height=li.naturalHeight||128;
-      const octx=oc.getContext('2d');
-      octx.drawImage(li,0,0);
-      // Composite white over the image pixels
-      octx.globalCompositeOperation='source-in';
-      octx.fillStyle='rgba(255,255,255,1)';
-      octx.fillRect(0,0,oc.width,oc.height);
-      const wImg=new Image();
-      wImg.onload=function(){{logoWhiteImg=wImg;}};
-      wImg.src=oc.toDataURL();
-    }};
-    li.onerror=function(){{logoWhiteImg=null;}};
-    try{{
-      // Try parent origin — works when not sandboxed
-      li.src=(window.parent&&window.parent.location?window.parent.location.origin:window.location.origin)+'/assets/app_icon.png';
-    }}catch(e){{
-      li.src='/assets/app_icon.png';
-    }}
-  }})();
+  // Logo injected as base64 from server — no CORS, always works
+  const LOGO_DATA_URL="{logo_b64 and ('data:image/png;base64,' + logo_b64) or ''}";
+  if(LOGO_DATA_URL){{
+    logoImg=new Image();
+    logoImg.src=LOGO_DATA_URL;
+  }}
 
   function drawPreviewBg(){{
     // Get actual rendered size — use getBoundingClientRect for accuracy on mobile
@@ -3924,11 +3955,16 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 
     const PAD=80,CARD_TOP=EXPORT_H*0.52;
 
-    // Logo + brand top-left — use white version if available
-    const drawLogo=logoWhiteImg||logoImg;
-    if(drawLogo){{
+    // Logo — use canvas filter to render white, no cross-origin canvas needed
+    if(logoImg&&logoImg.complete&&logoImg.naturalWidth>0){{
       const LOGO_SIZE=80,LOGO_PAD=PAD,LOGO_Y=48;
-      ctx.drawImage(drawLogo,LOGO_PAD,LOGO_Y,LOGO_SIZE,LOGO_SIZE);
+      ctx.save();
+      ctx.filter='brightness(0) invert(1)';  // make logo pure white
+      ctx.globalAlpha=0.9;
+      ctx.drawImage(logoImg,LOGO_PAD,LOGO_Y,LOGO_SIZE,LOGO_SIZE);
+      ctx.filter='none';
+      ctx.globalAlpha=1;
+      ctx.restore();
       ctx.font='600 28px system-ui';ctx.fillStyle='rgba(255,255,255,0.80)';
       ctx.textAlign='left';ctx.textBaseline='middle';
       ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',LOGO_PAD+LOGO_SIZE+18,LOGO_Y+LOGO_SIZE/2);
