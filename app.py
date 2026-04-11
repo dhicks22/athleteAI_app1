@@ -3592,11 +3592,12 @@ def show_share_card(n, athlete_id, is_open):
 
     try:
         mot_sys = (
-            "You are an elite performance analytics platform — think WHOOP, Oura, and Strava combined. "
-            "Write ONE sentence for an athlete's shareable training card that sounds like it came from a data-driven wearable insight. "
-            "Rules: Max 14 words. Address the athlete by first name. Lead with the number — readiness score, streak, or exposure — then give it meaning. "
-            "Style: clinical but motivating. BANNED words: warrior, beast, grind, hustle, champion, journey, dedication, incredible, amazing, greatness. "
-            "No hashtags. No exclamation marks. No emoji. Never vague or generic — every sentence must reference a specific number from the data."
+            "You are a straight-talking performance coach writing a one-liner for an athlete's shareable training card. "
+            "Write ONE punchy sentence — sounds like something a great coach would say after glancing at the data. "
+            "Rules: Max 14 words. Address the athlete by first name. Ground it in a real number (readiness, streak, or exposure). "
+            "Tone: direct, warm, a little dry — like a coach who doesn't do corporate speak. "
+            "BANNED: optimal, peak performance, indicates, recovery needed, warrior, beast, hustle, champion, journey, incredible, amazing, greatness. "
+            "No hashtags. No exclamation marks. No emoji."
         )
         mot_usr = (
             f"Athlete: {first_name}. Readiness: {d_r}/100. Neuro: {d_n}/100. "
@@ -3609,21 +3610,8 @@ def show_share_card(n, athlete_id, is_open):
     except Exception:
         mot_quote = f"Every session builds the athlete you're becoming, {first_name}."
 
-    # Load logo as base64 for canvas rendering
-    import base64
-    logo_b64 = ""
-    logo_path_candidates = [
-        "/home/claude/assets/app_icon.png",
-        "/assets/app_icon.png",
-        "assets/app_icon.png",
-    ]
-    for lp in logo_path_candidates:
-        try:
-            with open(lp, "rb") as lf:
-                logo_b64 = base64.b64encode(lf.read()).decode("utf-8")
-            break
-        except Exception:
-            pass
+    # Logo is served by Dash from /assets/ — load it in the iframe via URL, no disk read needed
+    logo_b64 = ""  # kept for canvas export fallback; loaded via JS fetch instead
 
     html_src = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -3637,7 +3625,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 #card-overlay{{position:absolute;bottom:0;left:0;right:0;padding:16px 18px 22px;pointer-events:none}}
 .topbar{{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}}
 .brand{{font-size:8px;letter-spacing:.16em;color:rgba(255,255,255,.55);text-transform:uppercase;display:flex;align-items:center;gap:5px}}
-.brand img{{width:18px;height:18px;border-radius:4px;object-fit:contain}}
+.brand img{{width:20px;height:20px;border-radius:3px;object-fit:contain;filter:brightness(0) invert(1);opacity:0.85}}
 .dials{{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px}}
 .dial-item{{display:flex;flex-direction:column;align-items:center;gap:4px}}
 .dial-lbl{{font-size:7px;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.5);text-align:center}}
@@ -3661,7 +3649,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     <div id="card-overlay">
       <div class="topbar">
         <span class="brand">
-          {"<img src='data:image/png;base64," + logo_b64 + "' alt='ACI'/>" if logo_b64 else ""}
+          <img src="/assets/app_icon.png" alt="ACI" onerror="this.style.display='none'"/>
           ACI &middot; Adaptive Coaching
         </span>
       </div>
@@ -3716,11 +3704,29 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 <script>
   const EXPORT_W=1080,EXPORT_H=1920;
   const wrap=document.getElementById('previewWrap'),previewEl=document.getElementById('preview'),canvasEl=document.getElementById('bgCanvas');
-  let userImage=null,logoImg=null;
+  let userImage=null,logoImg=null,logoWhiteImg=null;
 
-  // Load logo
-  const LOGO_B64="{logo_b64}";
-  if(LOGO_B64){{const li=new Image();li.onload=function(){{logoImg=li;}};li.src='data:image/png;base64,'+LOGO_B64;}}
+  // Load logo from Dash assets URL, then create a white version for canvas
+  (function(){{
+    const li=new Image();
+    li.crossOrigin='anonymous';
+    li.onload=function(){{
+      logoImg=li;
+      // Make a white version by drawing on offscreen canvas with color blend
+      const oc=document.createElement('canvas');
+      oc.width=li.naturalWidth||64;oc.height=li.naturalHeight||64;
+      const octx=oc.getContext('2d');
+      octx.drawImage(li,0,0);
+      octx.globalCompositeOperation='source-in';
+      octx.fillStyle='rgba(255,255,255,0.90)';
+      octx.fillRect(0,0,oc.width,oc.height);
+      const wImg=new Image();
+      wImg.onload=function(){{logoWhiteImg=wImg;}};
+      wImg.src=oc.toDataURL();
+    }};
+    // Use parent window origin so iframe can load the asset
+    li.src=window.parent.location.origin+'/assets/app_icon.png';
+  }})();
 
   function drawPreviewBg(){{
     const w=previewEl.offsetWidth,h=previewEl.offsetHeight;
@@ -3851,20 +3857,16 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 
     const PAD=80,CARD_TOP=EXPORT_H*0.52;
 
-    // Logo + brand top-left
-    if(logoImg){{
-      const LOGO_SIZE=72,LOGO_PAD=PAD,LOGO_Y=52;
-      ctx.save();
-      ctx.beginPath();
-      ctx.roundRect(LOGO_PAD,LOGO_Y,LOGO_SIZE,LOGO_SIZE,12);
-      ctx.clip();
-      ctx.drawImage(logoImg,LOGO_PAD,LOGO_Y,LOGO_SIZE,LOGO_SIZE);
-      ctx.restore();
-      ctx.font='26px system-ui';ctx.fillStyle='rgba(255,255,255,0.55)';
+    // Logo + brand top-left — use white version if available
+    const drawLogo=logoWhiteImg||logoImg;
+    if(drawLogo){{
+      const LOGO_SIZE=80,LOGO_PAD=PAD,LOGO_Y=48;
+      ctx.drawImage(drawLogo,LOGO_PAD,LOGO_Y,LOGO_SIZE,LOGO_SIZE);
+      ctx.font='600 28px system-ui';ctx.fillStyle='rgba(255,255,255,0.80)';
       ctx.textAlign='left';ctx.textBaseline='middle';
-      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',LOGO_PAD+LOGO_SIZE+16,LOGO_Y+LOGO_SIZE/2);
+      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',LOGO_PAD+LOGO_SIZE+18,LOGO_Y+LOGO_SIZE/2);
     }}else{{
-      ctx.font='26px system-ui';ctx.fillStyle='rgba(255,255,255,0.55)';
+      ctx.font='600 28px system-ui';ctx.fillStyle='rgba(255,255,255,0.80)';
       ctx.textAlign='left';ctx.textBaseline='alphabetic';
       ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',PAD,92);
     }}
