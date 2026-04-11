@@ -1571,21 +1571,41 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
                           hovermode="x unified", **MOBILE_PLOT_LAYOUT)
         return fig
 
-    # Fill gaps with 0 for rest days so EWMA flows continuously, not stepped
-    # Reindex to a full daily date range first
+    # Reindex to full daily range — keep NaN for rest days so EWMA decays naturally
+    # (filling with 0 causes EWMA to crash to zero then spike on return = bad ACWR)
     d = d.dropna(subset=["Date"]).set_index("Date")
     full_idx = pd.date_range(d.index.min(), d.index.max(), freq="D")
     d = d.reindex(full_idx)
-    d["Load"] = pd.to_numeric(d["Load"], errors="coerce").fillna(0)
+    d["Load"] = pd.to_numeric(d["Load"], errors="coerce")
 
-    # Compute EWMA on filled series — smooth continuous lines
-    d["EWMA7"]  = d["Load"].ewm(span=7,  adjust=False, min_periods=1).mean()
-    d["EWMA28"] = d["Load"].ewm(span=28, adjust=False, min_periods=1).mean()
-    d["ACWR"]   = (d["EWMA7"] / d["EWMA28"].replace(0, float("nan"))).clip(0, 2.5)
+    # Manually compute decaying EWMA through NaN gaps:
+    # On rest days (NaN), the EWMA decays by the alpha factor rather than resetting
+    alpha7  = 2 / (7  + 1)
+    alpha28 = 2 / (28 + 1)
+    load_vals = d["Load"].values
+    n = len(load_vals)
+    ewma7  = np.full(n, np.nan)
+    ewma28 = np.full(n, np.nan)
 
-    # Restore Date as column; replace 0 load with NaN for bar display only
+    for i in range(n):
+        v = load_vals[i]
+        load_i = 0.0 if np.isnan(v) else float(v)  # rest day = 0 load contribution
+        if i == 0:
+            ewma7[i]  = load_i
+            ewma28[i] = load_i
+        else:
+            ewma7[i]  = alpha7  * load_i + (1 - alpha7)  * ewma7[i-1]
+            ewma28[i] = alpha28 * load_i + (1 - alpha28) * ewma28[i-1]
+
+    d["EWMA7"]  = ewma7
+    d["EWMA28"] = ewma28
+    d["ACWR"]   = np.where(d["EWMA28"] > 10,
+                           (d["EWMA7"] / d["EWMA28"]).clip(0, 2.5),
+                           np.nan)  # suppress ACWR when chronic load too low to be meaningful
+
+    # Bars only on training days (NaN = no bar)
     d = d.reset_index().rename(columns={"index": "Date"})
-    d["Load_display"] = d["Load"].replace(0, float("nan"))
+    d["Load_display"] = d["Load"]  # NaN gaps already blank
     x = d["Date"]
 
     fig.add_bar(x=x, y=d["Load_display"], name="Load",
