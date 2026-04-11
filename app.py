@@ -1534,26 +1534,40 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
     d["Load"] = pd.to_numeric(d["Load"], errors="coerce")
 
     if view_mode == "weekly":
-        # Fill full date range so weeks with partial data still aggregate correctly
+        # Fill full date range, then aggregate by week keeping ALL weeks (including rest weeks)
         d = d.dropna(subset=["Date"]).set_index("Date")
         full_idx = pd.date_range(d.index.min(), d.index.max(), freq="D")
         d = d.reindex(full_idx).reset_index().rename(columns={"index": "Date"})
         d["Load"] = pd.to_numeric(d["Load"], errors="coerce").fillna(0)
         d["Week"] = _week_agg_date(d["Date"])
         g = d.groupby("Week", as_index=False).agg(Load=("Load", lambda s: s.sum()))
-        # Drop weeks with zero total (no planned sessions at all)
-        g = g[g["Load"] > 0].reset_index(drop=True)
-        # Weekly data: span=4 weeks ≈ 28-day chronic, span=1 ≈ 7-day acute
-        # Use min_periods=1 so lines show from first data point
-        # alpha=1/N convention on weekly data: 4wk acute, 16wk chronic
-        g["Acute"]   = g["Load"].ewm(alpha=1/4,  adjust=False, min_periods=1).mean()
-        g["Chronic"] = g["Load"].ewm(alpha=1/16, adjust=False, min_periods=1).mean()
+        # Keep rest weeks (Load=0) — they contribute to decay, don't drop them
+        # But hide zero bars visually
+        g["Load_display"] = g["Load"].replace(0, float("nan"))
+
+        # EWMA using 1/N alpha convention — computed over all weeks including rest
+        alpha_a = 1 / 4    # 4-week acute
+        alpha_c = 1 / 16   # 16-week chronic
+        load_w  = g["Load"].values
+        n_w     = len(load_w)
+        ewma_a  = np.full(n_w, np.nan)
+        ewma_c  = np.full(n_w, np.nan)
+        for i in range(n_w):
+            li = float(load_w[i])  # 0 for rest weeks, decays naturally
+            if i == 0:
+                ewma_a[i] = li; ewma_c[i] = li
+            else:
+                ewma_a[i] = alpha_a * li + (1 - alpha_a) * ewma_a[i-1]
+                ewma_c[i] = alpha_c * li + (1 - alpha_c) * ewma_c[i-1]
+
+        g["Acute"]   = ewma_a
+        g["Chronic"] = ewma_c
         g["ACWR"]    = np.where(g["Chronic"] > 50,
                                 (g["Acute"] / g["Chronic"]).clip(0, 2.5),
                                 np.nan)
         x = g["Week"]
 
-        fig.add_bar(x=x, y=g["Load"], name="Load",
+        fig.add_bar(x=x, y=g["Load_display"], name="Load",
                     marker=dict(color="rgba(30,107,214,0.35)", line=dict(color=_BLUE, width=1.8)),
                     hovertemplate="Load: %{y:,.0f}<extra></extra>")
         fig.add_trace(go.Scatter(x=x, y=g["Acute"], name="Acute (4wk)", mode="lines",
