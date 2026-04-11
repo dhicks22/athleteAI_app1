@@ -338,13 +338,19 @@ def calc_daily_readiness(load_series, rpe_series, quality_series, span=7):
         "qual": pd.to_numeric(quality_series, errors="coerce"),
     })
 
-    rpe_valid = df["rpe"].dropna()
-    if rpe_valid.empty:
-        return None
-
     load_ref = df["load"].quantile(0.90)
     if pd.isna(load_ref) or load_ref <= 0:
         load_ref = df["load"].max()
+
+    # If no RPE logged at all but we have load data, return a moderate base score
+    # so the dial isn't permanently blank for athletes who haven't post-logged yet
+    rpe_valid = df["rpe"].dropna()
+    if rpe_valid.empty:
+        if pd.isna(load_ref) or load_ref <= 0:
+            return None
+        # Load exists but no post-session RPE — assume moderate RPE (3/5) as placeholder
+        df["rpe"] = 3.0
+
     if pd.isna(load_ref) or load_ref <= 0:
         return None
 
@@ -2599,14 +2605,24 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     df_time    = df_time.reindex(full_range)
 
     load_series    = pd.to_numeric(df_time.get("Load"), errors="coerce")
-    print(f"🔍 Load series non-null count: {load_series.notna().sum()} / {len(load_series)}")
-    print(f"🔍 Load series last 7: {load_series.dropna().tail(7).tolist()}")
-    rpe_col        = "RPE_Post_Session" if "RPE_Post_Session" in df_time.columns else None
-    rpe_series     = pd.to_numeric(df_time[rpe_col] if rpe_col else pd.Series(dtype=float), errors="coerce")
-    print(f"🔍 RPE col used: {rpe_col}, non-null: {rpe_series.notna().sum()}")
+
+    # Prefer post-session RPE; fall back to planned RPE col if no athlete logs yet
+    rpe_post = pd.to_numeric(df_time.get("RPE_Post_Session"), errors="coerce")
+    rpe_plan = pd.to_numeric(df_time.get("RPE"), errors="coerce")
+    if rpe_post.notna().sum() > 0:
+        rpe_series = rpe_post
+    elif rpe_plan.notna().sum() > 0:
+        # Scale planned RPE (1-10 sRPE scale) down to 1-5 if needed
+        rpe_plan_vals = rpe_plan.dropna()
+        if not rpe_plan_vals.empty and rpe_plan_vals.max() > 5:
+            rpe_series = rpe_plan / 2.0
+        else:
+            rpe_series = rpe_plan
+    else:
+        rpe_series = pd.Series(dtype=float, index=df_time.index)
+
     quality_series = pd.to_numeric(df_time.get("Session_1_5"), errors="coerce")
     readiness_val  = calc_daily_readiness(load_series, rpe_series, quality_series, span=7)
-    print(f"🔍 Readiness val: {readiness_val}")
 
     _src = " · via Garmin" if data_source == "garmin" else " · manual entry"
 
@@ -3182,9 +3198,16 @@ def update_welcome(athlete_id, _today):
             full_range = pd.date_range(start=df_time.index.min(), end=today, freq="D")
             df_time    = df_time.reindex(full_range)
 
-            rpe_col        = "RPE_Post_Session" if "RPE_Post_Session" in df_time.columns else None
-            rpe_series     = pd.to_numeric(df_time[rpe_col] if rpe_col else pd.Series(dtype=float), errors="coerce")
             load_series    = pd.to_numeric(df_time.get("Load"), errors="coerce")
+            rpe_post_w = pd.to_numeric(df_time.get("RPE_Post_Session"), errors="coerce")
+            rpe_plan_w = pd.to_numeric(df_time.get("RPE"), errors="coerce")
+            if rpe_post_w.notna().sum() > 0:
+                rpe_series = rpe_post_w
+            elif rpe_plan_w.notna().sum() > 0:
+                rpe_vals_w = rpe_plan_w.dropna()
+                rpe_series = rpe_plan_w / 2.0 if (not rpe_vals_w.empty and rpe_vals_w.max() > 5) else rpe_plan_w
+            else:
+                rpe_series = pd.Series(dtype=float, index=df_time.index)
             quality_series = pd.to_numeric(df_time.get("Session_1_5"), errors="coerce")
             readiness_val  = calc_daily_readiness(load_series, rpe_series, quality_series)
 
@@ -3302,9 +3325,16 @@ def update_motivational_message(today_date, athlete_id):
             full_range = pd.date_range(start=df_time.index.min(), end=today_adl(), freq="D")
             df_time    = df_time.reindex(full_range)
 
-            rpe_col        = "RPE_Post_Session" if "RPE_Post_Session" in df_time.columns else None
-            rpe_series     = pd.to_numeric(df_time[rpe_col] if rpe_col else pd.Series(dtype=float), errors="coerce")
             load_series    = pd.to_numeric(df_time.get("Load"), errors="coerce")
+            rpe_post_w = pd.to_numeric(df_time.get("RPE_Post_Session"), errors="coerce")
+            rpe_plan_w = pd.to_numeric(df_time.get("RPE"), errors="coerce")
+            if rpe_post_w.notna().sum() > 0:
+                rpe_series = rpe_post_w
+            elif rpe_plan_w.notna().sum() > 0:
+                rpe_vals_w = rpe_plan_w.dropna()
+                rpe_series = rpe_plan_w / 2.0 if (not rpe_vals_w.empty and rpe_vals_w.max() > 5) else rpe_plan_w
+            else:
+                rpe_series = pd.Series(dtype=float, index=df_time.index)
             quality_series = pd.to_numeric(df_time.get("Session_1_5"), errors="coerce")
             readiness_val  = calc_daily_readiness(load_series, rpe_series, quality_series)
 
@@ -3526,8 +3556,15 @@ def show_share_card(n, athlete_id, is_open):
             dft = dft.reindex(pd.date_range(dft.index.min(), today, freq="D"))
 
             load_series    = pd.to_numeric(dft.get("Load"), errors="coerce")
-            rpe_col        = "RPE_Post_Session" if "RPE_Post_Session" in dft.columns else None
-            rpe_series     = pd.to_numeric(dft[rpe_col] if rpe_col else pd.Series(dtype=float), errors="coerce")
+            rpe_post_m = pd.to_numeric(dft.get("RPE_Post_Session"), errors="coerce")
+            rpe_plan_m = pd.to_numeric(dft.get("RPE"), errors="coerce")
+            if rpe_post_m.notna().sum() > 0:
+                rpe_series = rpe_post_m
+            elif rpe_plan_m.notna().sum() > 0:
+                rpe_vals_m = rpe_plan_m.dropna()
+                rpe_series = rpe_plan_m / 2.0 if (not rpe_vals_m.empty and rpe_vals_m.max() > 5) else rpe_plan_m
+            else:
+                rpe_series = pd.Series(dtype=float, index=dft.index)
             quality_series = pd.to_numeric(dft.get("Session_1_5"), errors="coerce")
             readiness_val  = calc_daily_readiness(load_series, rpe_series, quality_series) or 0
 
@@ -3704,38 +3741,62 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 <script>
   const EXPORT_W=1080,EXPORT_H=1920;
   const wrap=document.getElementById('previewWrap'),previewEl=document.getElementById('preview'),canvasEl=document.getElementById('bgCanvas');
-  let userImage=null,logoImg=null,logoWhiteImg=null;
+  let userImage=null,logoWhiteImg=null;
+  let userImageDataURL=null; // persist across redraws
 
-  // Load logo from Dash assets URL, then create a white version for canvas
+  // Build white logo from inline SVG — no cross-origin issues
   (function(){{
+    const svgSrc='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📊</text></svg>';
+    // Try loading from parent assets first; fall back to nothing (text drawn in canvas)
     const li=new Image();
-    li.crossOrigin='anonymous';
     li.onload=function(){{
-      logoImg=li;
-      // Make a white version by drawing on offscreen canvas with color blend
       const oc=document.createElement('canvas');
-      oc.width=li.naturalWidth||64;oc.height=li.naturalHeight||64;
+      oc.width=li.naturalWidth||128;oc.height=li.naturalHeight||128;
       const octx=oc.getContext('2d');
       octx.drawImage(li,0,0);
+      // Composite white over the image pixels
       octx.globalCompositeOperation='source-in';
-      octx.fillStyle='rgba(255,255,255,0.90)';
+      octx.fillStyle='rgba(255,255,255,1)';
       octx.fillRect(0,0,oc.width,oc.height);
       const wImg=new Image();
       wImg.onload=function(){{logoWhiteImg=wImg;}};
       wImg.src=oc.toDataURL();
     }};
-    // Use parent window origin so iframe can load the asset
-    li.src=window.parent.location.origin+'/assets/app_icon.png';
+    li.onerror=function(){{logoWhiteImg=null;}};
+    try{{
+      // Try parent origin — works when not sandboxed
+      li.src=(window.parent&&window.parent.location?window.parent.location.origin:window.location.origin)+'/assets/app_icon.png';
+    }}catch(e){{
+      li.src='/assets/app_icon.png';
+    }}
   }})();
 
   function drawPreviewBg(){{
-    const w=previewEl.offsetWidth,h=previewEl.offsetHeight;
+    // Get actual rendered size — use getBoundingClientRect for accuracy on mobile
+    const rect=previewEl.getBoundingClientRect();
+    const w=rect.width||previewEl.clientWidth||320;
+    const h=rect.height||previewEl.clientHeight||Math.round(w*16/9);
+    if(w===0||h===0){{setTimeout(drawPreviewBg,100);return;}}
     canvasEl.width=w;canvasEl.height=h;
-    const ctx=canvasEl.getContext('2d');ctx.clearRect(0,0,w,h);
-    if(userImage){{const scale=Math.max(w/userImage.width,h/userImage.height);const dw=userImage.width*scale,dh=userImage.height*scale;ctx.drawImage(userImage,(w-dw)/2,(h-dh)/2,dw,dh);}}
-    else{{const g=ctx.createLinearGradient(0,0,w,h);g.addColorStop(0,'#0f2027');g.addColorStop(0.5,'#203a43');g.addColorStop(1,'#2c5364');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);}}
+    const ctx=canvasEl.getContext('2d');
+    ctx.clearRect(0,0,w,h);
+    if(userImage){{
+      // Cover fit — always fill the canvas
+      const scale=Math.max(w/userImage.naturalWidth,h/userImage.naturalHeight);
+      const dw=userImage.naturalWidth*scale,dh=userImage.naturalHeight*scale;
+      ctx.drawImage(userImage,(w-dw)/2,(h-dh)/2,dw,dh);
+    }}else{{
+      const g=ctx.createLinearGradient(0,0,w,h);
+      g.addColorStop(0,'#0f2027');g.addColorStop(0.5,'#203a43');g.addColorStop(1,'#2c5364');
+      ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+    }}
   }}
-  window.addEventListener('load',drawPreviewBg);window.addEventListener('resize',drawPreviewBg);
+
+  // Redraw on resize but don't lose the image
+  let resizeTimer;
+  window.addEventListener('resize',function(){{clearTimeout(resizeTimer);resizeTimer=setTimeout(drawPreviewBg,80);}});
+  // Initial draw — delayed to let modal/iframe fully render
+  setTimeout(drawPreviewBg,200);
 
   // Transform state — allow scale 0.3 to 4
   let currentScale=1,translateX=0,translateY=0;
@@ -3812,15 +3873,21 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     setTimeout(()=>previewEl.style.transition='none',260);
   }}
 
-  // Photo picker
+  // Photo picker — store dataURL so redraws never lose the image
   document.getElementById('photoInput').addEventListener('change',function(e){{
     const file=e.target.files[0];if(!file)return;
     const reader=new FileReader();
     reader.onload=function(ev){{
+      userImageDataURL=ev.target.result;
       const img=new Image();
-      img.onload=function(){{userImage=img;drawPreviewBg();}};
-      img.src=ev.target.result;
+      img.onload=function(){{
+        userImage=img;
+        drawPreviewBg();
+      }};
+      img.onerror=function(){{console.error('Image load failed');}};
+      img.src=userImageDataURL;
     }};
+    reader.onerror=function(){{alert('Could not read file. Try a different photo.');}};
     reader.readAsDataURL(file);
     document.getElementById('photolabel').innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Change photo';
   }});
@@ -3838,10 +3905,10 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     const out=document.createElement('canvas');out.width=EXPORT_W;out.height=EXPORT_H;
     const ctx=out.getContext('2d');
 
-    // Background
-    if(userImage){{
-      const scale=Math.max(EXPORT_W/userImage.width,EXPORT_H/userImage.height);
-      const dw=userImage.width*scale,dh=userImage.height*scale;
+    // Background — use naturalWidth for reliability
+    if(userImage&&userImage.naturalWidth>0){{
+      const scale=Math.max(EXPORT_W/userImage.naturalWidth,EXPORT_H/userImage.naturalHeight);
+      const dw=userImage.naturalWidth*scale,dh=userImage.naturalHeight*scale;
       ctx.drawImage(userImage,(EXPORT_W-dw)/2,(EXPORT_H-dh)/2,dw,dh);
     }}else{{
       const g=ctx.createLinearGradient(0,0,EXPORT_W,EXPORT_H);
