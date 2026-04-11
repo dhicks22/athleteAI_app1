@@ -159,7 +159,7 @@ else:
 MOBILE_PLOT_LAYOUT = dict(
     autosize=True,
     height=360,
-    margin=dict(l=24, r=16, t=48, b=64),
+    margin=dict(l=24, r=16, t=48, b=80),
     font=dict(size=13),
     hoverlabel=dict(
         bgcolor="white",
@@ -170,12 +170,13 @@ MOBILE_PLOT_LAYOUT = dict(
     legend=dict(
         orientation="h",
         yanchor="top",
-        y=-0.18,
+        y=-0.22,
         xanchor="center",
         x=0.5,
         font=dict(size=10),
-        tracegroupgap=2,
+        tracegroupgap=0,
         itemsizing="constant",
+        itemwidth=40,
     ),
 )
 
@@ -1533,8 +1534,15 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
     d["Load"] = pd.to_numeric(d["Load"], errors="coerce")
 
     if view_mode == "weekly":
+        # Fill full date range so weeks with partial data still aggregate correctly
+        d = d.dropna(subset=["Date"]).set_index("Date")
+        full_idx = pd.date_range(d.index.min(), d.index.max(), freq="D")
+        d = d.reindex(full_idx).reset_index().rename(columns={"index": "Date"})
+        d["Load"] = pd.to_numeric(d["Load"], errors="coerce").fillna(0)
         d["Week"] = _week_agg_date(d["Date"])
-        g = d.groupby("Week", as_index=False).agg(Load=("Load", lambda s: s.sum(min_count=1)))
+        g = d.groupby("Week", as_index=False).agg(Load=("Load", lambda s: s.sum()))
+        # Drop weeks with zero total (no planned sessions at all)
+        g = g[g["Load"] > 0].reset_index(drop=True)
         # Weekly data: span=4 weeks ≈ 28-day chronic, span=1 ≈ 7-day acute
         # Use min_periods=1 so lines show from first data point
         g["Acute"]   = g["Load"].ewm(span=4,  adjust=False, min_periods=1).mean()
@@ -1545,13 +1553,13 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
         fig.add_bar(x=x, y=g["Load"], name="Load",
                     marker=dict(color="rgba(30,107,214,0.35)", line=dict(color=_BLUE, width=1.8)),
                     hovertemplate="Load: %{y:,.0f}<extra></extra>")
-        fig.add_trace(go.Scatter(x=x, y=g["Acute"], name="4-wk Acute", mode="lines",
+        fig.add_trace(go.Scatter(x=x, y=g["Acute"], name="Acute (4wk)", mode="lines",
                                  line=dict(color=_TEAL, width=2.6), line_shape="spline", line_smoothing=0.75,
-                                 showlegend=True, hovertemplate="Acute (4wk): %{y:,.0f}<extra></extra>"))
-        fig.add_trace(go.Scatter(x=x, y=g["Chronic"], name="16-wk Chronic", mode="lines",
+                                 hovertemplate="Acute: %{y:,.0f}<extra></extra>"))
+        fig.add_trace(go.Scatter(x=x, y=g["Chronic"], name="Chronic (16wk)", mode="lines",
                                  line=dict(color=_GREEN_DARK, width=2, dash="dot"), line_shape="spline",
-                                 line_smoothing=0.75, opacity=0.7, showlegend=True,
-                                 hovertemplate="Chronic (16wk): %{y:,.0f}<extra></extra>"))
+                                 line_smoothing=0.75, opacity=0.7,
+                                 hovertemplate="Chronic: %{y:,.0f}<extra></extra>"))
         fig.add_trace(go.Scatter(x=x, y=g["ACWR"], name="ACWR", mode="lines", yaxis="y2",
                                  line=dict(color=_PURPLE, width=1.6), line_shape="spline", line_smoothing=0.75,
                                  opacity=0.7, hovertemplate="ACWR: %{y:.2f}<extra></extra>"))
@@ -1563,21 +1571,33 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
                           hovermode="x unified", **MOBILE_PLOT_LAYOUT)
         return fig
 
-    d["EWMA7"]  = d["Load"].ewm(span=7,  adjust=False).mean()
-    d["EWMA28"] = d["Load"].ewm(span=28, adjust=False).mean()
-    d["ACWR"]   = d["EWMA7"] / d["EWMA28"]
+    # Fill gaps with 0 for rest days so EWMA flows continuously, not stepped
+    # Reindex to a full daily date range first
+    d = d.dropna(subset=["Date"]).set_index("Date")
+    full_idx = pd.date_range(d.index.min(), d.index.max(), freq="D")
+    d = d.reindex(full_idx)
+    d["Load"] = pd.to_numeric(d["Load"], errors="coerce").fillna(0)
+
+    # Compute EWMA on filled series — smooth continuous lines
+    d["EWMA7"]  = d["Load"].ewm(span=7,  adjust=False, min_periods=1).mean()
+    d["EWMA28"] = d["Load"].ewm(span=28, adjust=False, min_periods=1).mean()
+    d["ACWR"]   = (d["EWMA7"] / d["EWMA28"].replace(0, float("nan"))).clip(0, 2.5)
+
+    # Restore Date as column; replace 0 load with NaN for bar display only
+    d = d.reset_index().rename(columns={"index": "Date"})
+    d["Load_display"] = d["Load"].replace(0, float("nan"))
     x = d["Date"]
 
-    fig.add_bar(x=x, y=d["Load"], name="Daily Load",
+    fig.add_bar(x=x, y=d["Load_display"], name="Load",
                 marker=dict(color="rgba(30,107,214,0.35)", line=dict(color=_BLUE, width=1.8)),
                 hovertemplate="Load: %{y:,.0f}<extra></extra>")
-    fig.add_trace(go.Scatter(x=x, y=d["EWMA7"], name="Short-term Load", mode="lines",
+    fig.add_trace(go.Scatter(x=x, y=d["EWMA7"], name="7d EWMA", mode="lines",
                              line=dict(color=_TEAL, width=2.6), line_shape="spline", line_smoothing=0.75,
-                             hovertemplate="Short-term: %{y:,.0f}<extra></extra>"))
-    fig.add_trace(go.Scatter(x=x, y=d["EWMA28"], name="Long-term Load", mode="lines",
+                             hovertemplate="7d: %{y:,.0f}<extra></extra>"))
+    fig.add_trace(go.Scatter(x=x, y=d["EWMA28"], name="28d EWMA", mode="lines",
                              line=dict(color=_GREEN_DARK, width=2, dash="dot"), line_shape="spline",
-                             line_smoothing=0.75, opacity=0.5, visible="legendonly", showlegend=False,
-                             hovertemplate="Long-term: %{y:,.0f}<extra></extra>"))
+                             line_smoothing=0.75, opacity=0.7,
+                             hovertemplate="28d: %{y:,.0f}<extra></extra>"))
     fig.add_trace(go.Scatter(x=x, y=d["ACWR"], name="ACWR", mode="lines", yaxis="y2",
                              line=dict(color=_PURPLE, width=1.6), line_shape="spline", line_smoothing=0.75,
                              hovertemplate="ACWR: %{y:.2f}<extra></extra>"))
@@ -1686,30 +1706,20 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
 
     if view_mode == "daily":
         x = d["Date"]
-        fig.add_bar(x=x, y=speed, name="Speed exposure",
+        fig.add_bar(x=x, y=speed, name="Speed",
                     marker=dict(color="rgba(37,99,235,0.35)", line=dict(color=_BLUE, width=1.6)),
                     hovertemplate="Speed: %{y:,.0f} m<extra></extra>")
-        fig.add_bar(x=x, y=tempo, name="Tempo exposure",
+        fig.add_bar(x=x, y=tempo, name="Tempo",
                     marker=dict(color="rgba(245,158,11,0.35)", line=dict(color=_ORANGE, width=1.6)),
                     hovertemplate="Tempo: %{y:,.0f} m<extra></extra>")
-        fig.add_trace(go.Scatter(x=x, y=speed.rolling(7, min_periods=1).mean(), name="Speed 7d",
-                                 mode="lines", showlegend=False,
-                                 line=dict(color=_BLUE, width=2.4, dash="dot"), line_shape="spline",
-                                 line_smoothing=0.7, hovertemplate="Speed 7d: %{y:,.0f} m<extra></extra>"))
-        fig.add_trace(go.Scatter(x=x, y=speed.rolling(28, min_periods=1).mean(), name="Speed 28d",
-                                 mode="lines", showlegend=False,
-                                 line=dict(color=_BLUE, width=2.4, dash="dash"), line_shape="spline",
-                                 line_smoothing=0.7, hovertemplate="Speed 28d: %{y:,.0f} m<extra></extra>",
-                                 visible="legendonly"))
-        fig.add_trace(go.Scatter(x=x, y=tempo.rolling(7, min_periods=1).mean(), name="Tempo 7d",
-                                 mode="lines", showlegend=False,
-                                 line=dict(color=_ORANGE, width=2.4, dash="dot"), line_shape="spline",
-                                 line_smoothing=0.7, hovertemplate="Tempo 7d: %{y:,.0f} m<extra></extra>"))
-        fig.add_trace(go.Scatter(x=x, y=tempo.rolling(28, min_periods=1).mean(), name="Tempo 28d",
-                                 mode="lines", showlegend=False,
-                                 line=dict(color=_ORANGE, width=2.4, dash="dash"), line_shape="spline",
-                                 line_smoothing=0.7, hovertemplate="Tempo 28d: %{y:,.0f} m<extra></extra>",
-                                 visible="legendonly"))
+        fig.add_trace(go.Scatter(x=x, y=speed.ewm(span=7, adjust=False, min_periods=1).mean(),
+                                 name="Speed trend", mode="lines",
+                                 line=dict(color=_BLUE, width=2.2), line_shape="spline", line_smoothing=0.7,
+                                 hovertemplate="Speed trend: %{y:,.0f} m<extra></extra>"))
+        fig.add_trace(go.Scatter(x=x, y=tempo.ewm(span=7, adjust=False, min_periods=1).mean(),
+                                 name="Tempo trend", mode="lines",
+                                 line=dict(color=_ORANGE, width=2.2), line_shape="spline", line_smoothing=0.7,
+                                 hovertemplate="Tempo trend: %{y:,.0f} m<extra></extra>"))
         fig.update_layout(title="Daily Speed & Tempo Volumes", xaxis_title="", yaxis_title="Metres",
                           barmode="stack", hovermode="x unified", **MOBILE_PLOT_LAYOUT)
         return fig
@@ -1724,24 +1734,20 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
     )
     x = g["Week"]
 
-    fig.add_bar(x=x, y=g["Speed"], name="Speed exposure",
+    fig.add_bar(x=x, y=g["Speed"], name="Speed",
                 marker=dict(color="rgba(37,99,235,0.35)", line=dict(color=_BLUE, width=1.6)),
                 hovertemplate="Speed: %{y:,.0f} m<extra></extra>")
-    fig.add_bar(x=x, y=g["Tempo"], name="Tempo exposure",
+    fig.add_bar(x=x, y=g["Tempo"], name="Tempo",
                 marker=dict(color="rgba(245,158,11,0.35)", line=dict(color=_ORANGE, width=1.6)),
                 hovertemplate="Tempo: %{y:,.0f} m<extra></extra>")
-    fig.add_trace(go.Scatter(x=x, y=g["Speed"].rolling(1, min_periods=1).mean(), name="Speed 7d",
-                             mode="lines", line=dict(color=_BLUE, width=2.4, dash="dot"), line_shape="spline",
-                             line_smoothing=0.7, hovertemplate="Speed 7d: %{y:,.0f} m<extra></extra>"))
-    fig.add_trace(go.Scatter(x=x, y=g["Speed"].rolling(4, min_periods=1).mean(), name="Speed 28d",
-                             mode="lines", line=dict(color=_BLUE, width=2.4, dash="dash"), line_shape="spline",
-                             line_smoothing=0.7, hovertemplate="Speed 28d: %{y:,.0f} m<extra></extra>"))
-    fig.add_trace(go.Scatter(x=x, y=g["Tempo"].rolling(1, min_periods=1).mean(), name="Tempo 7d",
-                             mode="lines", line=dict(color=_ORANGE, width=2.4, dash="dot"), line_shape="spline",
-                             line_smoothing=0.7, hovertemplate="Tempo 7d: %{y:,.0f} m<extra></extra>"))
-    fig.add_trace(go.Scatter(x=x, y=g["Tempo"].rolling(4, min_periods=1).mean(), name="Tempo 28d",
-                             mode="lines", line=dict(color=_ORANGE, width=2.4, dash="dash"), line_shape="spline",
-                             line_smoothing=0.7, hovertemplate="Tempo 28d: %{y:,.0f} m<extra></extra>"))
+    fig.add_trace(go.Scatter(x=x, y=g["Speed"].ewm(span=4, adjust=False, min_periods=1).mean(),
+                             name="Speed trend", mode="lines",
+                             line=dict(color=_BLUE, width=2.2), line_shape="spline", line_smoothing=0.7,
+                             hovertemplate="Speed trend: %{y:,.0f} m<extra></extra>"))
+    fig.add_trace(go.Scatter(x=x, y=g["Tempo"].ewm(span=4, adjust=False, min_periods=1).mean(),
+                             name="Tempo trend", mode="lines",
+                             line=dict(color=_ORANGE, width=2.2), line_shape="spline", line_smoothing=0.7,
+                             hovertemplate="Tempo trend: %{y:,.0f} m<extra></extra>"))
     fig.update_layout(title="Weekly Speed & Tempo Volumes", xaxis_title="", yaxis_title="Metres",
                       barmode="stack", hovermode="x unified", **MOBILE_PLOT_LAYOUT)
     return fig
