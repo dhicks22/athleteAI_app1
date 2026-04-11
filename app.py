@@ -575,16 +575,26 @@ def load_tab(tab_name: str) -> pd.DataFrame:
     df = pd.DataFrame(all_values[1:], columns=clean_headers)
     df = df.loc[:, ~df.columns.str.startswith("_unnamed")]
 
-    # Override Date column with formatted values so serial numbers become
-    # readable date strings that pandas can parse correctly
-    if "Date" in df.columns and formatted_values and len(formatted_values) > 1:
+    # Override formula-computed columns with FORMATTED_VALUE results.
+    # The FORMULA render returns raw formula strings (e.g. "=IFERROR(G2*H2,\"\")")
+    # for computed cells — pd.to_numeric can't parse these, so we must use
+    # the evaluated/formatted values for all numeric and date columns.
+    NUMERIC_OVERRIDE_COLS = {
+        "Date", "Load", "SPEED (m)", "TEMPO (m)", "sRPE", "RPE", "Duration",
+        "EWMA 28", "EMWA 28", "EWMA 7", "EMWA 7",
+        "Sleep_1_5", "Fatigue_1_5", "Mood_1_5", "Soreness_1_5",
+        "RPE_Post_Session", "Session_1_5",
+    }
+    if formatted_values and len(formatted_values) > 1:
         fmt_headers = formatted_values[0]
-        if "Date" in fmt_headers:
-            date_col_idx = fmt_headers.index("Date")
-            df["Date"] = [
-                row[date_col_idx] if date_col_idx < len(row) else ""
-                for row in formatted_values[1:]
-            ]
+        fmt_rows    = formatted_values[1:]
+        for col in NUMERIC_OVERRIDE_COLS:
+            if col in df.columns and col in fmt_headers:
+                col_idx = fmt_headers.index(col)
+                df[col] = [
+                    row[col_idx] if col_idx < len(row) else ""
+                    for row in fmt_rows
+                ]
 
     # Parse hyperlinks for relevant cols
     for col in HYPERLINK_COLS:
