@@ -1581,10 +1581,10 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
                     marker=dict(color="rgba(30,107,214,0.35)", line=dict(color=_BLUE, width=1.8)),
                     hovertemplate="Load: %{y:,.0f}<extra></extra>")
         fig.add_trace(go.Scatter(x=x, y=g["Acute"], name="Acute (4wk)", mode="lines",
-                                 line=dict(color=_TEAL, width=2.6), line_shape="spline", line_smoothing=0.75,
+                                 line=dict(color=_TEAL, width=2.0, dash="dot"), line_shape="spline", line_smoothing=0.75,
                                  hovertemplate="Acute: %{y:,.0f}<extra></extra>"))
         fig.add_trace(go.Scatter(x=x, y=g["Chronic"], name="Chronic (16wk)", mode="lines",
-                                 line=dict(color=_GREEN_DARK, width=2, dash="dot"), line_shape="spline",
+                                 line=dict(color=_GREEN_DARK, width=2.0, dash="dash"), line_shape="spline",
                                  line_smoothing=0.75, opacity=0.7,
                                  hovertemplate="Chronic: %{y:,.0f}<extra></extra>"))
         fig.add_trace(go.Scatter(x=x, y=g["ACWR"], name="ACWR", mode="lines", yaxis="y2",
@@ -1642,10 +1642,10 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
                 marker=dict(color="rgba(30,107,214,0.35)", line=dict(color=_BLUE, width=1.8)),
                 hovertemplate="Load: %{y:,.0f}<extra></extra>")
     fig.add_trace(go.Scatter(x=x, y=d["EWMA7"], name="7d EWMA", mode="lines",
-                             line=dict(color=_TEAL, width=2.6), line_shape="spline", line_smoothing=0.75,
+                             line=dict(color=_TEAL, width=2.0, dash="dot"), line_shape="spline", line_smoothing=0.75,
                              hovertemplate="7d: %{y:,.0f}<extra></extra>"))
     fig.add_trace(go.Scatter(x=x, y=d["EWMA28"], name="28d EWMA", mode="lines",
-                             line=dict(color=_GREEN_DARK, width=2, dash="dot"), line_shape="spline",
+                             line=dict(color=_GREEN_DARK, width=2.0, dash="dash"), line_shape="spline",
                              line_smoothing=0.75, opacity=0.7,
                              hovertemplate="28d: %{y:,.0f}<extra></extra>"))
     fig.add_trace(go.Scatter(x=x, y=d["ACWR"], name="ACWR", mode="lines", yaxis="y2",
@@ -1764,11 +1764,11 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
                     hovertemplate="Tempo: %{y:,.0f} m<extra></extra>")
         fig.add_trace(go.Scatter(x=x, y=speed.ewm(span=7, adjust=False, min_periods=1).mean(),
                                  name="Speed trend", mode="lines",
-                                 line=dict(color=_BLUE, width=2.2), line_shape="spline", line_smoothing=0.7,
+                                 line=dict(color=_BLUE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
                                  hovertemplate="Speed trend: %{y:,.0f} m<extra></extra>"))
         fig.add_trace(go.Scatter(x=x, y=tempo.ewm(span=7, adjust=False, min_periods=1).mean(),
                                  name="Tempo trend", mode="lines",
-                                 line=dict(color=_ORANGE, width=2.2), line_shape="spline", line_smoothing=0.7,
+                                 line=dict(color=_ORANGE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
                                  hovertemplate="Tempo trend: %{y:,.0f} m<extra></extra>"))
         fig.update_layout(title="Daily Speed & Tempo Volumes", xaxis_title="", yaxis_title="Metres",
                           barmode="stack", hovermode="x unified", **MOBILE_PLOT_LAYOUT)
@@ -1792,11 +1792,11 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
                 hovertemplate="Tempo: %{y:,.0f} m<extra></extra>")
     fig.add_trace(go.Scatter(x=x, y=g["Speed"].ewm(span=4, adjust=False, min_periods=1).mean(),
                              name="Speed trend", mode="lines",
-                             line=dict(color=_BLUE, width=2.2), line_shape="spline", line_smoothing=0.7,
+                             line=dict(color=_BLUE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
                              hovertemplate="Speed trend: %{y:,.0f} m<extra></extra>"))
     fig.add_trace(go.Scatter(x=x, y=g["Tempo"].ewm(span=4, adjust=False, min_periods=1).mean(),
                              name="Tempo trend", mode="lines",
-                             line=dict(color=_ORANGE, width=2.2), line_shape="spline", line_smoothing=0.7,
+                             line=dict(color=_ORANGE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
                              hovertemplate="Tempo trend: %{y:,.0f} m<extra></extra>"))
     fig.update_layout(title="Weekly Speed & Tempo Volumes", xaxis_title="", yaxis_title="Metres",
                       barmode="stack", hovermode="x unified", **MOBILE_PLOT_LAYOUT)
@@ -4011,23 +4011,26 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 
     const PAD=80,CARD_TOP=EXPORT_H*0.52;
 
-    // Logo — use canvas filter to render white, no cross-origin canvas needed
-    if(logoImg&&logoImg.complete&&logoImg.naturalWidth>0){{
-      const LOGO_SIZE=80,LOGO_PAD=PAD,LOGO_Y=48;
-      ctx.save();
-      ctx.filter='brightness(0) invert(1)';  // make logo pure white
-      ctx.globalAlpha=0.9;
-      ctx.drawImage(logoImg,LOGO_PAD,LOGO_Y,LOGO_SIZE,LOGO_SIZE);
-      ctx.filter='none';
-      ctx.globalAlpha=1;
-      ctx.restore();
-      ctx.font='600 28px system-ui';ctx.fillStyle='rgba(255,255,255,0.80)';
+    // Logo — render white by drawing to offscreen canvas then compositing
+    const LOGO_SIZE=72,LOGO_PAD=PAD,LOGO_Y=CARD_TOP-60;
+    function drawBrand(){{
+      ctx.font='500 26px system-ui';ctx.fillStyle='rgba(255,255,255,0.75)';
       ctx.textAlign='left';ctx.textBaseline='middle';
-      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',LOGO_PAD+LOGO_SIZE+18,LOGO_Y+LOGO_SIZE/2);
+      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',LOGO_PAD+(logoImg?LOGO_SIZE+14:0),LOGO_Y+LOGO_SIZE/2);
+    }}
+    if(logoImg&&logoImg.naturalWidth>0){{
+      // Draw to offscreen canvas, apply white via source-in composite
+      const oc=document.createElement('canvas');
+      oc.width=LOGO_SIZE;oc.height=LOGO_SIZE;
+      const octx=oc.getContext('2d');
+      octx.drawImage(logoImg,0,0,LOGO_SIZE,LOGO_SIZE);
+      octx.globalCompositeOperation='source-in';
+      octx.fillStyle='rgba(255,255,255,0.90)';
+      octx.fillRect(0,0,LOGO_SIZE,LOGO_SIZE);
+      ctx.drawImage(oc,LOGO_PAD,LOGO_Y,LOGO_SIZE,LOGO_SIZE);
+      drawBrand();
     }}else{{
-      ctx.font='600 28px system-ui';ctx.fillStyle='rgba(255,255,255,0.80)';
-      ctx.textAlign='left';ctx.textBaseline='alphabetic';
-      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',PAD,92);
+      drawBrand();
     }}
 
     // Dials
