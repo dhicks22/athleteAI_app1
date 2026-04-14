@@ -3359,7 +3359,7 @@ def update_welcome(athlete_id, _today):
             "Line 2 (sub): One sentence of specific coaching context — what does the data mean for today? "
             "Reference a wellness score (rated X/5), load trend, streak, or a flag. Tell them what to do with it.\n"
             "CRITICAL: Sleep/fatigue/mood/soreness are 1-5 SCALE scores, not hours or minutes. Say rated X/5 not X hours. "
-            "BANNED words: greatness, dedication, potential, journey, warrior, champion, amazing, incredible, outstanding. "
+            "BANNED words: greatness, dedication, potential, journey, warrior, champion, champions, amazing, incredible, outstanding, path, destiny, mindset, process. "
             "Tone: like a trusted coach — direct, warm, grounded in numbers. No hype, no corporate wellness speak. "
             "No hashtags, no exclamation marks, no emoji. Format strictly: headline | sub"
         )
@@ -3684,6 +3684,21 @@ def show_share_card(n, athlete_id, is_open):
 
             if all(v is not None for v in [sl, fa, so, mo]):
                 neuro_val  = calc_neuro_readiness(sl, fa, so, mo, history_df=recent_neuro) or 0
+                # Apply same decay penalty as main dashboard
+                _NEURO_DECAY   = 3.5
+                _NEURO_MAX_PEN = 35.0
+                _wellness_cols = ["Sleep_1_5", "Fatigue_1_5", "Mood_1_5", "Soreness_1_5"]
+                _present = [c for c in _wellness_cols if c in df_neuro.columns]
+                if _present:
+                    df_neuro["_hw"] = df_neuro[_present].apply(
+                        lambda row: any(pd.to_numeric(row, errors="coerce").gt(0).dropna()), axis=1)
+                    _logged = df_neuro[df_neuro["_hw"]]["Date"]
+                    if not _logged.empty:
+                        _days_silent = (today - _logged.max()).days
+                        if _days_silent > 0:
+                            neuro_val = float(np.clip(
+                                neuro_val - min(_NEURO_DECAY * _days_silent, _NEURO_MAX_PEN), 0, 100))
+                neuro_val  = float(np.clip(neuro_val, 0, 100))
                 sleep_v    = int(sl); fatigue_v  = int(fa)
                 soreness_v = int(so); mood_v     = int(mo)
 
@@ -3736,7 +3751,7 @@ def show_share_card(n, athlete_id, is_open):
             "Write ONE punchy sentence — sounds like something a great coach would say after glancing at the data. "
             "Rules: Max 14 words. Address the athlete by first name. Ground it in a real number (readiness, streak, or exposure). "
             "Tone: direct, warm, a little dry — like a coach who doesn't do corporate speak. "
-            "BANNED: optimal, peak performance, indicates, recovery needed, warrior, beast, hustle, champion, journey, incredible, amazing, greatness. "
+            "BANNED: optimal, peak performance, indicates, recovery needed, warrior, beast, hustle, champion, champions, journey, incredible, amazing, greatness, path, destiny. "
             "No hashtags. No exclamation marks. No emoji."
         )
         mot_usr = (
@@ -4017,7 +4032,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     const PAD=80,CARD_TOP=EXPORT_H*0.52;
 
     // Logo — render white by drawing to offscreen canvas then compositing
-    const LOGO_SIZE=72,LOGO_PAD=PAD,LOGO_Y=CARD_TOP-60;
+    const LOGO_SIZE=72,LOGO_PAD=PAD,LOGO_Y=56;
     function drawBrand(){{
       ctx.font='500 26px system-ui';ctx.fillStyle='rgba(255,255,255,0.75)';
       ctx.textAlign='left';ctx.textBaseline='middle';
