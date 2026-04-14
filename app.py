@@ -3270,6 +3270,7 @@ app.clientside_callback(
     Output("welcome-message", "children"),
     Input("athlete-dropdown", "value"),
     Input("today-date",       "children"),
+    prevent_initial_call=False,
 )
 def update_welcome(athlete_id, _today):
     if not athlete_id:
@@ -3397,11 +3398,11 @@ def update_welcome(athlete_id, _today):
 
 @app.callback(
     Output("motivational-message", "children"),
-    Input("today-date",  "children"),
-    State("athlete-dropdown", "value"),
-    prevent_initial_call=True,
+    Input("athlete-dropdown", "value"),
+    Input("today-date",       "children"),
+    prevent_initial_call=False,
 )
-def update_motivational_message(today_date, athlete_id):
+def update_motivational_message(athlete_id, today_date):
     if not athlete_id:
         raise PreventUpdate
 
@@ -4123,7 +4124,7 @@ def update_garmin_badge(athlete_id, _today):
                       style={"fontSize": "11px", "background": "#e8f5e9", "color": "#2E7D32",
                              "padding": "3px 10px", "borderRadius": "20px", "fontWeight": "600",
                              "border": "1px solid #a5d6a7"}),
-            html.Span(" · dials powered by device data", style={"fontSize": "11px", "color": "#888", "marginLeft": "4px"}),
+
         ], style={"textAlign": "center", "marginTop": "4px"})
     else:
         badge = html.Div([
@@ -4131,8 +4132,7 @@ def update_garmin_badge(athlete_id, _today):
                    style={"fontSize": "11px", "color": "#1565C0", "textDecoration": "none",
                           "background": "#e3f2fd", "padding": "3px 10px", "borderRadius": "20px",
                           "border": "1px solid #90caf9", "fontWeight": "500"}),
-            html.Span(" · optional — dials will use device data",
-                      style={"fontSize": "11px", "color": "#aaa", "marginLeft": "4px"}),
+
         ], style={"textAlign": "center", "marginTop": "4px"})
 
     return badge
