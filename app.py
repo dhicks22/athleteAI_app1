@@ -4020,6 +4020,8 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 
   document.getElementById('dlBtn').addEventListener('click',function(){{
     const btn=this;btn.textContent='Generating\u2026';btn.disabled=true;
+
+    function doExport(){{
     const out=document.createElement('canvas');out.width=EXPORT_W;out.height=EXPORT_H;
     const ctx=out.getContext('2d');
 
@@ -4114,7 +4116,17 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       const a=document.createElement('a');a.download='aci-{dl_name}.png';a.href=imgData;a.click();
       btn.textContent='Download story (1080\u00d71920)';
     }}
-    btn.disabled=false;
+      btn.disabled=false;
+    }} // end doExport
+
+    // Restore image from dataURL if needed, then export
+    if((!userImage||userImage.naturalWidth===0) && userImageDataURL){{
+      const restored=new Image();
+      restored.onload=function(){{userImage=restored;doExport();}};
+      restored.src=userImageDataURL;
+    }}else{{
+      doExport();
+    }}
   }});
 
   function wrapText(ctx,text,x,y,maxWidth,lineHeight){{
