@@ -2049,12 +2049,16 @@ def build_main_layout(auth_data):
         options = [
             {"label": info.get("sheet", ""), "value": info.get("sheet", "")}
             for _, info in USER_LOGINS.items()
-            if info.get("sheet", "") and info.get("sheet", "") in tabs
+            if info.get("sheet", "")
+            # Include even if not in tabs list — Sheets may be slow on cold start
         ]
     else:
-        options = [{"label": athlete_sheet, "value": athlete_sheet}] if athlete_sheet in tabs else []
+        options = [{"label": athlete_sheet, "value": athlete_sheet}]
 
     if default_tab is None and options:
+        default_tab = options[0]["value"]
+    # Ensure default_tab is always set if we have options
+    if not default_tab and options:
         default_tab = options[0]["value"]
 
     home_view = html.Div(
@@ -3270,7 +3274,7 @@ app.clientside_callback(
     Output("welcome-message", "children"),
     Input("athlete-dropdown", "value"),
     Input("today-date",       "children"),
-    prevent_initial_call=False,
+    prevent_initial_call=True,
 )
 def update_welcome(athlete_id, _today):
     if not athlete_id:
@@ -3400,7 +3404,7 @@ def update_welcome(athlete_id, _today):
     Output("motivational-message", "children"),
     Input("athlete-dropdown", "value"),
     Input("today-date",       "children"),
-    prevent_initial_call=False,
+    prevent_initial_call=True,
 )
 def update_motivational_message(athlete_id, today_date):
     if not athlete_id:
