@@ -1522,6 +1522,58 @@ def garmin_enrich_df_row(df: pd.DataFrame, date: dt.date) -> dict:
     return result
 
 
+
+# ============================================================
+#  Shared neuro readiness computation — used by dashboard + share card
+#  to ensure both always show the same value
+# ============================================================
+
+def compute_neuro_for_athlete(df: pd.DataFrame, today: dt.date) -> float | None:
+    """Compute neuromuscular readiness exactly as update_dashboard does."""
+    NEURO_WINDOW  = 14
+    NEURO_DECAY   = 3.5
+    NEURO_MAX_PEN = 35.0
+
+    if df is None or df.empty:
+        return None
+
+    df_neuro = df.copy()
+    df_neuro["Date"] = pd.to_datetime(df_neuro["Date"], errors="coerce").dt.date
+    df_neuro = df_neuro.sort_values("Date")
+    recent_neuro = df_neuro[df_neuro["Date"] >= today - dt.timedelta(days=NEURO_WINDOW)]
+
+    def _last_col(frame, col):
+        s = pd.to_numeric(frame.get(col, pd.Series(dtype=float)), errors="coerce").dropna()
+        return float(s.iloc[-1]) if not s.empty else None
+
+    sleep_last    = _last_col(recent_neuro, "Sleep_1_5")
+    fatigue_last  = _last_col(recent_neuro, "Fatigue_1_5")
+    soreness_last = _last_col(recent_neuro, "Soreness_1_5")
+    mood_last     = _last_col(recent_neuro, "Mood_1_5")
+
+    if any(v is None for v in [sleep_last, fatigue_last, soreness_last, mood_last]):
+        return None
+
+    neuro_val = calc_neuro_readiness(sleep_last, fatigue_last, soreness_last, mood_last,
+                                     history_df=recent_neuro, span=3)
+
+    wellness_cols = ["Sleep_1_5", "Fatigue_1_5", "Mood_1_5", "Soreness_1_5"]
+    present_cols  = [c for c in wellness_cols if c in df_neuro.columns]
+    if present_cols:
+        df_neuro["_hw"] = df_neuro[present_cols].apply(
+            lambda row: any(pd.to_numeric(row, errors="coerce").gt(0).dropna()), axis=1)
+        logged_dates = df_neuro[df_neuro["_hw"]]["Date"]
+        if not logged_dates.empty:
+            last_date = logged_dates.max()
+            if hasattr(last_date, "date"):
+                last_date = last_date.date()
+            days_silent = (today - last_date).days
+            if days_silent > 0:
+                neuro_val = float(np.clip(
+                    neuro_val - min(NEURO_DECAY * days_silent, NEURO_MAX_PEN), 0, 100))
+
+    return float(np.clip(neuro_val, 0, 100))
+
 # ============================================================
 #  Plot builders
 # ============================================================
@@ -2628,35 +2680,8 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     today_enriched = garmin_enrich_df_row(df, today)
     data_source    = today_enriched["source"]
 
-    df_neuro = df.copy()
-    df_neuro["Date"] = pd.to_datetime(df_neuro["Date"], errors="coerce").dt.date
-    df_neuro = df_neuro.sort_values("Date")
-    recent_neuro = df_neuro[df_neuro["Date"] >= today - dt.timedelta(days=NEURO_WINDOW)]
-
-    def _last_col(frame, col):
-        s = pd.to_numeric(frame.get(col, pd.Series(dtype=float)), errors="coerce").dropna()
-        return float(s.iloc[-1]) if not s.empty else None
-
-    sleep_last    = today_enriched["sleep"]    or _last_col(recent_neuro, "Sleep_1_5")
-    fatigue_last  = today_enriched["fatigue"]  or _last_col(recent_neuro, "Fatigue_1_5")
-    soreness_last = today_enriched["soreness"] or _last_col(recent_neuro, "Soreness_1_5")
-    mood_last     = today_enriched["mood"]     or _last_col(recent_neuro, "Mood_1_5")
-
-    if any(v is None for v in [sleep_last, fatigue_last, soreness_last, mood_last]):
-        neuro_val = None
-    else:
-        neuro_val = calc_neuro_readiness(sleep_last, fatigue_last, soreness_last, mood_last,
-                                         history_df=recent_neuro, span=3)
-        wellness_cols = ["Sleep_1_5", "Fatigue_1_5", "Mood_1_5", "Soreness_1_5"]
-        present_cols  = [c for c in wellness_cols if c in df_neuro.columns]
-        df_neuro["_has_wellness"] = df_neuro[present_cols].apply(
-            lambda row: any(pd.to_numeric(row, errors="coerce").gt(0).dropna()), axis=1)
-        logged_w_dates = df_neuro[df_neuro["_has_wellness"]]["Date"]
-        if not logged_w_dates.empty:
-            days_silent = (today - logged_w_dates.max()).days
-            if days_silent > 0:
-                neuro_val = float(np.clip(neuro_val - min(NEURO_DECAY * days_silent, NEURO_MAX_PEN), 0, 100))
-        neuro_val = float(np.clip(neuro_val, 0, 100))
+    # Use shared helper — guarantees same result as share card
+    neuro_val = compute_neuro_for_athlete(df, today)
 
     df_time = df.copy()
     df_time["Date"] = pd.to_datetime(df_time["Date"], errors="coerce")
@@ -3672,44 +3697,19 @@ def show_share_card(n, athlete_id, is_open):
             quality_series = pd.to_numeric(dft.get("Session_1_5"), errors="coerce")
             readiness_val  = calc_daily_readiness(load_series, rpe_series, quality_series) or 0
 
-            df_neuro     = df.copy()
-            df_neuro["Date"] = pd.to_datetime(df_neuro["Date"], errors="coerce").dt.date
-            recent_neuro = df_neuro[df_neuro["Date"] >= today - dt.timedelta(days=14)]
+            # Use shared helper — same result as main dashboard
+            neuro_val = compute_neuro_for_athlete(df, today) or 0
 
+            # Still grab wellness values for display
+            _df_n = df.copy()
+            _df_n["Date"] = pd.to_datetime(_df_n["Date"], errors="coerce").dt.date
+            _recent = _df_n[_df_n["Date"] >= today - dt.timedelta(days=14)]
             def _last(col):
-                s = pd.to_numeric(recent_neuro.get(col, pd.Series(dtype=float)), errors="coerce").dropna()
+                s = pd.to_numeric(_recent.get(col, pd.Series(dtype=float)), errors="coerce").dropna()
                 return float(s.iloc[-1]) if not s.empty else None
-
             sl = _last("Sleep_1_5"); fa = _last("Fatigue_1_5")
             so = _last("Soreness_1_5"); mo = _last("Mood_1_5")
-
             if all(v is not None for v in [sl, fa, so, mo]):
-                neuro_val = calc_neuro_readiness(sl, fa, so, mo, history_df=recent_neuro, span=3) or 0
-                # Exact same decay as update_dashboard
-                _NEURO_DECAY   = 3.5
-                _NEURO_MAX_PEN = 35.0
-                _wellness_cols = ["Sleep_1_5", "Fatigue_1_5", "Mood_1_5", "Soreness_1_5"]
-                _present = [c for c in _wellness_cols if c in df_neuro.columns]
-                if _present:
-                    # Use full df_neuro (not just recent) to find last logged wellness date
-                    _full_neuro = df.copy()
-                    _full_neuro["Date"] = pd.to_datetime(_full_neuro["Date"], errors="coerce").dt.date
-                    _full_neuro = _full_neuro.sort_values("Date")
-                    _full_neuro["_hw"] = _full_neuro[_present].apply(
-                        lambda row: any(pd.to_numeric(row, errors="coerce").gt(0).dropna()), axis=1)
-                    _logged_dates = _full_neuro[_full_neuro["_hw"]]["Date"]
-                    if not _logged_dates.empty:
-                        _last_wellness = _logged_dates.max()
-                        # Ensure both are date objects for subtraction
-                        if hasattr(_last_wellness, "date"):
-                            _last_wellness = _last_wellness.date()
-                        _days_silent = (today - _last_wellness).days
-                        print(f"Share card neuro: days_silent={_days_silent}, raw={neuro_val:.1f}")
-                        if _days_silent > 0:
-                            neuro_val = float(np.clip(
-                                neuro_val - min(_NEURO_DECAY * _days_silent, _NEURO_MAX_PEN), 0, 100))
-                neuro_val  = float(np.clip(neuro_val, 0, 100))
-                print(f"Share card neuro final: {neuro_val:.1f}")
                 sleep_v    = int(sl); fatigue_v  = int(fa)
                 soreness_v = int(so); mood_v     = int(mo)
 
