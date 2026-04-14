@@ -2686,7 +2686,7 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     quality_series = pd.to_numeric(df_time.get("Session_1_5"), errors="coerce")
     readiness_val  = calc_daily_readiness(load_series, rpe_series, quality_series, span=7)
 
-    _src = " · via Garmin" if data_source == "garmin" else " · manual entry"
+    _src = " · via Garmin" if data_source == "garmin" else ""
 
     weekly_ui = dial_flip(
         apple_sessions_ring(weekly_exposure_pct), " ",
@@ -3458,8 +3458,9 @@ def update_motivational_message(athlete_id, today_date):
         "You are a high-performance sprint and strength coach writing a single motivational line "
         "for an athlete when they open their training app. "
         "Rules: 1 sentence ONLY. Address the athlete by first name. "
-        "Focus on PROCESS, IDENTITY, or CONSISTENCY — NOT on today's readiness score. "
+        "Focus on EFFORT, IDENTITY, or CONSISTENCY — NOT on today's readiness score. "
         "Tone: like a coach who has worked with this athlete for years. Sharp, personal, not generic. "
+        "BANNED: champion, champions, warrior, journey, greatness, amazing, incredible, mindset, destiny, path, process, outstanding. "
         "No hashtags. No emojis. No exclamation marks. "
         "Never mention readiness, fatigue scores, or wellness numbers. Never start with 'It's [day]'."
     )
@@ -3473,7 +3474,7 @@ def update_motivational_message(athlete_id, today_date):
             f"Every session is data, {first_name}. Make this one count.",
             f"{first_name}, consistency beats intensity. Show up.",
             f"The best athletes in the world trained today, {first_name}. So will you.",
-            f"{first_name}, trust the process — the numbers don't lie.",
+            f"{first_name}, the numbers are honest — keep showing up.",
         ])
 
     return html.Div(
@@ -3683,22 +3684,32 @@ def show_share_card(n, athlete_id, is_open):
             so = _last("Soreness_1_5"); mo = _last("Mood_1_5")
 
             if all(v is not None for v in [sl, fa, so, mo]):
-                neuro_val  = calc_neuro_readiness(sl, fa, so, mo, history_df=recent_neuro) or 0
-                # Apply same decay penalty as main dashboard
+                neuro_val = calc_neuro_readiness(sl, fa, so, mo, history_df=recent_neuro, span=3) or 0
+                # Exact same decay as update_dashboard
                 _NEURO_DECAY   = 3.5
                 _NEURO_MAX_PEN = 35.0
                 _wellness_cols = ["Sleep_1_5", "Fatigue_1_5", "Mood_1_5", "Soreness_1_5"]
                 _present = [c for c in _wellness_cols if c in df_neuro.columns]
                 if _present:
-                    df_neuro["_hw"] = df_neuro[_present].apply(
+                    # Use full df_neuro (not just recent) to find last logged wellness date
+                    _full_neuro = df.copy()
+                    _full_neuro["Date"] = pd.to_datetime(_full_neuro["Date"], errors="coerce").dt.date
+                    _full_neuro = _full_neuro.sort_values("Date")
+                    _full_neuro["_hw"] = _full_neuro[_present].apply(
                         lambda row: any(pd.to_numeric(row, errors="coerce").gt(0).dropna()), axis=1)
-                    _logged = df_neuro[df_neuro["_hw"]]["Date"]
-                    if not _logged.empty:
-                        _days_silent = (today - _logged.max()).days
+                    _logged_dates = _full_neuro[_full_neuro["_hw"]]["Date"]
+                    if not _logged_dates.empty:
+                        _last_wellness = _logged_dates.max()
+                        # Ensure both are date objects for subtraction
+                        if hasattr(_last_wellness, "date"):
+                            _last_wellness = _last_wellness.date()
+                        _days_silent = (today - _last_wellness).days
+                        print(f"Share card neuro: days_silent={_days_silent}, raw={neuro_val:.1f}")
                         if _days_silent > 0:
                             neuro_val = float(np.clip(
                                 neuro_val - min(_NEURO_DECAY * _days_silent, _NEURO_MAX_PEN), 0, 100))
                 neuro_val  = float(np.clip(neuro_val, 0, 100))
+                print(f"Share card neuro final: {neuro_val:.1f}")
                 sleep_v    = int(sl); fatigue_v  = int(fa)
                 soreness_v = int(so); mood_v     = int(mo)
 
