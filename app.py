@@ -4378,7 +4378,7 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
             marker=dict(colors=[c, "#f0f0f0"]),
             sort=False,
             direction="clockwise",
-            rotation=90,
+            rotation=-90,
             textinfo="none",
             hoverinfo="skip",
             showlegend=False,
