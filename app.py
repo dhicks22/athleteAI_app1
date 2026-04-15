@@ -4366,38 +4366,42 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
         return "red"
 
     def mini_ring(value, color, size=52):
-        """Small ring dial using Plotly go.Figure — no SVG injection needed."""
+        """Small ring dial using CSS — reliable top-fill, no Plotly quirks."""
         colour_map = {"green": "#2E7D32", "amber": "#F9A825", "red": "#C62828", "grey": "#e0e0e0"}
         c = colour_map.get(score_colour(value), "#e0e0e0")
         txt = "—" if value is None else str(int(round(value)))
         pct = 0 if value is None else min(max(float(value), 0), 100)
 
-        fig = go.Figure(go.Pie(
-            values=[pct, 100 - pct],
-            hole=0.72,
-            marker=dict(colors=[c, "#f0f0f0"]),
-            sort=False,
-            direction="clockwise",
-            rotation=-90,
-            textinfo="none",
-            hoverinfo="skip",
-            showlegend=False,
-        ))
-        fig.update_layout(
-            margin=dict(l=0, r=0, t=0, b=0),
-            width=size, height=size,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            annotations=[dict(
-                text=txt, x=0.5, y=0.5, showarrow=False,
-                font=dict(size=13, color="#333", family="system-ui"),
-                xanchor="center", yanchor="middle",
-            )],
-        )
-        return dcc.Graph(
-            figure=fig,
-            config={"displayModeBar": False, "staticPlot": True},
-            style={"width": f"{size}px", "height": f"{size}px"},
+        # Use conic-gradient for a clean top-filling ring
+        # conic-gradient starts at top (12 o'clock) by default
+        deg = round(pct * 3.6, 1)  # 100% = 360deg
+        ring_style = {
+            "width": f"{size}px",
+            "height": f"{size}px",
+            "borderRadius": "50%",
+            "background": f"conic-gradient({c} 0deg {deg}deg, #f0f0f0 {deg}deg 360deg)",
+            "display": "flex",
+            "alignItems": "center",
+            "justifyContent": "center",
+            "position": "relative",
+        }
+        # Inner white circle to create donut hole
+        inner_size = size - 14  # 7px ring width each side
+        inner_style = {
+            "width": f"{inner_size}px",
+            "height": f"{inner_size}px",
+            "borderRadius": "50%",
+            "backgroundColor": "white",
+            "display": "flex",
+            "alignItems": "center",
+            "justifyContent": "center",
+            "fontSize": "13px",
+            "fontWeight": "700",
+            "color": "#333",
+        }
+        return html.Div(
+            html.Div(txt, style=inner_style),
+            style=ring_style,
         )
 
     cards = []
