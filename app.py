@@ -4332,13 +4332,16 @@ def garmin_status():
     prevent_initial_call=True,
 )
 def update_squad_view(nav_clicks, refresh_clicks, auth_data):
-    if not auth_data or not auth_data.get("is_coach"):
-        raise PreventUpdate
-    # Need at least one click on either trigger
-    if not (nav_clicks or refresh_clicks):
-        raise PreventUpdate
+    print(f"🏟️ Squad callback fired — nav={nav_clicks} refresh={refresh_clicks} auth={auth_data}")
+    if not auth_data:
+        print("⚠️ No auth_data")
+        return html.Div("Not logged in.", className="text-muted")
+    if not auth_data.get("is_coach"):
+        print(f"⚠️ Not a coach — is_coach={auth_data.get('is_coach')}, keys={list(auth_data.keys())}")
+        return html.Div("Coach access only.", className="text-muted")
 
     today = today_adl()
+    print(f"✅ Squad loading for coach {auth_data.get('username')} — {len(USER_LOGINS)} users in config")
 
     # All sheets except "Default" template
     EXCLUDE = {"Default", "default"}
