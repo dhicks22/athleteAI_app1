@@ -4322,19 +4322,18 @@ def garmin_status():
     prevent_initial_call=True,
 )
 def update_squad_view(n_clicks, auth_data):
-    if not n_clicks or not auth_data or not auth_data.get("is_coach"):
+    if not auth_data or not auth_data.get("is_coach"):
         raise PreventUpdate
 
     today = today_adl()
 
-    # Get all athlete sheets from USER_LOGINS
-    athletes = [
-        {"name": info.get("sheet", ""), "key": key}
-        for key, info in USER_LOGINS.items()
-        if info.get("sheet", "") and info.get("role", "athlete") != "coach"
-    ]
-    # Include coach athletes too — anyone with a sheet
-    all_sheets = list({info.get("sheet", "") for _, info in USER_LOGINS.items() if info.get("sheet", "")})
+    # All sheets except "Default" template
+    EXCLUDE = {"Default", "default"}
+    all_sheets = sorted([
+        info.get("sheet", "")
+        for _, info in USER_LOGINS.items()
+        if info.get("sheet", "") and info.get("sheet", "") not in EXCLUDE
+    ])
 
     TRAFFIC = {
         "green":  {"bg": "#e8f5e9", "border": "#2E7D32", "dot": "#2E7D32"},
@@ -4351,28 +4350,30 @@ def update_squad_view(n_clicks, auth_data):
         return "red"
 
     def mini_ring(value, color, size=52):
-        """Small SVG ring dial."""
-        if value is None:
-            return html.Div("—", style={"fontSize": "18px", "fontWeight": "600",
-                                         "color": "#bbb", "textAlign": "center",
-                                         "lineHeight": f"{size}px", "width": f"{size}px"})
-        circ = 2 * 3.14159 * 20
-        offset = round(circ * (1 - min(max(value, 0), 100) / 100), 1)
+        """Small SVG ring dial using dangerouslySetInnerHTML."""
         colour_map = {"green": "#2E7D32", "amber": "#F9A825", "red": "#C62828", "grey": "#bdbdbd"}
-        c = colour_map.get(score_colour(value), "#bdbdbd")
-        return html.Div(
-            html.Svg([
-                html.Circle(cx="26", cy="26", r="20", fill="none",
-                            stroke="rgba(0,0,0,0.08)", strokeWidth="4"),
-                html.Circle(cx="26", cy="26", r="20", fill="none",
-                            stroke=c, strokeWidth="4", strokeLinecap="round",
-                            strokeDasharray=str(circ),
-                            strokeDashoffset=str(offset),
-                            transform="rotate(-90 26 26)"),
-                html.Text(str(int(round(value))), x="26", y="31",
-                          textAnchor="middle", fontSize="12", fontWeight="700", fill="#333"),
-            ], viewBox="0 0 52 52", style={"width": f"{size}px", "height": f"{size}px"}),
+        if value is None:
+            c = "#e0e0e0"
+            txt = "—"
+            offset = 0
+        else:
+            c = colour_map.get(score_colour(value), "#bdbdbd")
+            txt = str(int(round(value)))
+            circ = 2 * 3.14159 * 20
+            offset = round(circ * (1 - min(max(value, 0), 100) / 100), 1)
+
+        circ_val = round(2 * 3.14159 * 20, 1)
+        svg = (
+            f'<svg viewBox="0 0 52 52" width="{size}" height="{size}" xmlns="http://www.w3.org/2000/svg">' +
+            f'<circle cx="26" cy="26" r="20" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="4"/>' +
+            (f'<circle cx="26" cy="26" r="20" fill="none" stroke="{c}" stroke-width="4" ' +
+             f'stroke-linecap="round" stroke-dasharray="{circ_val}" stroke-dashoffset="{offset}" ' +
+             f'transform="rotate(-90 26 26)"/>' if value is not None else "") +
+            f'<text x="26" y="31" text-anchor="middle" font-size="12" font-weight="700" fill="#333">{txt}</text>' +
+            f'</svg>'
         )
+        return html.Div(dangerouslySetInnerHTML={"__html": svg},
+                        style={"width": f"{size}px", "height": f"{size}px"})
 
     cards = []
 
@@ -4549,25 +4550,15 @@ def update_squad_view(n_clicks, auth_data):
     if not cards:
         return html.Div("No athletes found.", className="text-muted mt-3")
 
-    # Summary bar at top
-    total    = len(cards)
-    logged_today = sum(1 for s in all_sheets if not (lambda df=load_tab(s): df.empty or
-                       not get_day_status(
-                           (lambda d: (d.__setitem__("Date", pd.to_datetime(d["Date"], errors="coerce").dt.date) or d))(df.copy()),
-                           today).get("logged", False))())
-
+    total = len(all_sheets)
     summary = html.Div([
         html.Div([
             html.Div(str(total), style={"fontSize": "28px", "fontWeight": "800", "color": "#1565C0"}),
             html.Div("Athletes", style={"fontSize": "11px", "color": "#888"}),
         ], style={"textAlign": "center", "flex": "1"}),
         html.Div([
-            html.Div(str(streak), style={"fontSize": "28px", "fontWeight": "800", "color": "#E91E8C"}),
-            html.Div("Max streak", style={"fontSize": "11px", "color": "#888"}),
-        ], style={"textAlign": "center", "flex": "1"}),
-        html.Div([
-            html.Div(today.strftime("%d %b"), style={"fontSize": "22px", "fontWeight": "700", "color": "#333"}),
-            html.Div("Today", style={"fontSize": "11px", "color": "#888"}),
+            html.Div(today.strftime("%a"), style={"fontSize": "22px", "fontWeight": "700", "color": "#333"}),
+            html.Div(today.strftime("%d %b %Y"), style={"fontSize": "11px", "color": "#888"}),
         ], style={"textAlign": "center", "flex": "1"}),
     ], style={"display": "flex", "background": "#f8f9fa", "borderRadius": "12px",
               "padding": "12px", "marginBottom": "16px"})
