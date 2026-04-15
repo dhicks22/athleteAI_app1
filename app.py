@@ -4366,30 +4366,39 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
         return "red"
 
     def mini_ring(value, color, size=52):
-        """Small SVG ring dial using dangerouslySetInnerHTML."""
-        colour_map = {"green": "#2E7D32", "amber": "#F9A825", "red": "#C62828", "grey": "#bdbdbd"}
-        if value is None:
-            c = "#e0e0e0"
-            txt = "—"
-            offset = 0
-        else:
-            c = colour_map.get(score_colour(value), "#bdbdbd")
-            txt = str(int(round(value)))
-            circ = 2 * 3.14159 * 20
-            offset = round(circ * (1 - min(max(value, 0), 100) / 100), 1)
+        """Small ring dial using Plotly go.Figure — no SVG injection needed."""
+        colour_map = {"green": "#2E7D32", "amber": "#F9A825", "red": "#C62828", "grey": "#e0e0e0"}
+        c = colour_map.get(score_colour(value), "#e0e0e0")
+        txt = "—" if value is None else str(int(round(value)))
+        pct = 0 if value is None else min(max(float(value), 0), 100)
 
-        circ_val = round(2 * 3.14159 * 20, 1)
-        svg = (
-            f'<svg viewBox="0 0 52 52" width="{size}" height="{size}" xmlns="http://www.w3.org/2000/svg">' +
-            f'<circle cx="26" cy="26" r="20" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="4"/>' +
-            (f'<circle cx="26" cy="26" r="20" fill="none" stroke="{c}" stroke-width="4" ' +
-             f'stroke-linecap="round" stroke-dasharray="{circ_val}" stroke-dashoffset="{offset}" ' +
-             f'transform="rotate(-90 26 26)"/>' if value is not None else "") +
-            f'<text x="26" y="31" text-anchor="middle" font-size="12" font-weight="700" fill="#333">{txt}</text>' +
-            f'</svg>'
+        fig = go.Figure(go.Pie(
+            values=[pct, 100 - pct],
+            hole=0.72,
+            marker=dict(colors=[c, "#f0f0f0"]),
+            sort=False,
+            direction="clockwise",
+            rotation=90,
+            textinfo="none",
+            hoverinfo="skip",
+            showlegend=False,
+        ))
+        fig.update_layout(
+            margin=dict(l=0, r=0, t=0, b=0),
+            width=size, height=size,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            annotations=[dict(
+                text=txt, x=0.5, y=0.5, showarrow=False,
+                font=dict(size=13, color="#333", family="system-ui"),
+                xanchor="center", yanchor="middle",
+            )],
         )
-        return html.Div(dangerouslySetInnerHTML={"__html": svg},
-                        style={"width": f"{size}px", "height": f"{size}px"})
+        return dcc.Graph(
+            figure=fig,
+            config={"displayModeBar": False, "staticPlot": True},
+            style={"width": f"{size}px", "height": f"{size}px"},
+        )
 
     cards = []
 
