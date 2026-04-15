@@ -2428,7 +2428,7 @@ def build_main_layout(auth_data):
         id="session-log-modal", is_open=False, scrollable=True, size="lg",
     )
 
-    # Squad view — coach only
+    # Squad view — coach only, but squad-cards-container always in DOM for callback stability
     squad_view = html.Div(
         id="squad-view",
         style={"display": "none"},
@@ -2436,9 +2436,18 @@ def build_main_layout(auth_data):
             html.H4("Squad Overview", className="mt-3 mb-1"),
             html.P("All athletes — readiness, wellness and session status",
                    style={"color": "#6e6e6e", "fontSize": "13px", "margin": "0 0 16px 0"}),
-            dcc.Loading(type="circle", children=html.Div(id="squad-cards-container")),
+            dbc.Button(
+                [html.I(className="bi bi-arrow-clockwise me-2"), "Load squad data"],
+                id="squad-refresh-btn", color="primary", outline=True, size="sm",
+                className="mb-3"
+            ) if is_coach else html.Div(id="squad-refresh-btn", style={"display": "none"}),
+            dcc.Loading(type="circle", children=html.Div(
+                id="squad-cards-container",
+                children=html.Div("Tap 'Load squad data' to refresh.",
+                                  className="text-muted") if is_coach else None
+            )),
         ],
-    ) if is_coach else html.Div(id="squad-view", style={"display": "none"})
+    )
 
     # Bottom nav — add Squad tab for coaches
     nav_cols = [
@@ -4318,11 +4327,15 @@ def garmin_status():
 @app.callback(
     Output("squad-cards-container", "children"),
     Input("nav-squad", "n_clicks"),
+    Input("squad-refresh-btn", "n_clicks"),
     State("auth-store", "data"),
     prevent_initial_call=True,
 )
-def update_squad_view(n_clicks, auth_data):
+def update_squad_view(nav_clicks, refresh_clicks, auth_data):
     if not auth_data or not auth_data.get("is_coach"):
+        raise PreventUpdate
+    # Need at least one click on either trigger
+    if not (nav_clicks or refresh_clicks):
         raise PreventUpdate
 
     today = today_adl()
