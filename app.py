@@ -4372,36 +4372,50 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
         txt = "—" if value is None else str(int(round(value)))
         pct = 0 if value is None else min(max(float(value), 0), 100)
 
-        # Use conic-gradient for a clean top-filling ring
-        # conic-gradient starts at top (12 o'clock) by default
-        deg = round(pct * 3.6, 1)  # 100% = 360deg
-        ring_style = {
-            "width": f"{size}px",
-            "height": f"{size}px",
-            "borderRadius": "50%",
-            "background": f"conic-gradient(from -90deg, {c} 0deg {deg}deg, #f0f0f0 {deg}deg 360deg)",
-            "display": "flex",
-            "alignItems": "center",
-            "justifyContent": "center",
-            "position": "relative",
-        }
-        # Inner white circle to create donut hole
-        inner_size = size - 14  # 7px ring width each side
-        inner_style = {
-            "width": f"{inner_size}px",
-            "height": f"{inner_size}px",
-            "borderRadius": "50%",
-            "backgroundColor": "white",
-            "display": "flex",
-            "alignItems": "center",
-            "justifyContent": "center",
-            "fontSize": "13px",
-            "fontWeight": "700",
-            "color": "#333",
-        }
+        # Use SVG via dcc.Graph with Scatter arc — works on all browsers
+        # Build arc path for the filled portion
+        import math
+        if pct >= 100:
+            # Full circle — use two semicircle arcs
+            arc_d = "M 26 6 A 20 20 0 1 1 25.999 6 Z"
+        elif pct <= 0:
+            arc_d = ""
+        else:
+            angle = (pct / 100) * 360
+            # Start at top (270deg in standard math = -90deg from east)
+            start_rad = math.radians(-90)
+            end_rad   = math.radians(-90 + angle)
+            x1 = 26 + 20 * math.cos(start_rad)
+            y1 = 26 + 20 * math.sin(start_rad)
+            x2 = 26 + 20 * math.cos(end_rad)
+            y2 = 26 + 20 * math.sin(end_rad)
+            large = 1 if angle > 180 else 0
+            arc_d = f"M {x1:.2f} {y1:.2f} A 20 20 0 {large} 1 {x2:.2f} {y2:.2f}"
+
+        svg_parts = [
+            f'<svg viewBox="0 0 52 52" width="{size}" height="{size}" xmlns="http://www.w3.org/2000/svg">',
+            f'<circle cx="26" cy="26" r="20" fill="none" stroke="#f0f0f0" stroke-width="6"/>',
+        ]
+        if arc_d:
+            svg_parts.append(
+                f'<path d="{arc_d}" fill="none" stroke="{c}" stroke-width="6" '
+                f'stroke-linecap="round"/>'
+            )
+        svg_parts.append(
+            f'<text x="26" y="31" text-anchor="middle" font-size="13" '
+            f'font-weight="700" fill="#333" font-family="system-ui">{txt}</text>'
+        )
+        svg_parts.append('</svg>')
+        svg_str = "".join(svg_parts)
+
+        # Use an img tag with SVG data URI — works everywhere including iOS Safari
+        import base64
+        svg_b64 = base64.b64encode(svg_str.encode()).decode()
+        data_uri = f"data:image/svg+xml;base64,{svg_b64}"
+
         return html.Div(
-            html.Div(txt, style=inner_style),
-            style=ring_style,
+            html.Img(src=data_uri, style={"width": f"{size}px", "height": f"{size}px"}),
+            style={"width": f"{size}px", "height": f"{size}px"},
         )
 
     cards = []
@@ -4475,7 +4489,7 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
                 if not today_rows.empty:
                     row = today_rows.iloc[-1]
                     session_note = str(row.get("Athlete_Notes", "") or "").strip()
-                    if session_note.lower() in ("", "nan", "none", "nil"):
+                    if session_note.lower() in ("", "nan", "none", "nil", "example", "test", "n/a", "-", "—"):
                         session_note = ""
                     rpe_raw = pd.to_numeric(row.get("RPE_Post_Session", np.nan), errors="coerce")
                     session_rpe = int(rpe_raw) if pd.notna(rpe_raw) and rpe_raw > 0 else None
