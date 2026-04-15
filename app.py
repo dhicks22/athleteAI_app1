@@ -4379,7 +4379,7 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
             "width": f"{size}px",
             "height": f"{size}px",
             "borderRadius": "50%",
-            "background": f"conic-gradient({c} 0deg {deg}deg, #f0f0f0 {deg}deg 360deg)",
+            "background": f"conic-gradient(from -90deg, {c} 0deg {deg}deg, #f0f0f0 {deg}deg 360deg)",
             "display": "flex",
             "alignItems": "center",
             "justifyContent": "center",
@@ -4545,10 +4545,10 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
                 ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
                 # Streak
                 html.Div([
-                    mini_ring(min((streak / 14) * 100, 100) if streak else None,
+                    mini_ring(streak if streak else None,
                               "grey" if not streak else score_colour(min((streak / 14) * 100, 100))),
-                    html.Div(f"{streak}d streak", style={"fontSize": "10px", "color": "#888",
-                                                          "textAlign": "center", "marginTop": "3px"}),
+                    html.Div("Streak", style={"fontSize": "10px", "color": "#888",
+                                              "textAlign": "center", "marginTop": "3px"}),
                 ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
             ], style={"display": "flex", "justifyContent": "space-around",
                       "marginBottom": "10px" if (session_note or session_rpe) else "0"}),
