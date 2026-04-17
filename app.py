@@ -1755,18 +1755,10 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
                                      line=dict(color=color, width=2.6), line_shape="spline", line_smoothing=0.7,
                                      hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>"))
 
-        fig.update_layout(
-            title="Weekly Wellness Trends", xaxis_title="",
-            yaxis=dict(title="Scale (1–5)", range=[0.8, 5.2], tickvals=[1, 2, 3, 4, 5]),
-            hovermode="x unified",
-            legend=dict(
-                orientation="h", yanchor="top", y=-0.20,
-                xanchor="center", x=0.5,
-                font=dict(size=10), itemwidth=40,
-                tracegroupgap=0,
-            ),
-            margin=dict(l=24, r=16, t=48, b=90),
-        )
+        fig.update_layout(title="Weekly Wellness Trends", xaxis_title="",
+                          yaxis=dict(title="Scale (1–5)", range=[0.8, 5.2], tickvals=[1, 2, 3, 4, 5]),
+                          hovermode="x unified")
+        fig.update_layout(**MOBILE_PLOT_LAYOUT)
         return fig
 
     x = d["Date"]
@@ -1790,18 +1782,10 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
                                  hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>",
                                  visible="legendonly" if label == "Mood" else True))
 
-    fig.update_layout(
-        title="Daily Wellness Trends", xaxis_title="",
-        yaxis=dict(title="Scale (1–5)", range=[0.8, 5.2], tickvals=[1, 2, 3, 4, 5]),
-        hovermode="x unified",
-        legend=dict(
-            orientation="h", yanchor="top", y=-0.20,
-            xanchor="center", x=0.5,
-            font=dict(size=10), itemwidth=40,
-            tracegroupgap=0,
-        ),
-        margin=dict(l=24, r=16, t=48, b=90),
-    )
+    fig.update_layout(title="Daily Wellness Trends", xaxis_title="",
+                      yaxis=dict(title="Scale (1–5)", range=[0.8, 5.2], tickvals=[1, 2, 3, 4, 5]),
+                      hovermode="x unified")
+    fig.update_layout(**MOBILE_PLOT_LAYOUT)
     return fig
 
 
@@ -2049,33 +2033,19 @@ app.index_string = """
             display: flex;
             flex-direction: column;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 8px;
           }
           .dial-secondary-row {
             display: flex;
             justify-content: space-around;
-            align-items: flex-end;
+            align-items: flex-start;
             width: 100%;
-            padding-bottom: 8px;
-            margin-top: 16px;
           }
           .dial-secondary-item {
             display: flex;
             flex-direction: column;
             align-items: center;
             flex: 1;
-          }
-          /* Arc the three dials — left tilts up-left, right tilts up-right */
-          @media (max-width: 767px) {
-            .dial-secondary-item:nth-child(1) {
-              transform: translateY(-18px) rotate(-4deg);
-            }
-            .dial-secondary-item:nth-child(3) {
-              transform: translateY(-18px) rotate(4deg);
-            }
-            .dial-secondary-item:nth-child(2) {
-              transform: translateY(0px);
-            }
           }
           .dial-secondary-label {
             font-size: 10px;
@@ -2107,11 +2077,8 @@ app.index_string = """
             .dial-label-desktop-only { display: none !important; }
           }
           @media (min-width: 768px) {
-            .mobile-dial-label { display: none !important; }
-            .desktop-dial-label { display: block !important; }
+            .dial-secondary-label { display: none !important; }
           }
-
-          /* Dial colours handled by assets/dashboard.css */
         </style>
         {%css%}
     </head>
@@ -2220,23 +2187,37 @@ def build_main_layout(auth_data):
                     ], lg=6, md=6, width=12),
                 ],
             ),
-            dbc.Row(
-                className="g-2 align-items-stretch mt-1 dial-row",
-                children=[
-                    dbc.Col(html.Div([html.Div("Daily Readiness",        className="dial-label"),
-                                      html.Div(id="readiness-dial-container",    className="dial-center")], className="dial-block"),
-                            lg=3, md=3, sm=6, xs=6, width=6),
-                    dbc.Col(html.Div([html.Div("Neuromuscular Readiness", className="dial-label"),
-                                      html.Div(id="neuromuscular-dial-container", className="dial-center")], className="dial-block"),
-                            lg=3, md=3, sm=6, xs=6, width=6),
-                    dbc.Col(html.Div([html.Div("Training Exposure",       className="dial-label"),
-                                      html.Div(id="weekly-dial-container",        className="dial-center")], className="dial-block"),
-                            lg=3, md=3, sm=6, xs=6, width=6),
-                    dbc.Col(html.Div([html.Div("Training Streak",         className="dial-label"),
-                                      html.Div(id="streak-dial-container",        className="dial-center")], className="dial-block"),
-                            lg=3, md=3, sm=6, xs=6, width=6),
-                ],
-            ),
+            # Responsive dial layout:
+            # Desktop (≥768px): 4-column grid, all equal size
+            # Mobile (<768px): hero readiness top, 3 smaller below
+            html.Div([
+                # Inject responsive CSS
+                html.Div([
+                    # Hero — Daily Readiness
+                    html.Div([
+                        html.Div("Daily Readiness", className="dial-label"),
+                        html.Div(id="readiness-dial-container", className="dial-center"),
+                    ], className="dial-hero-row"),
+                    # Secondary row (becomes siblings on desktop via CSS)
+                    html.Div([
+                        html.Div([
+                            html.Div("Neuromuscular Readiness", className="dial-label dial-label-desktop-only"),
+                            html.Div(id="neuromuscular-dial-container", className="dial-center"),
+                            html.Div("Neuro", className="dial-secondary-label"),
+                        ], className="dial-secondary-item"),
+                        html.Div([
+                            html.Div("Training Exposure", className="dial-label dial-label-desktop-only"),
+                            html.Div(id="weekly-dial-container", className="dial-center"),
+                            html.Div("Exposure", className="dial-secondary-label"),
+                        ], className="dial-secondary-item"),
+                        html.Div([
+                            html.Div("Training Streak", className="dial-label dial-label-desktop-only"),
+                            html.Div(id="streak-dial-container", className="dial-center"),
+                            html.Div("Streak", className="dial-secondary-label"),
+                        ], className="dial-secondary-item"),
+                    ], className="dial-secondary-row"),
+                ], className="dial-responsive-wrap"),
+            ]),
             html.Div(id="welcome-message", className="mt-3"),
             html.Div(id="motivational-message", style={"display": "none"}),
             html.Div(id="garmin-status-badge", className="mt-2"),

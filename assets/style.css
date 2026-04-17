@@ -222,6 +222,10 @@ textarea, input, .form-control {
 
 /* ============================================================
    8) DIAL ROW LAYOUT
+   KEY RULE: when a dial is flipped, it gets position:fixed
+   so its back card appears in the viewport centre — completely
+   separated from the grid and impossible to overlap neighbours.
+   A dark backdrop dims the page behind it.
 ============================================================ */
 .dial-row {
   margin-top: 8px !important;
@@ -266,6 +270,10 @@ textarea, input, .form-control {
 
 /* ============================================================
    FLIP CARD
+   The flip container stays in-grid (no position:fixed on it).
+   The BACK CARD uses position:fixed to escape the grid entirely
+   and render in the viewport centre when .is-flipped is active.
+   A pseudo-element backdrop blocks taps outside the card.
 ============================================================ */
 .dial-flip {
   width: var(--dial-size);
@@ -303,8 +311,10 @@ textarea, input, .form-control {
 .dial-front { transform: rotateY(0deg); }
 .dial-back  { transform: rotateY(180deg); }
 
+/* Back card — hidden by CSS AND force-hidden by flip.js MutationObserver */
 .dial-back-content { display: none !important; }
 
+/* ── Body-level overlay (injected by flip.js) ── */
 #dial-overlay .dial-back-title {
   font-weight: 800;
   font-size: 12px;
@@ -347,9 +357,9 @@ textarea, input, .form-control {
 
 /* ============================================================
    9) RING DIAL — animated conic-gradient fill
-   *** FIXED: added "from -90deg" so fill starts at 12 o'clock ***
 ============================================================ */
 
+/* Houdini property — enables smooth number interpolation */
 @property --dial-progress {
   syntax: "<number>";
   inherits: false;
@@ -373,15 +383,14 @@ textarea, input, .form-control {
   align-items: center;
   justify-content: center;
 
-  /* *** KEY FIX: from -90deg starts fill at 12 o'clock *** */
   background: conic-gradient(
-    from -90deg,
     var(--dial-color) calc(clamp(0, var(--dial-progress), 100) * 1%),
     var(--dial-track) 0
   );
 
   box-shadow: 0 3px 10px rgba(0,0,0,0.14), 0 0 0 1px var(--dial-stroke);
 
+  /* @property animates --dial-progress; background redraws automatically */
   transition:
     --dial-progress 3.0s cubic-bezier(0.34, 1.56, 0.64, 1),
     transform 250ms ease;
@@ -410,6 +419,7 @@ textarea, input, .form-control {
   opacity: 0.5;
 }
 
+/* Number centred with translate */
 .dial-text {
   position: absolute;
   top: 50%;
@@ -436,6 +446,7 @@ textarea, input, .form-control {
   box-shadow: inset 0 12px 20px rgba(0,0,0,0.55);
 }
 
+/* Pulse when data updates */
 .dial-circle.updated { animation: dialPulse 800ms ease-out; }
 @keyframes dialPulse {
   0%   { transform: scale(1); }
@@ -451,8 +462,6 @@ textarea, input, .form-control {
 .dial-pink  { --dial-color: #ff4fa3; }
 .dial-grey  { --dial-color: #b0bec5; }
 
-.dial-pink .dial-circle { --dial-color: #E91E8C; }
-
 /* ============================================================
    RESPONSIVE
 ============================================================ */
@@ -464,6 +473,7 @@ textarea, input, .form-control {
   :root { --dial-size: 94px; --dial-thickness: 12px; }
   .dial-circle::after { display: none; }
 
+  /* Back card full-width on small phones */
   .dial-back-content {
     width: min(300px, 92vw);
     max-height: 68vh;
@@ -473,7 +483,10 @@ textarea, input, .form-control {
 
 @media (max-width: 900px) and (orientation: landscape) {
   :root { --dial-size: 100px; --dial-thickness: 12px; }
-  .dial-back-content { max-height: 80vh; }
+
+  .dial-back-content {
+    max-height: 80vh;
+  }
 }
 
 /* ============================================================
@@ -749,8 +762,11 @@ textarea, input, .form-control {
 }
 
 /* ============================================================
-   DROPDOWN FIX
+   DROPDOWN FIX — paste these into your dashboard.css,
+   replacing any existing rules for the same selectors.
 ============================================================ */
+
+/* 1) Stop the Select menu from being clipped by overflow */
 .Select-menu-outer {
   z-index: 9999 !important;
   position: absolute !important;
@@ -758,98 +774,41 @@ textarea, input, .form-control {
   overflow-y: auto !important;
 }
 
-#session-input-container .Select-menu-outer { bottom: auto !important; }
-#session-input-container { overflow: visible !important; }
+/* 2) When a dropdown is open, the menu opens ABOVE if near
+      the bottom of the viewport — force it to prefer upward
+      when inside the session input area */
+#session-input-container .Select-menu-outer {
+  bottom: auto !important;
+}
+
+/* 3) The session input container itself should not clip its children */
+#session-input-container {
+  overflow: visible !important;
+}
+
+/* 4) The dbc.Row and dbc.Col wrappers inside session container */
 #session-input-container .row,
-#session-input-container [class*="col"] { overflow: visible !important; }
+#session-input-container [class*="col"] {
+  overflow: visible !important;
+}
 
-body { padding-bottom: calc(var(--bottom-nav-h) + 80px) !important; }
+/* 5) Increase bottom padding so last dropdown option isn't
+      hidden behind the bottom nav when scrolled to bottom */
+body {
+  padding-bottom: calc(var(--bottom-nav-h) + 80px) !important;
+}
 
-.aw-dropdown { position: relative; z-index: 500; }
-.aw-dropdown .Select-menu-outer { z-index: 9999 !important; max-height: 280px !important; }
+/* 6) The aw-dropdown class used on ai-mode-1 / ai-mode-2 */
+.aw-dropdown {
+  position: relative;
+  z-index: 500;
+}
 
-/* ============================================================
-   MOBILE DIAL LAYOUT — hero + arc
-   On mobile: readiness = big hero top, others arc below
-   On desktop: standard 4-col grid (unchanged)
-============================================================ */
+.aw-dropdown .Select-menu-outer {
+  z-index: 9999 !important;
+  max-height: 280px !important;
+}
 
-@media (max-width: 767px) {
-
-  /* Turn the dial-row into a flex column */
-  .dial-row {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    gap: 0 !important;
-  }
-
-  /* Hide Bootstrap columns, show as full-width items */
-  .dial-row > [class*="col"] {
-    width: 100% !important;
-    max-width: 100% !important;
-    flex: none !important;
-    display: flex !important;
-    justify-content: center !important;
-  }
-
-  /* First dial (Daily Readiness) — hero, bigger */
-  .dial-row > [class*="col"]:nth-child(1) .dial-block {
-    margin-bottom: 12px;
-  }
-  .dial-row > [class*="col"]:nth-child(1) .dial-center {
-    --dial-size: 150px !important;
-  }
-  .dial-row > [class*="col"]:nth-child(1) .dial-label {
-    font-size: 11px !important;
-    margin-bottom: 8px !important;
-  }
-
-  /* Show dials 2-4 in a single row */
-  .dial-row > [class*="col"]:nth-child(2),
-  .dial-row > [class*="col"]:nth-child(3),
-  .dial-row > [class*="col"]:nth-child(4) {
-    width: 33.33% !important;
-    flex: 1 !important;
-  }
-
-  /* Force the last 3 into a flex row */
-  .dial-row {
-    flex-wrap: wrap !important;
-  }
-  .dial-row > [class*="col"]:nth-child(1) {
-    order: 1;
-    width: 100% !important;
-  }
-  .dial-row > [class*="col"]:nth-child(2) { order: 2; }
-  .dial-row > [class*="col"]:nth-child(3) { order: 3; }
-  .dial-row > [class*="col"]:nth-child(4) { order: 4; }
-
-  /* Arc effect on secondary dials */
-  .dial-row > [class*="col"]:nth-child(2) .dial-block {
-    transform: translateY(-16px) rotate(-4deg);
-    transform-origin: bottom center;
-  }
-  .dial-row > [class*="col"]:nth-child(3) .dial-block {
-    transform: translateY(4px);
-    transform-origin: bottom center;
-  }
-  .dial-row > [class*="col"]:nth-child(4) .dial-block {
-    transform: translateY(-16px) rotate(4deg);
-    transform-origin: bottom center;
-  }
-
-  /* Secondary dials smaller */
-  .dial-row > [class*="col"]:nth-child(2) .dial-center,
-  .dial-row > [class*="col"]:nth-child(3) .dial-center,
-  .dial-row > [class*="col"]:nth-child(4) .dial-center {
-    --dial-size: 90px !important;
-  }
-
-  /* Smaller label on secondary */
-  .dial-row > [class*="col"]:nth-child(2) .dial-label,
-  .dial-row > [class*="col"]:nth-child(3) .dial-label,
-  .dial-row > [class*="col"]:nth-child(4) .dial-label {
-    font-size: 8px !important;
-  }
+.dial-pink .dial-circle {
+  --dial-color: #E91E8C;
 }
