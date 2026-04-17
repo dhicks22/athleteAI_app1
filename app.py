@@ -2114,48 +2114,53 @@ app.index_string = """
             .dial-back-hint { display: none !important; }
             .dial-back-title { font-size: 11px !important; }
           }
-          /* Override dial-circle to fill from top (12 o'clock) */
-          .dial-circle {
+          /* Force dial fill from top with maximum specificity */
+          body .dial-circle,
+          body .dial-wrapper .dial-circle {
             --dial-size: 120px;
-            width: var(--dial-size);
-            height: var(--dial-size);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
+            width: var(--dial-size) !important;
+            height: var(--dial-size) !important;
+            border-radius: 50% !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            position: relative !important;
+            background: none !important;
           }
-          .dial-circle::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            border-radius: 50%;
+          body .dial-circle::before,
+          body .dial-wrapper .dial-circle::before {
+            content: '' !important;
+            position: absolute !important;
+            inset: 0 !important;
+            border-radius: 50% !important;
             background: conic-gradient(
               from -90deg,
               var(--dial-color, #1565C0) 0deg calc(var(--dial-progress, 0) * 3.6deg),
-              rgba(0,0,0,0.08) calc(var(--dial-progress, 0) * 3.6deg) 360deg
-            );
+              rgba(0,0,0,0.10) calc(var(--dial-progress, 0) * 3.6deg) 360deg
+            ) !important;
           }
-          .dial-circle::after {
-            content: '';
-            position: absolute;
-            inset: 10px;
-            border-radius: 50%;
-            background: white;
+          body .dial-circle::after,
+          body .dial-wrapper .dial-circle::after {
+            content: '' !important;
+            position: absolute !important;
+            inset: 10px !important;
+            border-radius: 50% !important;
+            background: white !important;
+            z-index: 1 !important;
           }
-          .dial-text {
-            position: relative;
-            z-index: 2;
-            font-size: 1.8rem;
-            font-weight: 800;
-            color: #1a1a1a;
+          body .dial-text {
+            position: relative !important;
+            z-index: 2 !important;
+            font-size: 1.8rem !important;
+            font-weight: 800 !important;
+            color: #1a1a1a !important;
           }
-          .dial-blue  { --dial-color: #1565C0; }
-          .dial-green { --dial-color: #2E7D32; }
-          .dial-amber { --dial-color: #F9A825; }
-          .dial-red   { --dial-color: #C62828; }
-          .dial-pink  { --dial-color: #E91E8C; }
-          .dial-grey  { --dial-color: rgba(0,0,0,0.08); }
+          body .dial-blue  { --dial-color: #1565C0 !important; }
+          body .dial-green { --dial-color: #2E7D32 !important; }
+          body .dial-amber { --dial-color: #F9A825 !important; }
+          body .dial-red   { --dial-color: #C62828 !important; }
+          body .dial-pink  { --dial-color: #E91E8C !important; }
+          body .dial-grey  { --dial-color: rgba(0,0,0,0.10) !important; }
         </style>
         {%css%}
     </head>
@@ -2280,22 +2285,39 @@ def build_main_layout(auth_data):
                     ], className="dial-hero-row"),
                     # Secondary row (becomes siblings on desktop via CSS)
                     html.Div([
+                        # Left dial — Neuro — lifted and tilted left
                         html.Div([
-                            html.Div("NEURO", style={"fontSize":"9px","fontWeight":"600","letterSpacing":"0.08em","color":"#aaa","textAlign":"center","marginBottom":"4px","display":"none"}, className="desktop-dial-label"),
+                            html.Div("NEURO", className="desktop-dial-label",
+                                     style={"fontSize":"9px","fontWeight":"600","letterSpacing":"0.08em",
+                                            "color":"#aaa","textAlign":"center","marginBottom":"4px"}),
                             html.Div(id="neuromuscular-dial-container", className="dial-center"),
-                            html.Div("Neuro", style={"fontSize":"10px","color":"#aaa","textAlign":"center","marginTop":"4px"}, className="mobile-dial-label"),
-                        ], className="dial-secondary-item"),
+                            html.Div("Neuro", className="mobile-dial-label",
+                                     style={"fontSize":"10px","color":"#aaa","textAlign":"center","marginTop":"4px"}),
+                        ], className="dial-secondary-item",
+                           style={"transform":"translateY(-20px) rotate(-5deg)","transformOrigin":"bottom center"}),
+                        # Centre dial — Exposure — stays at baseline
                         html.Div([
-                            html.Div("EXPOSURE", style={"fontSize":"9px","fontWeight":"600","letterSpacing":"0.08em","color":"#aaa","textAlign":"center","marginBottom":"4px","display":"none"}, className="desktop-dial-label"),
+                            html.Div("EXPOSURE", className="desktop-dial-label",
+                                     style={"fontSize":"9px","fontWeight":"600","letterSpacing":"0.08em",
+                                            "color":"#aaa","textAlign":"center","marginBottom":"4px"}),
                             html.Div(id="weekly-dial-container", className="dial-center"),
-                            html.Div("Exposure", style={"fontSize":"10px","color":"#aaa","textAlign":"center","marginTop":"4px"}, className="mobile-dial-label"),
-                        ], className="dial-secondary-item"),
+                            html.Div("Exposure", className="mobile-dial-label",
+                                     style={"fontSize":"10px","color":"#aaa","textAlign":"center","marginTop":"4px"}),
+                        ], className="dial-secondary-item",
+                           style={"transform":"translateY(8px)","transformOrigin":"bottom center"}),
+                        # Right dial — Streak — lifted and tilted right
                         html.Div([
-                            html.Div("STREAK", style={"fontSize":"9px","fontWeight":"600","letterSpacing":"0.08em","color":"#aaa","textAlign":"center","marginBottom":"4px","display":"none"}, className="desktop-dial-label"),
+                            html.Div("STREAK", className="desktop-dial-label",
+                                     style={"fontSize":"9px","fontWeight":"600","letterSpacing":"0.08em",
+                                            "color":"#aaa","textAlign":"center","marginBottom":"4px"}),
                             html.Div(id="streak-dial-container", className="dial-center"),
-                            html.Div("Streak", style={"fontSize":"10px","color":"#aaa","textAlign":"center","marginTop":"4px"}, className="mobile-dial-label"),
-                        ], className="dial-secondary-item"),
-                    ], className="dial-secondary-row"),
+                            html.Div("Streak", className="mobile-dial-label",
+                                     style={"fontSize":"10px","color":"#aaa","textAlign":"center","marginTop":"4px"}),
+                        ], className="dial-secondary-item",
+                           style={"transform":"translateY(-20px) rotate(5deg)","transformOrigin":"bottom center"}),
+                    ], className="dial-secondary-row",
+                       style={"display":"flex","justifyContent":"space-around",
+                              "alignItems":"flex-end","width":"100%","marginTop":"24px","paddingBottom":"16px"}),
                 ], className="dial-responsive-wrap"),
             ]),
             html.Div(id="welcome-message", className="mt-3"),
