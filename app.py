@@ -2110,57 +2110,8 @@ app.index_string = """
             .mobile-dial-label { display: none !important; }
             .desktop-dial-label { display: block !important; }
           }
-          @media (max-width: 767px) {
-            .dial-back-hint { display: none !important; }
-            .dial-back-title { font-size: 11px !important; }
-          }
-          /* Force dial fill from top with maximum specificity */
-          body .dial-circle,
-          body .dial-wrapper .dial-circle {
-            --dial-size: 120px;
-            width: var(--dial-size) !important;
-            height: var(--dial-size) !important;
-            border-radius: 50% !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            position: relative !important;
-            background: none !important;
-          }
-          body .dial-circle::before,
-          body .dial-wrapper .dial-circle::before {
-            content: '' !important;
-            position: absolute !important;
-            inset: 0 !important;
-            border-radius: 50% !important;
-            background: conic-gradient(
-              from -90deg,
-              var(--dial-color, #1565C0) 0deg calc(var(--dial-progress, 0) * 3.6deg),
-              rgba(0,0,0,0.10) calc(var(--dial-progress, 0) * 3.6deg) 360deg
-            ) !important;
-          }
-          body .dial-circle::after,
-          body .dial-wrapper .dial-circle::after {
-            content: '' !important;
-            position: absolute !important;
-            inset: 10px !important;
-            border-radius: 50% !important;
-            background: white !important;
-            z-index: 1 !important;
-          }
-          body .dial-text {
-            position: relative !important;
-            z-index: 2 !important;
-            font-size: 1.8rem !important;
-            font-weight: 800 !important;
-            color: #1a1a1a !important;
-          }
-          body .dial-blue  { --dial-color: #1565C0 !important; }
-          body .dial-green { --dial-color: #2E7D32 !important; }
-          body .dial-amber { --dial-color: #F9A825 !important; }
-          body .dial-red   { --dial-color: #C62828 !important; }
-          body .dial-pink  { --dial-color: #E91E8C !important; }
-          body .dial-grey  { --dial-color: rgba(0,0,0,0.10) !important; }
+
+          /* Dial colours handled by assets/dashboard.css */
         </style>
         {%css%}
     </head>
