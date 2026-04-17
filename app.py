@@ -1640,8 +1640,8 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
                                  line_smoothing=0.75, opacity=0.7,
                                  hovertemplate="Chronic: %{y:,.0f}<extra></extra>"))
         fig.add_trace(go.Scatter(x=x, y=g["ACWR"], name="ACWR", mode="lines", yaxis="y2",
-                                 line=dict(color=_PURPLE, width=1.2, dash="dot"), line_shape="spline", line_smoothing=0.75,
-                                 opacity=0.5, hovertemplate="ACWR: %{y:.2f}<extra></extra>"))
+                                 line=dict(color=_PURPLE, width=1.6), line_shape="spline", line_smoothing=0.75,
+                                 opacity=0.7, hovertemplate="ACWR: %{y:.2f}<extra></extra>"))
         fig.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y2", y0=0.9, y1=1.25,
                       fillcolor="rgba(56,189,248,0.12)", line_width=0, layer="below")
         fig.update_layout(title="Weekly Training Load & Balance", xaxis_title="",
@@ -1701,8 +1701,8 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
                              line_smoothing=0.75, opacity=0.7,
                              hovertemplate="28d: %{y:,.0f}<extra></extra>"))
     fig.add_trace(go.Scatter(x=x, y=d["ACWR"], name="ACWR", mode="lines", yaxis="y2",
-                             line=dict(color=_PURPLE, width=1.2, dash="dot"), line_shape="spline", line_smoothing=0.75,
-                             opacity=0.6, hovertemplate="ACWR: %{y:.2f}<extra></extra>"))
+                             line=dict(color=_PURPLE, width=1.6), line_shape="spline", line_smoothing=0.75,
+                             hovertemplate="ACWR: %{y:.2f}<extra></extra>"))
     fig.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y2", y0=0.9, y1=1.25,
                   fillcolor="rgba(56,189,248,0.12)", line_width=0, layer="below")
     fig.update_layout(title="Daily Training Load & Balance", xaxis_title="",
@@ -2022,63 +2022,6 @@ app.index_string = """
             overflow-y: auto !important;
             z-index: 9999 !important;
           }
-          /* Responsive dial layout */
-          .dial-responsive-wrap {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 12px 0 4px 0;
-          }
-          .dial-hero-row {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            margin-bottom: 8px;
-          }
-          .dial-secondary-row {
-            display: flex;
-            justify-content: space-around;
-            align-items: flex-start;
-            width: 100%;
-          }
-          .dial-secondary-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            flex: 1;
-          }
-          .dial-secondary-label {
-            font-size: 10px;
-            color: #aaa;
-            text-align: center;
-            margin-top: 4px;
-          }
-          @media (min-width: 768px) {
-            .dial-responsive-wrap {
-              flex-direction: row;
-              justify-content: space-around;
-              align-items: flex-start;
-              padding: 8px 0;
-            }
-            .dial-hero-row {
-              flex-direction: column;
-              margin-bottom: 0;
-              flex: 1;
-            }
-            .dial-hero-row .dial-center { --dial-size: 120px !important; }
-            .dial-secondary-row { display: contents; }
-            .dial-secondary-item { flex: 1; }
-            .dial-secondary-item .dial-center { --dial-size: 120px !important; }
-            .dial-secondary-label { display: none; }
-          }
-          @media (max-width: 767px) {
-            .dial-hero-row .dial-center { --dial-size: 140px !important; }
-            .dial-secondary-item .dial-center { --dial-size: 88px !important; }
-            .dial-label-desktop-only { display: none !important; }
-          }
-          @media (min-width: 768px) {
-            .dial-secondary-label { display: none !important; }
-          }
         </style>
         {%css%}
     </head>
@@ -2187,39 +2130,25 @@ def build_main_layout(auth_data):
                     ], lg=6, md=6, width=12),
                 ],
             ),
-            # Responsive dial layout:
-            # Desktop (≥768px): 4-column grid, all equal size
-            # Mobile (<768px): hero readiness top, 3 smaller below
-            html.Div([
-                # Inject responsive CSS
-                html.Div([
-                    # Hero — Daily Readiness
-                    html.Div([
-                        html.Div("Daily Readiness", className="dial-label"),
-                        html.Div(id="readiness-dial-container", className="dial-center"),
-                    ], className="dial-hero-row"),
-                    # Secondary row (becomes siblings on desktop via CSS)
-                    html.Div([
-                        html.Div([
-                            html.Div("Neuromuscular Readiness", className="dial-label dial-label-desktop-only"),
-                            html.Div(id="neuromuscular-dial-container", className="dial-center"),
-                            html.Div("Neuro", className="dial-secondary-label"),
-                        ], className="dial-secondary-item"),
-                        html.Div([
-                            html.Div("Training Exposure", className="dial-label dial-label-desktop-only"),
-                            html.Div(id="weekly-dial-container", className="dial-center"),
-                            html.Div("Exposure", className="dial-secondary-label"),
-                        ], className="dial-secondary-item"),
-                        html.Div([
-                            html.Div("Training Streak", className="dial-label dial-label-desktop-only"),
-                            html.Div(id="streak-dial-container", className="dial-center"),
-                            html.Div("Streak", className="dial-secondary-label"),
-                        ], className="dial-secondary-item"),
-                    ], className="dial-secondary-row"),
-                ], className="dial-responsive-wrap"),
-            ]),
+            dbc.Row(
+                className="g-2 align-items-stretch mt-1 dial-row",
+                children=[
+                    dbc.Col(html.Div([html.Div("Daily Readiness",        className="dial-label"),
+                                      html.Div(id="readiness-dial-container",    className="dial-center")], className="dial-block"),
+                            lg=3, md=3, sm=6, xs=6, width=6),
+                    dbc.Col(html.Div([html.Div("Neuromuscular Readiness", className="dial-label"),
+                                      html.Div(id="neuromuscular-dial-container", className="dial-center")], className="dial-block"),
+                            lg=3, md=3, sm=6, xs=6, width=6),
+                    dbc.Col(html.Div([html.Div("Training Exposure",       className="dial-label"),
+                                      html.Div(id="weekly-dial-container",        className="dial-center")], className="dial-block"),
+                            lg=3, md=3, sm=6, xs=6, width=6),
+                    dbc.Col(html.Div([html.Div("Training Streak",         className="dial-label"),
+                                      html.Div(id="streak-dial-container",        className="dial-center")], className="dial-block"),
+                            lg=3, md=3, sm=6, xs=6, width=6),
+                ],
+            ),
             html.Div(id="welcome-message", className="mt-3"),
-            html.Div(id="motivational-message", style={"display": "none"}),
+            html.Div(id="motivational-message"),
             html.Div(id="garmin-status-badge", className="mt-2"),
             html.Div(
                 dbc.Button(
