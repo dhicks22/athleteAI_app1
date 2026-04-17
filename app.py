@@ -1755,10 +1755,18 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
                                      line=dict(color=color, width=2.6), line_shape="spline", line_smoothing=0.7,
                                      hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>"))
 
-        fig.update_layout(title="Weekly Wellness Trends", xaxis_title="",
-                          yaxis=dict(title="Scale (1–5)", range=[0.8, 5.2], tickvals=[1, 2, 3, 4, 5]),
-                          hovermode="x unified")
-        fig.update_layout(**MOBILE_PLOT_LAYOUT)
+        fig.update_layout(
+            title="Weekly Wellness Trends", xaxis_title="",
+            yaxis=dict(title="Scale (1–5)", range=[0.8, 5.2], tickvals=[1, 2, 3, 4, 5]),
+            hovermode="x unified",
+            legend=dict(
+                orientation="h", yanchor="top", y=-0.20,
+                xanchor="center", x=0.5,
+                font=dict(size=10), itemwidth=40,
+                tracegroupgap=0,
+            ),
+            margin=dict(l=24, r=16, t=48, b=90),
+        )
         return fig
 
     x = d["Date"]
@@ -1782,10 +1790,18 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
                                  hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>",
                                  visible="legendonly" if label == "Mood" else True))
 
-    fig.update_layout(title="Daily Wellness Trends", xaxis_title="",
-                      yaxis=dict(title="Scale (1–5)", range=[0.8, 5.2], tickvals=[1, 2, 3, 4, 5]),
-                      hovermode="x unified")
-    fig.update_layout(**MOBILE_PLOT_LAYOUT)
+    fig.update_layout(
+        title="Daily Wellness Trends", xaxis_title="",
+        yaxis=dict(title="Scale (1–5)", range=[0.8, 5.2], tickvals=[1, 2, 3, 4, 5]),
+        hovermode="x unified",
+        legend=dict(
+            orientation="h", yanchor="top", y=-0.20,
+            xanchor="center", x=0.5,
+            font=dict(size=10), itemwidth=40,
+            tracegroupgap=0,
+        ),
+        margin=dict(l=24, r=16, t=48, b=90),
+    )
     return fig
 
 
@@ -2033,19 +2049,33 @@ app.index_string = """
             display: flex;
             flex-direction: column;
             align-items: center;
-            margin-bottom: 8px;
+            margin-bottom: 20px;
           }
           .dial-secondary-row {
             display: flex;
             justify-content: space-around;
-            align-items: flex-start;
+            align-items: flex-end;
             width: 100%;
+            padding-bottom: 8px;
+            margin-top: 16px;
           }
           .dial-secondary-item {
             display: flex;
             flex-direction: column;
             align-items: center;
             flex: 1;
+          }
+          /* Arc the three dials — left tilts up-left, right tilts up-right */
+          @media (max-width: 767px) {
+            .dial-secondary-item:nth-child(1) {
+              transform: translateY(-18px) rotate(-4deg);
+            }
+            .dial-secondary-item:nth-child(3) {
+              transform: translateY(-18px) rotate(4deg);
+            }
+            .dial-secondary-item:nth-child(2) {
+              transform: translateY(0px);
+            }
           }
           .dial-secondary-label {
             font-size: 10px;
@@ -2077,8 +2107,55 @@ app.index_string = """
             .dial-label-desktop-only { display: none !important; }
           }
           @media (min-width: 768px) {
-            .dial-secondary-label { display: none !important; }
+            .mobile-dial-label { display: none !important; }
+            .desktop-dial-label { display: block !important; }
           }
+          @media (max-width: 767px) {
+            .dial-back-hint { display: none !important; }
+            .dial-back-title { font-size: 11px !important; }
+          }
+          /* Override dial-circle to fill from top (12 o'clock) */
+          .dial-circle {
+            --dial-size: 120px;
+            width: var(--dial-size);
+            height: var(--dial-size);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+          }
+          .dial-circle::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: conic-gradient(
+              from -90deg,
+              var(--dial-color, #1565C0) 0deg calc(var(--dial-progress, 0) * 3.6deg),
+              rgba(0,0,0,0.08) calc(var(--dial-progress, 0) * 3.6deg) 360deg
+            );
+          }
+          .dial-circle::after {
+            content: '';
+            position: absolute;
+            inset: 10px;
+            border-radius: 50%;
+            background: white;
+          }
+          .dial-text {
+            position: relative;
+            z-index: 2;
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: #1a1a1a;
+          }
+          .dial-blue  { --dial-color: #1565C0; }
+          .dial-green { --dial-color: #2E7D32; }
+          .dial-amber { --dial-color: #F9A825; }
+          .dial-red   { --dial-color: #C62828; }
+          .dial-pink  { --dial-color: #E91E8C; }
+          .dial-grey  { --dial-color: rgba(0,0,0,0.08); }
         </style>
         {%css%}
     </head>
@@ -2195,25 +2272,28 @@ def build_main_layout(auth_data):
                 html.Div([
                     # Hero — Daily Readiness
                     html.Div([
-                        html.Div("Daily Readiness", className="dial-label"),
+                        html.Div("DAILY READINESS", style={
+                            "fontSize": "10px", "fontWeight": "600", "letterSpacing": "0.1em",
+                            "color": "#888", "textAlign": "center", "marginBottom": "6px",
+                        }),
                         html.Div(id="readiness-dial-container", className="dial-center"),
                     ], className="dial-hero-row"),
                     # Secondary row (becomes siblings on desktop via CSS)
                     html.Div([
                         html.Div([
-                            html.Div("Neuromuscular Readiness", className="dial-label dial-label-desktop-only"),
+                            html.Div("NEURO", style={"fontSize":"9px","fontWeight":"600","letterSpacing":"0.08em","color":"#aaa","textAlign":"center","marginBottom":"4px","display":"none"}, className="desktop-dial-label"),
                             html.Div(id="neuromuscular-dial-container", className="dial-center"),
-                            html.Div("Neuro", className="dial-secondary-label"),
+                            html.Div("Neuro", style={"fontSize":"10px","color":"#aaa","textAlign":"center","marginTop":"4px"}, className="mobile-dial-label"),
                         ], className="dial-secondary-item"),
                         html.Div([
-                            html.Div("Training Exposure", className="dial-label dial-label-desktop-only"),
+                            html.Div("EXPOSURE", style={"fontSize":"9px","fontWeight":"600","letterSpacing":"0.08em","color":"#aaa","textAlign":"center","marginBottom":"4px","display":"none"}, className="desktop-dial-label"),
                             html.Div(id="weekly-dial-container", className="dial-center"),
-                            html.Div("Exposure", className="dial-secondary-label"),
+                            html.Div("Exposure", style={"fontSize":"10px","color":"#aaa","textAlign":"center","marginTop":"4px"}, className="mobile-dial-label"),
                         ], className="dial-secondary-item"),
                         html.Div([
-                            html.Div("Training Streak", className="dial-label dial-label-desktop-only"),
+                            html.Div("STREAK", style={"fontSize":"9px","fontWeight":"600","letterSpacing":"0.08em","color":"#aaa","textAlign":"center","marginBottom":"4px","display":"none"}, className="desktop-dial-label"),
                             html.Div(id="streak-dial-container", className="dial-center"),
-                            html.Div("Streak", className="dial-secondary-label"),
+                            html.Div("Streak", style={"fontSize":"10px","color":"#aaa","textAlign":"center","marginTop":"4px"}, className="mobile-dial-label"),
                         ], className="dial-secondary-item"),
                     ], className="dial-secondary-row"),
                 ], className="dial-responsive-wrap"),
