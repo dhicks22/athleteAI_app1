@@ -1640,8 +1640,8 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
                                  line_smoothing=0.75, opacity=0.7,
                                  hovertemplate="Chronic: %{y:,.0f}<extra></extra>"))
         fig.add_trace(go.Scatter(x=x, y=g["ACWR"], name="ACWR", mode="lines", yaxis="y2",
-                                 line=dict(color=_PURPLE, width=1.6), line_shape="spline", line_smoothing=0.75,
-                                 opacity=0.7, hovertemplate="ACWR: %{y:.2f}<extra></extra>"))
+                                 line=dict(color=_PURPLE, width=1.2, dash="dot"), line_shape="spline", line_smoothing=0.75,
+                                 opacity=0.5, hovertemplate="ACWR: %{y:.2f}<extra></extra>"))
         fig.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y2", y0=0.9, y1=1.25,
                       fillcolor="rgba(56,189,248,0.12)", line_width=0, layer="below")
         fig.update_layout(title="Weekly Training Load & Balance", xaxis_title="",
@@ -1701,8 +1701,8 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
                              line_smoothing=0.75, opacity=0.7,
                              hovertemplate="28d: %{y:,.0f}<extra></extra>"))
     fig.add_trace(go.Scatter(x=x, y=d["ACWR"], name="ACWR", mode="lines", yaxis="y2",
-                             line=dict(color=_PURPLE, width=1.6), line_shape="spline", line_smoothing=0.75,
-                             hovertemplate="ACWR: %{y:.2f}<extra></extra>"))
+                             line=dict(color=_PURPLE, width=1.2, dash="dot"), line_shape="spline", line_smoothing=0.75,
+                             opacity=0.6, hovertemplate="ACWR: %{y:.2f}<extra></extra>"))
     fig.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y2", y0=0.9, y1=1.25,
                   fillcolor="rgba(56,189,248,0.12)", line_width=0, layer="below")
     fig.update_layout(title="Daily Training Load & Balance", xaxis_title="",
@@ -2074,6 +2074,10 @@ app.index_string = """
           @media (max-width: 767px) {
             .dial-hero-row .dial-center { --dial-size: 140px !important; }
             .dial-secondary-item .dial-center { --dial-size: 88px !important; }
+            .dial-label-desktop-only { display: none !important; }
+          }
+          @media (min-width: 768px) {
+            .dial-secondary-label { display: none !important; }
           }
         </style>
         {%css%}
@@ -2197,17 +2201,17 @@ def build_main_layout(auth_data):
                     # Secondary row (becomes siblings on desktop via CSS)
                     html.Div([
                         html.Div([
-                            html.Div("Neuromuscular Readiness", className="dial-label"),
+                            html.Div("Neuromuscular Readiness", className="dial-label dial-label-desktop-only"),
                             html.Div(id="neuromuscular-dial-container", className="dial-center"),
                             html.Div("Neuro", className="dial-secondary-label"),
                         ], className="dial-secondary-item"),
                         html.Div([
-                            html.Div("Training Exposure", className="dial-label"),
+                            html.Div("Training Exposure", className="dial-label dial-label-desktop-only"),
                             html.Div(id="weekly-dial-container", className="dial-center"),
                             html.Div("Exposure", className="dial-secondary-label"),
                         ], className="dial-secondary-item"),
                         html.Div([
-                            html.Div("Training Streak", className="dial-label"),
+                            html.Div("Training Streak", className="dial-label dial-label-desktop-only"),
                             html.Div(id="streak-dial-container", className="dial-center"),
                             html.Div("Streak", className="dial-secondary-label"),
                         ], className="dial-secondary-item"),
@@ -2215,6 +2219,7 @@ def build_main_layout(auth_data):
                 ], className="dial-responsive-wrap"),
             ]),
             html.Div(id="welcome-message", className="mt-3"),
+            html.Div(id="motivational-message", style={"display": "none"}),
             html.Div(id="garmin-status-badge", className="mt-2"),
             html.Div(
                 dbc.Button(
