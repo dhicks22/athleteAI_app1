@@ -2220,57 +2220,23 @@ def build_main_layout(auth_data):
                     ], lg=6, md=6, width=12),
                 ],
             ),
-            # Responsive dial layout:
-            # Desktop (≥768px): 4-column grid, all equal size
-            # Mobile (<768px): hero readiness top, 3 smaller below
-            html.Div([
-                # Inject responsive CSS
-                html.Div([
-                    # Hero — Daily Readiness
-                    html.Div([
-                        html.Div("DAILY READINESS", style={
-                            "fontSize": "10px", "fontWeight": "600", "letterSpacing": "0.1em",
-                            "color": "#888", "textAlign": "center", "marginBottom": "6px",
-                        }),
-                        html.Div(id="readiness-dial-container", className="dial-center"),
-                    ], className="dial-hero-row"),
-                    # Secondary row (becomes siblings on desktop via CSS)
-                    html.Div([
-                        # Left dial — Neuro — lifted and tilted left
-                        html.Div([
-                            html.Div("NEURO", className="desktop-dial-label",
-                                     style={"fontSize":"9px","fontWeight":"600","letterSpacing":"0.08em",
-                                            "color":"#aaa","textAlign":"center","marginBottom":"4px"}),
-                            html.Div(id="neuromuscular-dial-container", className="dial-center"),
-                            html.Div("Neuro", className="mobile-dial-label",
-                                     style={"fontSize":"10px","color":"#aaa","textAlign":"center","marginTop":"4px"}),
-                        ], className="dial-secondary-item",
-                           style={"transform":"translateY(-20px) rotate(-5deg)","transformOrigin":"bottom center"}),
-                        # Centre dial — Exposure — stays at baseline
-                        html.Div([
-                            html.Div("EXPOSURE", className="desktop-dial-label",
-                                     style={"fontSize":"9px","fontWeight":"600","letterSpacing":"0.08em",
-                                            "color":"#aaa","textAlign":"center","marginBottom":"4px"}),
-                            html.Div(id="weekly-dial-container", className="dial-center"),
-                            html.Div("Exposure", className="mobile-dial-label",
-                                     style={"fontSize":"10px","color":"#aaa","textAlign":"center","marginTop":"4px"}),
-                        ], className="dial-secondary-item",
-                           style={"transform":"translateY(8px)","transformOrigin":"bottom center"}),
-                        # Right dial — Streak — lifted and tilted right
-                        html.Div([
-                            html.Div("STREAK", className="desktop-dial-label",
-                                     style={"fontSize":"9px","fontWeight":"600","letterSpacing":"0.08em",
-                                            "color":"#aaa","textAlign":"center","marginBottom":"4px"}),
-                            html.Div(id="streak-dial-container", className="dial-center"),
-                            html.Div("Streak", className="mobile-dial-label",
-                                     style={"fontSize":"10px","color":"#aaa","textAlign":"center","marginTop":"4px"}),
-                        ], className="dial-secondary-item",
-                           style={"transform":"translateY(-20px) rotate(5deg)","transformOrigin":"bottom center"}),
-                    ], className="dial-secondary-row",
-                       style={"display":"flex","justifyContent":"space-around",
-                              "alignItems":"flex-end","width":"100%","marginTop":"24px","paddingBottom":"16px"}),
-                ], className="dial-responsive-wrap"),
-            ]),
+            dbc.Row(
+                className="g-2 align-items-stretch mt-1 dial-row",
+                children=[
+                    dbc.Col(html.Div([html.Div("Daily Readiness",        className="dial-label"),
+                                      html.Div(id="readiness-dial-container",    className="dial-center")], className="dial-block"),
+                            lg=3, md=3, sm=6, xs=6, width=6),
+                    dbc.Col(html.Div([html.Div("Neuromuscular Readiness", className="dial-label"),
+                                      html.Div(id="neuromuscular-dial-container", className="dial-center")], className="dial-block"),
+                            lg=3, md=3, sm=6, xs=6, width=6),
+                    dbc.Col(html.Div([html.Div("Training Exposure",       className="dial-label"),
+                                      html.Div(id="weekly-dial-container",        className="dial-center")], className="dial-block"),
+                            lg=3, md=3, sm=6, xs=6, width=6),
+                    dbc.Col(html.Div([html.Div("Training Streak",         className="dial-label"),
+                                      html.Div(id="streak-dial-container",        className="dial-center")], className="dial-block"),
+                            lg=3, md=3, sm=6, xs=6, width=6),
+                ],
+            ),
             html.Div(id="welcome-message", className="mt-3"),
             html.Div(id="motivational-message", style={"display": "none"}),
             html.Div(id="garmin-status-badge", className="mt-2"),

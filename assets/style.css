@@ -767,3 +767,89 @@ body { padding-bottom: calc(var(--bottom-nav-h) + 80px) !important; }
 
 .aw-dropdown { position: relative; z-index: 500; }
 .aw-dropdown .Select-menu-outer { z-index: 9999 !important; max-height: 280px !important; }
+
+/* ============================================================
+   MOBILE DIAL LAYOUT — hero + arc
+   On mobile: readiness = big hero top, others arc below
+   On desktop: standard 4-col grid (unchanged)
+============================================================ */
+
+@media (max-width: 767px) {
+
+  /* Turn the dial-row into a flex column */
+  .dial-row {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 0 !important;
+  }
+
+  /* Hide Bootstrap columns, show as full-width items */
+  .dial-row > [class*="col"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: none !important;
+    display: flex !important;
+    justify-content: center !important;
+  }
+
+  /* First dial (Daily Readiness) — hero, bigger */
+  .dial-row > [class*="col"]:nth-child(1) .dial-block {
+    margin-bottom: 12px;
+  }
+  .dial-row > [class*="col"]:nth-child(1) .dial-center {
+    --dial-size: 150px !important;
+  }
+  .dial-row > [class*="col"]:nth-child(1) .dial-label {
+    font-size: 11px !important;
+    margin-bottom: 8px !important;
+  }
+
+  /* Show dials 2-4 in a single row */
+  .dial-row > [class*="col"]:nth-child(2),
+  .dial-row > [class*="col"]:nth-child(3),
+  .dial-row > [class*="col"]:nth-child(4) {
+    width: 33.33% !important;
+    flex: 1 !important;
+  }
+
+  /* Force the last 3 into a flex row */
+  .dial-row {
+    flex-wrap: wrap !important;
+  }
+  .dial-row > [class*="col"]:nth-child(1) {
+    order: 1;
+    width: 100% !important;
+  }
+  .dial-row > [class*="col"]:nth-child(2) { order: 2; }
+  .dial-row > [class*="col"]:nth-child(3) { order: 3; }
+  .dial-row > [class*="col"]:nth-child(4) { order: 4; }
+
+  /* Arc effect on secondary dials */
+  .dial-row > [class*="col"]:nth-child(2) .dial-block {
+    transform: translateY(-16px) rotate(-4deg);
+    transform-origin: bottom center;
+  }
+  .dial-row > [class*="col"]:nth-child(3) .dial-block {
+    transform: translateY(4px);
+    transform-origin: bottom center;
+  }
+  .dial-row > [class*="col"]:nth-child(4) .dial-block {
+    transform: translateY(-16px) rotate(4deg);
+    transform-origin: bottom center;
+  }
+
+  /* Secondary dials smaller */
+  .dial-row > [class*="col"]:nth-child(2) .dial-center,
+  .dial-row > [class*="col"]:nth-child(3) .dial-center,
+  .dial-row > [class*="col"]:nth-child(4) .dial-center {
+    --dial-size: 90px !important;
+  }
+
+  /* Smaller label on secondary */
+  .dial-row > [class*="col"]:nth-child(2) .dial-label,
+  .dial-row > [class*="col"]:nth-child(3) .dial-label,
+  .dial-row > [class*="col"]:nth-child(4) .dial-label {
+    font-size: 8px !important;
+  }
+}
