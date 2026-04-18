@@ -2113,6 +2113,54 @@ app.index_string = """
 
           /* Dial colours handled by assets/dashboard.css */
         </style>
+        <script>
+        // Make share card draggable
+        document.addEventListener('DOMContentLoaded', function() {
+          function initDrag() {
+            const modal = document.getElementById('share-card-modal');
+            const handle = document.getElementById('share-card-drag-handle');
+            if (!modal || !handle) { setTimeout(initDrag, 500); return; }
+            let isDragging = false, startX, startY, origLeft, origTop;
+            handle.addEventListener('mousedown', function(e) {
+              isDragging = true;
+              startX = e.clientX; startY = e.clientY;
+              const rect = modal.getBoundingClientRect();
+              origLeft = rect.left; origTop = rect.top;
+              modal.style.transform = 'none';
+              modal.style.left = origLeft + 'px';
+              modal.style.top = origTop + 'px';
+              handle.style.cursor = 'grabbing';
+              e.preventDefault();
+            });
+            document.addEventListener('mousemove', function(e) {
+              if (!isDragging) return;
+              modal.style.left = (origLeft + e.clientX - startX) + 'px';
+              modal.style.top  = (origTop  + e.clientY - startY) + 'px';
+            });
+            document.addEventListener('mouseup', function() {
+              isDragging = false;
+              handle.style.cursor = 'grab';
+            });
+            // Touch drag
+            handle.addEventListener('touchstart', function(e) {
+              isDragging = true;
+              startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+              const rect = modal.getBoundingClientRect();
+              origLeft = rect.left; origTop = rect.top;
+              modal.style.transform = 'none';
+              modal.style.left = origLeft + 'px';
+              modal.style.top = origTop + 'px';
+            }, {passive: true});
+            document.addEventListener('touchmove', function(e) {
+              if (!isDragging) return;
+              modal.style.left = (origLeft + e.touches[0].clientX - startX) + 'px';
+              modal.style.top  = (origTop  + e.touches[0].clientY - startY) + 'px';
+            }, {passive: true});
+            document.addEventListener('touchend', function() { isDragging = false; });
+          }
+          setTimeout(initDrag, 1000);
+        });
+        </script>
         {%css%}
     </head>
     <body>
@@ -2248,13 +2296,30 @@ def build_main_layout(auth_data):
                 ),
                 style={"textAlign": "center", "marginTop": "12px"},
             ),
-            dbc.Modal(
-                [
-                    dbc.ModalHeader(dbc.ModalTitle("Share today's stats"), close_button=True),
-                    dbc.ModalBody([html.Div(id="share-card-container")],
-                                  style={"padding": "0", "background": "#111"}),
-                ],
-                id="share-card-modal", is_open=False, centered=True, size="lg",
+            # Draggable share card overlay
+            html.Div(
+                id="share-card-modal",
+                style={"display": "none", "position": "fixed", "top": "60px", "left": "50%",
+                       "transform": "translateX(-50%)", "width": "min(420px, 96vw)",
+                       "maxHeight": "90vh", "background": "#111", "borderRadius": "16px",
+                       "boxShadow": "0 8px 40px rgba(0,0,0,0.7)", "zIndex": "10000",
+                       "overflow": "hidden", "resize": "both"},
+                children=[
+                    # Drag handle header
+                    html.Div([
+                        html.Div("Share today's stats",
+                                 style={"color": "white", "fontWeight": "600", "fontSize": "15px"}),
+                        html.Div("✕", id="share-card-close",
+                                 style={"color": "white", "cursor": "pointer", "fontSize": "20px",
+                                        "padding": "0 4px", "lineHeight": "1"}),
+                    ], id="share-card-drag-handle",
+                       style={"display": "flex", "justifyContent": "space-between",
+                              "alignItems": "center", "padding": "12px 16px",
+                              "background": "#1a1a1a", "cursor": "grab",
+                              "borderBottom": "1px solid rgba(255,255,255,0.1)"}),
+                    html.Div(id="share-card-container",
+                             style={"overflowY": "auto", "maxHeight": "calc(90vh - 50px)"}),
+                ]
             ),
             html.Div(logout_button,
                      style={"display": "flex", "justifyContent": "flex-end",
@@ -3693,16 +3758,23 @@ def generate_session_plan(n_clicks, athlete_id, coach_style, goal, duration):
 
 
 @app.callback(
-    Output("share-card-modal",    "is_open"),
+    Output("share-card-modal",    "style"),
     Output("share-card-container","children"),
     Input("btn-share-card",       "n_clicks"),
+    Input("share-card-close",     "n_clicks"),
     State("athlete-dropdown",     "value"),
-    State("share-card-modal",     "is_open"),
+    State("share-card-modal",     "style"),
     prevent_initial_call=True,
 )
-def show_share_card(n, athlete_id, is_open):
+def show_share_card(n, close_n, athlete_id, current_style):
+    ctx = callback_context
+    if not ctx.triggered: raise PreventUpdate
+    trigger = ctx.triggered[0]["prop_id"].split(".")[0]
+    if trigger == "share-card-close":
+        return {"display": "none"}, no_update
     if not n: raise PreventUpdate
-    if is_open: return False, no_update
+    if current_style and current_style.get("display") == "block":
+        return {"display": "none"}, no_update
 
     today      = today_adl()
     date_str   = today.strftime("%d %b %Y")
@@ -4092,17 +4164,22 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     scrim.addColorStop(0.58,'rgba(0,0,0,0.55)');scrim.addColorStop(1.0,'rgba(0,0,0,0.82)');
     ctx.fillStyle=scrim;ctx.fillRect(0,0,EXPORT_W,EXPORT_H);
 
-    const PAD=80,CARD_TOP=EXPORT_H*0.52;
+    const PAD=80,CARD_TOP=EXPORT_H*0.48;
 
-    // Logo — render white by drawing to offscreen canvas then compositing
-    const LOGO_SIZE=72,LOGO_PAD=PAD,LOGO_Y=56;
+    // Dials — positioned first so brand sits directly above them
+    const DIAL_R=90,DIAL_SW=18,DIAL_Y=CARD_TOP+120,dialSpacing=(EXPORT_W-PAD*2)/4;
+
+    // Logo + brand — centred, directly above the dials
+    const LOGO_SIZE=64;
+    const BRAND_Y=DIAL_Y-DIAL_R-90; // sit above dials
+    const BRAND_CX=EXPORT_W/2;
     function drawBrand(){{
-      ctx.font='500 26px system-ui';ctx.fillStyle='rgba(255,255,255,0.75)';
-      ctx.textAlign='left';ctx.textBaseline='middle';
-      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',LOGO_PAD+(logoImg?LOGO_SIZE+14:0),LOGO_Y+LOGO_SIZE/2);
+      // Brand text centred
+      ctx.font='500 28px system-ui';ctx.fillStyle='rgba(255,255,255,0.70)';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',BRAND_CX+(logoImg?LOGO_SIZE/2+8:0),BRAND_Y+LOGO_SIZE/2);
     }}
     if(logoImg&&logoImg.naturalWidth>0){{
-      // Draw to offscreen canvas, apply white via source-in composite
       const oc=document.createElement('canvas');
       oc.width=LOGO_SIZE;oc.height=LOGO_SIZE;
       const octx=oc.getContext('2d');
@@ -4110,14 +4187,18 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       octx.globalCompositeOperation='source-in';
       octx.fillStyle='rgba(255,255,255,0.90)';
       octx.fillRect(0,0,LOGO_SIZE,LOGO_SIZE);
-      ctx.drawImage(oc,LOGO_PAD,LOGO_Y,LOGO_SIZE,LOGO_SIZE);
-      drawBrand();
+      // Measure brand text to centre logo+text together
+      ctx.font='500 28px system-ui';
+      const textW=ctx.measureText('ACI \u00b7 ADAPTIVE COACHING').width;
+      const totalW=LOGO_SIZE+14+textW;
+      const startX=BRAND_CX-totalW/2;
+      ctx.drawImage(oc,startX,BRAND_Y,LOGO_SIZE,LOGO_SIZE);
+      ctx.font='500 28px system-ui';ctx.fillStyle='rgba(255,255,255,0.70)';
+      ctx.textAlign='left';ctx.textBaseline='middle';
+      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',startX+LOGO_SIZE+14,BRAND_Y+LOGO_SIZE/2);
     }}else{{
       drawBrand();
     }}
-
-    // Dials
-    const DIAL_R=90,DIAL_SW=18,DIAL_Y=CARD_TOP+70,dialSpacing=(EXPORT_W-PAD*2)/4;
     const dialData=[
       {{val:{d_r},pct:{d_r},color:'{c_r}',label:'READINESS'}},
       {{val:{d_n},pct:{d_n},color:'{c_n}',label:'NEURO'}},
@@ -4191,8 +4272,10 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 </script>
 </body></html>"""
 
-    return True, html.Iframe(srcDoc=html_src, style={"width": "100%", "height": "720px",
-                                                       "border": "none", "background": "#111"})
+    return {"display": "block"}, html.Iframe(
+        srcDoc=html_src,
+        style={"width": "100%", "height": "700px", "border": "none", "background": "#111"}
+    )
 
 
 @app.callback(
