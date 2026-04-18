@@ -2296,29 +2296,27 @@ def build_main_layout(auth_data):
                 ),
                 style={"textAlign": "center", "marginTop": "12px"},
             ),
-            # Draggable share card overlay
             html.Div(
                 id="share-card-modal",
-                style={"display": "none", "position": "fixed", "top": "60px", "left": "50%",
-                       "transform": "translateX(-50%)", "width": "min(420px, 96vw)",
-                       "maxHeight": "90vh", "background": "#111", "borderRadius": "16px",
-                       "boxShadow": "0 8px 40px rgba(0,0,0,0.7)", "zIndex": "10000",
-                       "overflow": "hidden", "resize": "both"},
+                style={"display": "none", "position": "fixed", "top": "55px", "left": "50%",
+                       "transform": "translateX(-50%)", "width": "min(400px, 95vw)",
+                       "maxHeight": "88vh", "background": "#111", "borderRadius": "16px",
+                       "boxShadow": "0 8px 40px rgba(0,0,0,0.75)", "zIndex": "10000",
+                       "overflow": "hidden", "flexDirection": "column", "display": "none"},
                 children=[
-                    # Drag handle header
                     html.Div([
                         html.Div("Share today's stats",
                                  style={"color": "white", "fontWeight": "600", "fontSize": "15px"}),
-                        html.Div("✕", id="share-card-close",
-                                 style={"color": "white", "cursor": "pointer", "fontSize": "20px",
-                                        "padding": "0 4px", "lineHeight": "1"}),
+                        html.Div("✕", id="share-card-close", n_clicks=0,
+                                 style={"color": "white", "cursor": "pointer", "fontSize": "22px",
+                                        "padding": "0 6px", "lineHeight": "1", "userSelect": "none"}),
                     ], id="share-card-drag-handle",
                        style={"display": "flex", "justifyContent": "space-between",
                               "alignItems": "center", "padding": "12px 16px",
-                              "background": "#1a1a1a", "cursor": "grab",
+                              "background": "#1a1a1a", "cursor": "grab", "flexShrink": "0",
                               "borderBottom": "1px solid rgba(255,255,255,0.1)"}),
                     html.Div(id="share-card-container",
-                             style={"overflowY": "auto", "maxHeight": "calc(90vh - 50px)"}),
+                             style={"overflowY": "auto", "flex": "1"}),
                 ]
             ),
             html.Div(logout_button,
@@ -3767,14 +3765,18 @@ def generate_session_plan(n_clicks, athlete_id, coach_style, goal, duration):
     prevent_initial_call=True,
 )
 def show_share_card(n, close_n, athlete_id, current_style):
-    ctx = callback_context
-    if not ctx.triggered: raise PreventUpdate
-    trigger = ctx.triggered[0]["prop_id"].split(".")[0]
-    if trigger == "share-card-close":
-        return {"display": "none"}, no_update
+    HIDDEN  = {"display": "none",  "position": "fixed", "top": "55px", "left": "50%",
+               "transform": "translateX(-50%)", "width": "min(400px, 95vw)",
+               "maxHeight": "88vh", "background": "#111", "borderRadius": "16px",
+               "boxShadow": "0 8px 40px rgba(0,0,0,0.75)", "zIndex": "10000",
+               "overflow": "hidden", "flexDirection": "column"}
+    VISIBLE = {**HIDDEN, "display": "flex"}
+    ctx2 = callback_context
+    if not ctx2.triggered: raise PreventUpdate
+    trigger = ctx2.triggered[0]["prop_id"].split(".")[0]
+    if trigger == "share-card-close": return HIDDEN, no_update
     if not n: raise PreventUpdate
-    if current_style and current_style.get("display") == "block":
-        return {"display": "none"}, no_update
+    if current_style and current_style.get("display") == "flex": return HIDDEN, no_update
 
     today      = today_adl()
     date_str   = today.strftime("%d %b %Y")
@@ -4272,9 +4274,9 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 </script>
 </body></html>"""
 
-    return {"display": "block"}, html.Iframe(
+    return VISIBLE, html.Iframe(
         srcDoc=html_src,
-        style={"width": "100%", "height": "700px", "border": "none", "background": "#111"}
+        style={"width": "100%", "height": "680px", "border": "none", "background": "#111", "display": "block"}
     )
 
 
