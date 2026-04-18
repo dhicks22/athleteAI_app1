@@ -159,6 +159,7 @@ else:
 MOBILE_PLOT_LAYOUT = dict(
     autosize=True,
     height=360,
+    margin=dict(l=24, r=16, t=48, b=80),
     font=dict(size=13),
     hoverlabel=dict(
         bgcolor="white",
@@ -169,7 +170,7 @@ MOBILE_PLOT_LAYOUT = dict(
     legend=dict(
         orientation="h",
         yanchor="top",
-        y=-0.16,
+        y=-0.22,
         xanchor="center",
         x=0.5,
         font=dict(size=10),
@@ -177,7 +178,6 @@ MOBILE_PLOT_LAYOUT = dict(
         itemsizing="constant",
         itemwidth=40,
     ),
-    margin=dict(l=24, r=16, t=48, b=85),
 )
 
 BLUE       = "#1565C0"
@@ -1752,7 +1752,7 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
                                      fillcolor=f"rgba{tuple(int(color[i:i+2], 16) for i in (1,3,5)) + (0.12,)}",
                                      hoverinfo="skip", showlegend=False))
             fig.add_trace(go.Scatter(x=x, y=roll, name=label, mode="lines",
-                                     line=dict(color=color, width=1.0), line_shape="spline", line_smoothing=0.7,
+                                     line=dict(color=color, width=2.6), line_shape="spline", line_smoothing=0.7,
                                      hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>"))
 
         fig.update_layout(
@@ -1786,7 +1786,7 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
                                  fillcolor=f"rgba{tuple(int(color[i:i+2], 16) for i in (1,3,5)) + (0.12,)}",
                                  hoverinfo="skip", showlegend=False))
         fig.add_trace(go.Scatter(x=x, y=roll, name=label, mode="lines",
-                                 line=dict(color=color, width=1.0), line_shape="spline", line_smoothing=0.7,
+                                 line=dict(color=color, width=2.6), line_shape="spline", line_smoothing=0.7,
                                  hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>",
                                  visible="legendonly" if label == "Mood" else True))
 
@@ -1825,18 +1825,18 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
     if view_mode == "daily":
         x = d["Date"]
         fig.add_bar(x=x, y=speed, name="Speed",
-                    marker=dict(color="rgba(37,99,235,0.25)", line=dict(color=_BLUE, width=1.5)),
+                    marker=dict(color="rgba(37,99,235,0.35)", line=dict(color=_BLUE, width=1.6)),
                     hovertemplate="Speed: %{y:,.0f} m<extra></extra>")
         fig.add_bar(x=x, y=tempo, name="Tempo",
-                    marker=dict(color="rgba(245,158,11,0.28)", line=dict(color=_ORANGE, width=1.5)),
+                    marker=dict(color="rgba(245,158,11,0.35)", line=dict(color=_ORANGE, width=1.6)),
                     hovertemplate="Tempo: %{y:,.0f} m<extra></extra>")
         fig.add_trace(go.Scatter(x=x, y=speed.ewm(span=7, adjust=False, min_periods=1).mean(),
                                  name="Speed trend", mode="lines",
-                                 line=dict(color=_BLUE, width=2.4), line_shape="spline", line_smoothing=0.7,
+                                 line=dict(color=_BLUE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
                                  hovertemplate="Speed trend: %{y:,.0f} m<extra></extra>"))
         fig.add_trace(go.Scatter(x=x, y=tempo.ewm(span=7, adjust=False, min_periods=1).mean(),
                                  name="Tempo trend", mode="lines",
-                                 line=dict(color=_ORANGE, width=2.4), line_shape="spline", line_smoothing=0.7,
+                                 line=dict(color=_ORANGE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
                                  hovertemplate="Tempo trend: %{y:,.0f} m<extra></extra>"))
         fig.update_layout(title="Daily Speed & Tempo Volumes", xaxis_title="", yaxis_title="Metres",
                           barmode="stack", hovermode="x unified", **MOBILE_PLOT_LAYOUT)
@@ -1853,18 +1853,18 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
     x = g["Week"]
 
     fig.add_bar(x=x, y=g["Speed"], name="Speed",
-                marker=dict(color="rgba(37,99,235,0.25)", line=dict(color=_BLUE, width=1.5)),
+                marker=dict(color="rgba(37,99,235,0.35)", line=dict(color=_BLUE, width=1.6)),
                 hovertemplate="Speed: %{y:,.0f} m<extra></extra>")
     fig.add_bar(x=x, y=g["Tempo"], name="Tempo",
-                marker=dict(color="rgba(245,158,11,0.28)", line=dict(color=_ORANGE, width=1.5)),
+                marker=dict(color="rgba(245,158,11,0.35)", line=dict(color=_ORANGE, width=1.6)),
                 hovertemplate="Tempo: %{y:,.0f} m<extra></extra>")
     fig.add_trace(go.Scatter(x=x, y=g["Speed"].ewm(span=4, adjust=False, min_periods=1).mean(),
                              name="Speed trend", mode="lines",
-                             line=dict(color=_BLUE, width=2.4), line_shape="spline", line_smoothing=0.7,
+                             line=dict(color=_BLUE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
                              hovertemplate="Speed trend: %{y:,.0f} m<extra></extra>"))
     fig.add_trace(go.Scatter(x=x, y=g["Tempo"].ewm(span=4, adjust=False, min_periods=1).mean(),
                              name="Tempo trend", mode="lines",
-                             line=dict(color=_ORANGE, width=2.4), line_shape="spline", line_smoothing=0.7,
+                             line=dict(color=_ORANGE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
                              hovertemplate="Tempo trend: %{y:,.0f} m<extra></extra>"))
     fig.update_layout(title="Weekly Speed & Tempo Volumes", xaxis_title="", yaxis_title="Metres",
                       barmode="stack", hovermode="x unified", **MOBILE_PLOT_LAYOUT)
@@ -2114,102 +2114,51 @@ app.index_string = """
           /* Dial colours handled by assets/dashboard.css */
         </style>
         <script>
-        // Share card: free drag anywhere, pinch-to-resize, Strava-style
-        function initShareDrag() {
-          const modal = document.getElementById('share-card-modal');
-          const handle = document.getElementById('share-card-drag-handle');
-          if (!modal || !handle) { setTimeout(initShareDrag, 600); return; }
-
-          let dragging = false, dx = 0, dy = 0, bx = 0, by = 0;
-
-          function snapToGrid(v) { return v; } // no snap — free movement
-
-          function getPos() {
-            const r = modal.getBoundingClientRect();
-            return { left: r.left, top: r.top };
-          }
-
-          function setPos(left, top) {
-            // Clamp to viewport
-            const mw = modal.offsetWidth, mh = modal.offsetHeight;
-            left = Math.max(0, Math.min(left, window.innerWidth  - mw));
-            top  = Math.max(0, Math.min(top,  window.innerHeight - 60));
-            modal.style.transform = 'none';
-            modal.style.left  = left  + 'px';
-            modal.style.top   = top   + 'px';
-            modal.style.right = 'auto';
-          }
-
-          // Mouse drag
-          handle.addEventListener('mousedown', function(e) {
-            const p = getPos(); bx = p.left; by = p.top;
-            dx = e.clientX - bx; dy = e.clientY - by;
-            dragging = true;
-            handle.style.cursor = 'grabbing';
-            e.preventDefault();
-          });
-          document.addEventListener('mousemove', function(e) {
-            if (!dragging) return;
-            setPos(e.clientX - dx, e.clientY - dy);
-          });
-          document.addEventListener('mouseup', function() {
-            dragging = false; handle.style.cursor = 'grab';
-          });
-
-          // Touch drag (single finger on handle)
-          let t0x, t0y, tb_left, tb_top;
-          handle.addEventListener('touchstart', function(e) {
-            if (e.touches.length !== 1) return;
-            const p = getPos(); tb_left = p.left; tb_top = p.top;
-            t0x = e.touches[0].clientX; t0y = e.touches[0].clientY;
-            dragging = true;
-          }, {passive: true});
-          document.addEventListener('touchmove', function(e) {
-            if (!dragging || e.touches.length !== 1) return;
-            const nx = tb_left + e.touches[0].clientX - t0x;
-            const ny = tb_top  + e.touches[0].clientY - t0y;
-            setPos(nx, ny);
-          }, {passive: true});
-          document.addEventListener('touchend', function() { dragging = false; });
-
-          // Pinch-to-resize the whole card (two fingers anywhere on modal)
-          let pinchStartDist = 0, pinchStartW = 0, pinchStartH = 0;
-          modal.addEventListener('touchstart', function(e) {
-            if (e.touches.length === 2) {
-              const dx2 = e.touches[0].clientX - e.touches[1].clientX;
-              const dy2 = e.touches[0].clientY - e.touches[1].clientY;
-              pinchStartDist = Math.sqrt(dx2*dx2 + dy2*dy2);
-              pinchStartW = modal.offsetWidth;
-              pinchStartH = modal.offsetHeight;
-            }
-          }, {passive: true});
-          modal.addEventListener('touchmove', function(e) {
-            if (e.touches.length === 2) {
-              const dx2 = e.touches[0].clientX - e.touches[1].clientX;
-              const dy2 = e.touches[0].clientY - e.touches[1].clientY;
-              const newDist = Math.sqrt(dx2*dx2 + dy2*dy2);
-              const scale = newDist / pinchStartDist;
-              const newW = Math.max(260, Math.min(window.innerWidth, Math.round(pinchStartW * scale)));
-              modal.style.width = newW + 'px';
-              modal.style.maxHeight = '95vh';
-              e.preventDefault();
-            }
-          }, {passive: false});
-        }
+        // Make share card draggable
         document.addEventListener('DOMContentLoaded', function() {
-          setTimeout(initShareDrag, 800);
-          // Re-init when Dash updates the DOM
-          const obs = new MutationObserver(function(ml) {
-            for (const m of ml) {
-              for (const n of m.addedNodes) {
-                if (n.id === 'share-card-drag-handle' ||
-                    (n.querySelectorAll && n.querySelectorAll('#share-card-drag-handle').length)) {
-                  setTimeout(initShareDrag, 100);
-                }
-              }
-            }
-          });
-          obs.observe(document.body, {childList: true, subtree: true});
+          function initDrag() {
+            const modal = document.getElementById('share-card-modal');
+            const handle = document.getElementById('share-card-drag-handle');
+            if (!modal || !handle) { setTimeout(initDrag, 500); return; }
+            let isDragging = false, startX, startY, origLeft, origTop;
+            handle.addEventListener('mousedown', function(e) {
+              isDragging = true;
+              startX = e.clientX; startY = e.clientY;
+              const rect = modal.getBoundingClientRect();
+              origLeft = rect.left; origTop = rect.top;
+              modal.style.transform = 'none';
+              modal.style.left = origLeft + 'px';
+              modal.style.top = origTop + 'px';
+              handle.style.cursor = 'grabbing';
+              e.preventDefault();
+            });
+            document.addEventListener('mousemove', function(e) {
+              if (!isDragging) return;
+              modal.style.left = (origLeft + e.clientX - startX) + 'px';
+              modal.style.top  = (origTop  + e.clientY - startY) + 'px';
+            });
+            document.addEventListener('mouseup', function() {
+              isDragging = false;
+              handle.style.cursor = 'grab';
+            });
+            // Touch drag
+            handle.addEventListener('touchstart', function(e) {
+              isDragging = true;
+              startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+              const rect = modal.getBoundingClientRect();
+              origLeft = rect.left; origTop = rect.top;
+              modal.style.transform = 'none';
+              modal.style.left = origLeft + 'px';
+              modal.style.top = origTop + 'px';
+            }, {passive: true});
+            document.addEventListener('touchmove', function(e) {
+              if (!isDragging) return;
+              modal.style.left = (origLeft + e.touches[0].clientX - startX) + 'px';
+              modal.style.top  = (origTop  + e.touches[0].clientY - startY) + 'px';
+            }, {passive: true});
+            document.addEventListener('touchend', function() { isDragging = false; });
+          }
+          setTimeout(initDrag, 1000);
         });
         </script>
         {%css%}
