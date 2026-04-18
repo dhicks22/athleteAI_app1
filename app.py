@@ -1640,8 +1640,8 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
                                  line_smoothing=0.75, opacity=0.7,
                                  hovertemplate="Chronic: %{y:,.0f}<extra></extra>"))
         fig.add_trace(go.Scatter(x=x, y=g["ACWR"], name="ACWR", mode="lines", yaxis="y2",
-                                 line=dict(color=_PURPLE, width=1.6), line_shape="spline", line_smoothing=0.75,
-                                 opacity=0.7, hovertemplate="ACWR: %{y:.2f}<extra></extra>"))
+                                 line=dict(color=_PURPLE, width=1.2, dash="dot"), line_shape="spline", line_smoothing=0.75,
+                                 opacity=0.5, hovertemplate="ACWR: %{y:.2f}<extra></extra>"))
         fig.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y2", y0=0.9, y1=1.25,
                       fillcolor="rgba(56,189,248,0.12)", line_width=0, layer="below")
         fig.update_layout(title="Weekly Training Load & Balance", xaxis_title="",
@@ -1701,8 +1701,8 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
                              line_smoothing=0.75, opacity=0.7,
                              hovertemplate="28d: %{y:,.0f}<extra></extra>"))
     fig.add_trace(go.Scatter(x=x, y=d["ACWR"], name="ACWR", mode="lines", yaxis="y2",
-                             line=dict(color=_PURPLE, width=1.6), line_shape="spline", line_smoothing=0.75,
-                             hovertemplate="ACWR: %{y:.2f}<extra></extra>"))
+                             line=dict(color=_PURPLE, width=1.2, dash="dot"), line_shape="spline", line_smoothing=0.75,
+                             opacity=0.6, hovertemplate="ACWR: %{y:.2f}<extra></extra>"))
     fig.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y2", y0=0.9, y1=1.25,
                   fillcolor="rgba(56,189,248,0.12)", line_width=0, layer="below")
     fig.update_layout(title="Daily Training Load & Balance", xaxis_title="",
@@ -1755,10 +1755,18 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
                                      line=dict(color=color, width=2.6), line_shape="spline", line_smoothing=0.7,
                                      hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>"))
 
-        fig.update_layout(title="Weekly Wellness Trends", xaxis_title="",
-                          yaxis=dict(title="Scale (1–5)", range=[0.8, 5.2], tickvals=[1, 2, 3, 4, 5]),
-                          hovermode="x unified")
-        fig.update_layout(**MOBILE_PLOT_LAYOUT)
+        fig.update_layout(
+            title="Weekly Wellness Trends", xaxis_title="",
+            yaxis=dict(title="Scale (1–5)", range=[0.8, 5.2], tickvals=[1, 2, 3, 4, 5]),
+            hovermode="x unified",
+            legend=dict(
+                orientation="h", yanchor="top", y=-0.20,
+                xanchor="center", x=0.5,
+                font=dict(size=10), itemwidth=40,
+                tracegroupgap=0,
+            ),
+            margin=dict(l=24, r=16, t=48, b=90),
+        )
         return fig
 
     x = d["Date"]
@@ -1782,10 +1790,18 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
                                  hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>",
                                  visible="legendonly" if label == "Mood" else True))
 
-    fig.update_layout(title="Daily Wellness Trends", xaxis_title="",
-                      yaxis=dict(title="Scale (1–5)", range=[0.8, 5.2], tickvals=[1, 2, 3, 4, 5]),
-                      hovermode="x unified")
-    fig.update_layout(**MOBILE_PLOT_LAYOUT)
+    fig.update_layout(
+        title="Daily Wellness Trends", xaxis_title="",
+        yaxis=dict(title="Scale (1–5)", range=[0.8, 5.2], tickvals=[1, 2, 3, 4, 5]),
+        hovermode="x unified",
+        legend=dict(
+            orientation="h", yanchor="top", y=-0.20,
+            xanchor="center", x=0.5,
+            font=dict(size=10), itemwidth=40,
+            tracegroupgap=0,
+        ),
+        margin=dict(l=24, r=16, t=48, b=90),
+    )
     return fig
 
 
@@ -2022,6 +2038,80 @@ app.index_string = """
             overflow-y: auto !important;
             z-index: 9999 !important;
           }
+          /* Responsive dial layout */
+          .dial-responsive-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 12px 0 4px 0;
+          }
+          .dial-hero-row {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+          }
+          .dial-secondary-row {
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-end;
+            width: 100%;
+            padding-bottom: 8px;
+            margin-top: 16px;
+          }
+          .dial-secondary-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+          }
+          /* Arc the three dials — left tilts up-left, right tilts up-right */
+          @media (max-width: 767px) {
+            .dial-secondary-item:nth-child(1) {
+              transform: translateY(-18px) rotate(-4deg);
+            }
+            .dial-secondary-item:nth-child(3) {
+              transform: translateY(-18px) rotate(4deg);
+            }
+            .dial-secondary-item:nth-child(2) {
+              transform: translateY(0px);
+            }
+          }
+          .dial-secondary-label {
+            font-size: 10px;
+            color: #aaa;
+            text-align: center;
+            margin-top: 4px;
+          }
+          @media (min-width: 768px) {
+            .dial-responsive-wrap {
+              flex-direction: row;
+              justify-content: space-around;
+              align-items: flex-start;
+              padding: 8px 0;
+            }
+            .dial-hero-row {
+              flex-direction: column;
+              margin-bottom: 0;
+              flex: 1;
+            }
+            .dial-hero-row .dial-center { --dial-size: 120px !important; }
+            .dial-secondary-row { display: contents; }
+            .dial-secondary-item { flex: 1; }
+            .dial-secondary-item .dial-center { --dial-size: 120px !important; }
+            .dial-secondary-label { display: none; }
+          }
+          @media (max-width: 767px) {
+            .dial-hero-row .dial-center { --dial-size: 140px !important; }
+            .dial-secondary-item .dial-center { --dial-size: 88px !important; }
+            .dial-label-desktop-only { display: none !important; }
+          }
+          @media (min-width: 768px) {
+            .mobile-dial-label { display: none !important; }
+            .desktop-dial-label { display: block !important; }
+          }
+
+          /* Dial colours handled by assets/dashboard.css */
         </style>
         {%css%}
     </head>
@@ -2148,7 +2238,7 @@ def build_main_layout(auth_data):
                 ],
             ),
             html.Div(id="welcome-message", className="mt-3"),
-            html.Div(id="motivational-message"),
+            html.Div(id="motivational-message", style={"display": "none"}),
             html.Div(id="garmin-status-badge", className="mt-2"),
             html.Div(
                 dbc.Button(
@@ -3470,90 +3560,6 @@ def update_welcome(athlete_id, _today):
 
 
 @app.callback(
-    Output("motivational-message", "children"),
-    Input("athlete-dropdown", "value"),
-    Input("today-date",       "children"),
-    prevent_initial_call=True,
-)
-def update_motivational_message(athlete_id, today_date):
-    if not athlete_id:
-        raise PreventUpdate
-
-    first_name = athlete_id.strip().split()[0] if athlete_id.strip() else "Athlete"
-
-    try:
-        df      = load_tab(athlete_id)
-        context = ""
-        if not df.empty:
-            streak, _ = compute_streaks(df)
-            summary   = build_context_summary(df, days=7)
-            wellness  = build_wellness_flags(df, days=7)
-
-            df_time = df.copy()
-            df_time["Date"] = pd.to_datetime(df_time["Date"], errors="coerce")
-            df_time = df_time.sort_values("Date")
-            df_time = df_time[~df_time["Date"].duplicated(keep="last")]
-            df_time = df_time.set_index("Date")
-            full_range = pd.date_range(start=df_time.index.min(), end=today_adl(), freq="D")
-            df_time    = df_time.reindex(full_range)
-
-            load_series    = pd.to_numeric(df_time.get("Load"), errors="coerce")
-            rpe_post_w = pd.to_numeric(df_time.get("RPE_Post_Session"), errors="coerce")
-            rpe_plan_w = pd.to_numeric(df_time.get("RPE"), errors="coerce")
-            if rpe_post_w.notna().sum() > 0:
-                rpe_series = rpe_post_w
-            elif rpe_plan_w.notna().sum() > 0:
-                rpe_vals_w = rpe_plan_w.dropna()
-                rpe_series = rpe_plan_w / 2.0 if (not rpe_vals_w.empty and rpe_vals_w.max() > 5) else rpe_plan_w
-            else:
-                rpe_series = pd.Series(dtype=float, index=df_time.index)
-            quality_series = pd.to_numeric(df_time.get("Session_1_5"), errors="coerce")
-            readiness_val  = calc_daily_readiness(load_series, rpe_series, quality_series)
-
-            context = (
-                f"Athlete first name: {first_name}\n"
-                f"Current streak: {streak} days\n"
-                f"7-day summary: {summary}\n"
-                f"Wellness scan: {wellness}\n"
-                f"Daily readiness score: {round(readiness_val, 1) if readiness_val else 'unknown'}/100\n"
-                f"Day of week: {dt.datetime.now(ADL_TZ).strftime('%A')}\n"
-            )
-        else:
-            context = f"Athlete first name: {first_name}\nNo training data logged yet.\n"
-    except Exception:
-        context = f"Athlete first name: {first_name}\n"
-
-    system_msg = (
-        "You are a high-performance sprint and strength coach writing a single motivational line "
-        "for an athlete when they open their training app. "
-        "Rules: 1 sentence ONLY. Address the athlete by first name. "
-        "Focus on EFFORT, IDENTITY, or CONSISTENCY — NOT on today's readiness score. "
-        "Tone: like a coach who has worked with this athlete for years. Sharp, personal, not generic. "
-        "BANNED: champion, champions, warrior, journey, greatness, amazing, incredible, mindset, destiny, path, process, outstanding. "
-        "No hashtags. No emojis. No exclamation marks. "
-        "Never mention readiness, fatigue scores, or wellness numbers. Never start with 'It's [day]'."
-    )
-    user_msg = f"Athlete context:\n{context}\n\nWrite the motivational message now. 1–2 sentences only."
-    raw      = call_openai_chat([{"role": "system", "content": system_msg}, {"role": "user", "content": user_msg}], max_tokens=80)
-
-    if not raw or "unavailable" in raw.lower():
-        import random
-        raw = random.choice([
-            f"{first_name}, the work you put in today compounds into who you become.",
-            f"Every session is data, {first_name}. Make this one count.",
-            f"{first_name}, consistency beats intensity. Show up.",
-            f"The best athletes in the world trained today, {first_name}. So will you.",
-            f"{first_name}, the numbers are honest — keep showing up.",
-        ])
-
-    return html.Div(
-        [html.Span(raw.strip(), style={"fontSize": "15px", "fontStyle": "normal", "color": "#424242",
-                                       "fontWeight": 500, "lineHeight": "1.4", "opacity": 0.85})],
-        style={"textAlign": "center", "padding": "4px 0", "marginTop": "4px", "marginBottom": "8px"}
-    )
-
-
-@app.callback(
     Output("ai-plan-output", "children"),
     Output("ai-plan-status", "children"),
     Input("btn-generate-plan",  "n_clicks"),
@@ -4160,7 +4166,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       const a=document.createElement('a');a.download='aci-{dl_name}.png';a.href=imgData;a.click();
       btn.textContent='Download story (1080\u00d71920)';
     }}
-      btn.disabled=false;
+    btn.disabled=false;
     }} // end doExport
 
     // Restore image from dataURL if needed, then export
