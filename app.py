@@ -159,7 +159,6 @@ else:
 MOBILE_PLOT_LAYOUT = dict(
     autosize=True,
     height=360,
-    margin=dict(l=24, r=16, t=48, b=80),
     font=dict(size=13),
     hoverlabel=dict(
         bgcolor="white",
@@ -170,7 +169,7 @@ MOBILE_PLOT_LAYOUT = dict(
     legend=dict(
         orientation="h",
         yanchor="top",
-        y=-0.22,
+        y=-0.16,
         xanchor="center",
         x=0.5,
         font=dict(size=10),
@@ -178,6 +177,7 @@ MOBILE_PLOT_LAYOUT = dict(
         itemsizing="constant",
         itemwidth=40,
     ),
+    margin=dict(l=24, r=16, t=48, b=85),
 )
 
 BLUE       = "#1565C0"
@@ -1752,7 +1752,7 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
                                      fillcolor=f"rgba{tuple(int(color[i:i+2], 16) for i in (1,3,5)) + (0.12,)}",
                                      hoverinfo="skip", showlegend=False))
             fig.add_trace(go.Scatter(x=x, y=roll, name=label, mode="lines",
-                                     line=dict(color=color, width=2.6), line_shape="spline", line_smoothing=0.7,
+                                     line=dict(color=color, width=1.0), line_shape="spline", line_smoothing=0.7,
                                      hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>"))
 
         fig.update_layout(
@@ -1786,7 +1786,7 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
                                  fillcolor=f"rgba{tuple(int(color[i:i+2], 16) for i in (1,3,5)) + (0.12,)}",
                                  hoverinfo="skip", showlegend=False))
         fig.add_trace(go.Scatter(x=x, y=roll, name=label, mode="lines",
-                                 line=dict(color=color, width=2.6), line_shape="spline", line_smoothing=0.7,
+                                 line=dict(color=color, width=1.0), line_shape="spline", line_smoothing=0.7,
                                  hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>",
                                  visible="legendonly" if label == "Mood" else True))
 
@@ -1825,18 +1825,18 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
     if view_mode == "daily":
         x = d["Date"]
         fig.add_bar(x=x, y=speed, name="Speed",
-                    marker=dict(color="rgba(37,99,235,0.35)", line=dict(color=_BLUE, width=1.6)),
+                    marker=dict(color="rgba(37,99,235,0.25)", line=dict(color=_BLUE, width=1.5)),
                     hovertemplate="Speed: %{y:,.0f} m<extra></extra>")
         fig.add_bar(x=x, y=tempo, name="Tempo",
-                    marker=dict(color="rgba(245,158,11,0.35)", line=dict(color=_ORANGE, width=1.6)),
+                    marker=dict(color="rgba(245,158,11,0.28)", line=dict(color=_ORANGE, width=1.5)),
                     hovertemplate="Tempo: %{y:,.0f} m<extra></extra>")
         fig.add_trace(go.Scatter(x=x, y=speed.ewm(span=7, adjust=False, min_periods=1).mean(),
                                  name="Speed trend", mode="lines",
-                                 line=dict(color=_BLUE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
+                                 line=dict(color=_BLUE, width=2.4), line_shape="spline", line_smoothing=0.7,
                                  hovertemplate="Speed trend: %{y:,.0f} m<extra></extra>"))
         fig.add_trace(go.Scatter(x=x, y=tempo.ewm(span=7, adjust=False, min_periods=1).mean(),
                                  name="Tempo trend", mode="lines",
-                                 line=dict(color=_ORANGE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
+                                 line=dict(color=_ORANGE, width=2.4), line_shape="spline", line_smoothing=0.7,
                                  hovertemplate="Tempo trend: %{y:,.0f} m<extra></extra>"))
         fig.update_layout(title="Daily Speed & Tempo Volumes", xaxis_title="", yaxis_title="Metres",
                           barmode="stack", hovermode="x unified", **MOBILE_PLOT_LAYOUT)
@@ -1853,18 +1853,18 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
     x = g["Week"]
 
     fig.add_bar(x=x, y=g["Speed"], name="Speed",
-                marker=dict(color="rgba(37,99,235,0.35)", line=dict(color=_BLUE, width=1.6)),
+                marker=dict(color="rgba(37,99,235,0.25)", line=dict(color=_BLUE, width=1.5)),
                 hovertemplate="Speed: %{y:,.0f} m<extra></extra>")
     fig.add_bar(x=x, y=g["Tempo"], name="Tempo",
-                marker=dict(color="rgba(245,158,11,0.35)", line=dict(color=_ORANGE, width=1.6)),
+                marker=dict(color="rgba(245,158,11,0.28)", line=dict(color=_ORANGE, width=1.5)),
                 hovertemplate="Tempo: %{y:,.0f} m<extra></extra>")
     fig.add_trace(go.Scatter(x=x, y=g["Speed"].ewm(span=4, adjust=False, min_periods=1).mean(),
                              name="Speed trend", mode="lines",
-                             line=dict(color=_BLUE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
+                             line=dict(color=_BLUE, width=2.4), line_shape="spline", line_smoothing=0.7,
                              hovertemplate="Speed trend: %{y:,.0f} m<extra></extra>"))
     fig.add_trace(go.Scatter(x=x, y=g["Tempo"].ewm(span=4, adjust=False, min_periods=1).mean(),
                              name="Tempo trend", mode="lines",
-                             line=dict(color=_ORANGE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
+                             line=dict(color=_ORANGE, width=2.4), line_shape="spline", line_smoothing=0.7,
                              hovertemplate="Tempo trend: %{y:,.0f} m<extra></extra>"))
     fig.update_layout(title="Weekly Speed & Tempo Volumes", xaxis_title="", yaxis_title="Metres",
                       barmode="stack", hovermode="x unified", **MOBILE_PLOT_LAYOUT)
@@ -2101,64 +2101,114 @@ app.index_string = """
             .dial-secondary-item .dial-center { --dial-size: 120px !important; }
             .dial-secondary-label { display: none; }
           }
-          @media (max-width: 767px) {
-            .dial-hero-row .dial-center { --dial-size: 140px !important; }
-            .dial-secondary-item .dial-center { --dial-size: 88px !important; }
-            .dial-label-desktop-only { display: none !important; }
-          }
+          /* Hero + small dial sizing */
+          .dial-hero  { --dial-size: 160px !important; }
+          .dial-small { --dial-size: 96px !important; }
           @media (min-width: 768px) {
-            .mobile-dial-label { display: none !important; }
-            .desktop-dial-label { display: block !important; }
+            .dial-hero  { --dial-size: 130px !important; }
+            .dial-small { --dial-size: 110px !important; }
+            .dial-layout-wrap { flex-direction: row !important; justify-content: space-around !important; }
           }
 
           /* Dial colours handled by assets/dashboard.css */
         </style>
         <script>
-        // Make share card draggable
-        document.addEventListener('DOMContentLoaded', function() {
-          function initDrag() {
-            const modal = document.getElementById('share-card-modal');
-            const handle = document.getElementById('share-card-drag-handle');
-            if (!modal || !handle) { setTimeout(initDrag, 500); return; }
-            let isDragging = false, startX, startY, origLeft, origTop;
-            handle.addEventListener('mousedown', function(e) {
-              isDragging = true;
-              startX = e.clientX; startY = e.clientY;
-              const rect = modal.getBoundingClientRect();
-              origLeft = rect.left; origTop = rect.top;
-              modal.style.transform = 'none';
-              modal.style.left = origLeft + 'px';
-              modal.style.top = origTop + 'px';
-              handle.style.cursor = 'grabbing';
-              e.preventDefault();
-            });
-            document.addEventListener('mousemove', function(e) {
-              if (!isDragging) return;
-              modal.style.left = (origLeft + e.clientX - startX) + 'px';
-              modal.style.top  = (origTop  + e.clientY - startY) + 'px';
-            });
-            document.addEventListener('mouseup', function() {
-              isDragging = false;
-              handle.style.cursor = 'grab';
-            });
-            // Touch drag
-            handle.addEventListener('touchstart', function(e) {
-              isDragging = true;
-              startX = e.touches[0].clientX; startY = e.touches[0].clientY;
-              const rect = modal.getBoundingClientRect();
-              origLeft = rect.left; origTop = rect.top;
-              modal.style.transform = 'none';
-              modal.style.left = origLeft + 'px';
-              modal.style.top = origTop + 'px';
-            }, {passive: true});
-            document.addEventListener('touchmove', function(e) {
-              if (!isDragging) return;
-              modal.style.left = (origLeft + e.touches[0].clientX - startX) + 'px';
-              modal.style.top  = (origTop  + e.touches[0].clientY - startY) + 'px';
-            }, {passive: true});
-            document.addEventListener('touchend', function() { isDragging = false; });
+        // Share card: free drag anywhere, pinch-to-resize, Strava-style
+        function initShareDrag() {
+          const modal = document.getElementById('share-card-modal');
+          const handle = document.getElementById('share-card-drag-handle');
+          if (!modal || !handle) { setTimeout(initShareDrag, 600); return; }
+
+          let dragging = false, dx = 0, dy = 0, bx = 0, by = 0;
+
+          function snapToGrid(v) { return v; } // no snap — free movement
+
+          function getPos() {
+            const r = modal.getBoundingClientRect();
+            return { left: r.left, top: r.top };
           }
-          setTimeout(initDrag, 1000);
+
+          function setPos(left, top) {
+            // Clamp to viewport
+            const mw = modal.offsetWidth, mh = modal.offsetHeight;
+            left = Math.max(0, Math.min(left, window.innerWidth  - mw));
+            top  = Math.max(0, Math.min(top,  window.innerHeight - 60));
+            modal.style.transform = 'none';
+            modal.style.left  = left  + 'px';
+            modal.style.top   = top   + 'px';
+            modal.style.right = 'auto';
+          }
+
+          // Mouse drag
+          handle.addEventListener('mousedown', function(e) {
+            const p = getPos(); bx = p.left; by = p.top;
+            dx = e.clientX - bx; dy = e.clientY - by;
+            dragging = true;
+            handle.style.cursor = 'grabbing';
+            e.preventDefault();
+          });
+          document.addEventListener('mousemove', function(e) {
+            if (!dragging) return;
+            setPos(e.clientX - dx, e.clientY - dy);
+          });
+          document.addEventListener('mouseup', function() {
+            dragging = false; handle.style.cursor = 'grab';
+          });
+
+          // Touch drag (single finger on handle)
+          let t0x, t0y, tb_left, tb_top;
+          handle.addEventListener('touchstart', function(e) {
+            if (e.touches.length !== 1) return;
+            const p = getPos(); tb_left = p.left; tb_top = p.top;
+            t0x = e.touches[0].clientX; t0y = e.touches[0].clientY;
+            dragging = true;
+          }, {passive: true});
+          document.addEventListener('touchmove', function(e) {
+            if (!dragging || e.touches.length !== 1) return;
+            const nx = tb_left + e.touches[0].clientX - t0x;
+            const ny = tb_top  + e.touches[0].clientY - t0y;
+            setPos(nx, ny);
+          }, {passive: true});
+          document.addEventListener('touchend', function() { dragging = false; });
+
+          // Pinch-to-resize the whole card (two fingers anywhere on modal)
+          let pinchStartDist = 0, pinchStartW = 0, pinchStartH = 0;
+          modal.addEventListener('touchstart', function(e) {
+            if (e.touches.length === 2) {
+              const dx2 = e.touches[0].clientX - e.touches[1].clientX;
+              const dy2 = e.touches[0].clientY - e.touches[1].clientY;
+              pinchStartDist = Math.sqrt(dx2*dx2 + dy2*dy2);
+              pinchStartW = modal.offsetWidth;
+              pinchStartH = modal.offsetHeight;
+            }
+          }, {passive: true});
+          modal.addEventListener('touchmove', function(e) {
+            if (e.touches.length === 2) {
+              const dx2 = e.touches[0].clientX - e.touches[1].clientX;
+              const dy2 = e.touches[0].clientY - e.touches[1].clientY;
+              const newDist = Math.sqrt(dx2*dx2 + dy2*dy2);
+              const scale = newDist / pinchStartDist;
+              const newW = Math.max(260, Math.min(window.innerWidth, Math.round(pinchStartW * scale)));
+              modal.style.width = newW + 'px';
+              modal.style.maxHeight = '95vh';
+              e.preventDefault();
+            }
+          }, {passive: false});
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+          setTimeout(initShareDrag, 800);
+          // Re-init when Dash updates the DOM
+          const obs = new MutationObserver(function(ml) {
+            for (const m of ml) {
+              for (const n of m.addedNodes) {
+                if (n.id === 'share-card-drag-handle' ||
+                    (n.querySelectorAll && n.querySelectorAll('#share-card-drag-handle').length)) {
+                  setTimeout(initShareDrag, 100);
+                }
+              }
+            }
+          });
+          obs.observe(document.body, {childList: true, subtree: true});
         });
         </script>
         {%css%}
@@ -2268,23 +2318,48 @@ def build_main_layout(auth_data):
                     ], lg=6, md=6, width=12),
                 ],
             ),
-            dbc.Row(
-                className="g-2 align-items-stretch mt-1 dial-row",
-                children=[
-                    dbc.Col(html.Div([html.Div("Daily Readiness",        className="dial-label"),
-                                      html.Div(id="readiness-dial-container",    className="dial-center")], className="dial-block"),
-                            lg=3, md=3, sm=6, xs=6, width=6),
-                    dbc.Col(html.Div([html.Div("Neuromuscular Readiness", className="dial-label"),
-                                      html.Div(id="neuromuscular-dial-container", className="dial-center")], className="dial-block"),
-                            lg=3, md=3, sm=6, xs=6, width=6),
-                    dbc.Col(html.Div([html.Div("Training Exposure",       className="dial-label"),
-                                      html.Div(id="weekly-dial-container",        className="dial-center")], className="dial-block"),
-                            lg=3, md=3, sm=6, xs=6, width=6),
-                    dbc.Col(html.Div([html.Div("Training Streak",         className="dial-label"),
-                                      html.Div(id="streak-dial-container",        className="dial-center")], className="dial-block"),
-                            lg=3, md=3, sm=6, xs=6, width=6),
-                ],
-            ),
+            html.Div([
+                # ── Hero ring — Daily Readiness ──────────────────────────────
+                html.Div([
+                    html.Div("DAILY READINESS", style={
+                        "fontSize": "10px", "fontWeight": "700", "letterSpacing": "0.12em",
+                        "color": "#888", "textAlign": "center", "marginBottom": "8px",
+                        "textTransform": "uppercase",
+                    }),
+                    html.Div(id="readiness-dial-container", className="dial-center dial-hero"),
+                ], style={"display": "flex", "flexDirection": "column", "alignItems": "center",
+                          "marginBottom": "20px"}),
+
+                # ── Two small rings row ───────────────────────────────────────
+                html.Div([
+                    html.Div([
+                        html.Div(id="neuromuscular-dial-container", className="dial-center dial-small"),
+                        html.Div("Neuro", style={"fontSize": "10px", "color": "#aaa",
+                                                  "textAlign": "center", "marginTop": "5px",
+                                                  "fontWeight": "500"}),
+                    ], style={"display": "flex", "flexDirection": "column", "alignItems": "center",
+                              "flex": "1"}),
+
+                    # ── Streak badge (centre) ─────────────────────────────────
+                    html.Div(id="streak-badge-container", style={
+                        "display": "flex", "flexDirection": "column", "alignItems": "center",
+                        "flex": "1",
+                    }),
+
+                    html.Div([
+                        html.Div(id="weekly-dial-container", className="dial-center dial-small"),
+                        html.Div("Exposure", style={"fontSize": "10px", "color": "#aaa",
+                                                     "textAlign": "center", "marginTop": "5px",
+                                                     "fontWeight": "500"}),
+                    ], style={"display": "flex", "flexDirection": "column", "alignItems": "center",
+                              "flex": "1"}),
+                ], style={"display": "flex", "justifyContent": "space-around",
+                          "alignItems": "flex-start", "width": "100%",
+                          "maxWidth": "400px", "margin": "0 auto"}),
+            ], className="dial-layout-wrap", style={
+                "display": "flex", "flexDirection": "column", "alignItems": "center",
+                "padding": "12px 0 8px 0",
+            }),
             html.Div(id="welcome-message", className="mt-3"),
             html.Div(id="motivational-message", style={"display": "none"}),
             html.Div(id="garmin-status-badge", className="mt-2"),
@@ -2798,7 +2873,7 @@ def update_calendar(athlete_tab, window_start, selected_date):
 @app.callback(
     Output("today-date",                  "children"),
     Output("weekly-dial-container",       "children"),
-    Output("streak-dial-container",       "children"),
+    Output("streak-badge-container",      "children"),
     Output("neuromuscular-dial-container","children"),
     Output("readiness-dial-container",    "children"),
     Output("load-plot",      "figure"),
@@ -2811,9 +2886,14 @@ def update_calendar(athlete_tab, window_start, selected_date):
 def update_dashboard(athlete_id, view_mode, n_clicks):
     if not athlete_id:
         today_date_str = today_adl().strftime("%d %b %Y")
+        _empty_streak = html.Div([
+            html.Div("🔥", style={"fontSize": "36px", "opacity": "0.3"}),
+            html.Div("0", style={"fontSize": "28px", "fontWeight": "900", "color": "#bbb"}),
+            html.Div("streak", style={"fontSize": "10px", "color": "#aaa"}),
+        ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"})
         return (today_date_str,
                 dial_flip(apple_sessions_ring(None),       "Weekly Training Exposure",    "—"),
-                dial_flip(streak_dial(0),                  "Training Streak",             "—"),
+                _empty_streak,
                 dial_flip(apple_neuromuscular_ring(None),  "Neuromuscular State",         "—"),
                 dial_flip(apple_readiness_ring(None),      "Training Readiness Index",    "—"),
                 go.Figure(), go.Figure(), go.Figure())
@@ -2829,7 +2909,11 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
 
     if df is None or df.empty:
         weekly_ui    = dial_flip(apple_sessions_ring(None),      " ", "No data yet.")
-        streak_ui    = dial_flip(streak_dial(0),                 " ", "No data yet.")
+        streak_ui    = html.Div([
+            html.Div("🔥", style={"fontSize": "36px", "opacity": "0.3"}),
+            html.Div("0", style={"fontSize": "28px", "fontWeight": "900", "color": "#bbb"}),
+            html.Div("streak", style={"fontSize": "10px", "color": "#aaa"}),
+        ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"})
         readiness_ui = dial_flip(apple_readiness_ring(None),     " ", "No data yet.")
         neuro_ui     = dial_flip(apple_neuromuscular_ring(None), " ", "No data yet.")
         empty_fig    = go.Figure()
@@ -2916,11 +3000,29 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
         f"Exposure: {weekly_exposure_pct if weekly_exposure_pct is not None else '—'}/100\n"
         "100 = every planned session logged."
     )
-    streak_ui = dial_flip(
-        streak_dial(streak), " ",
-        f"Current streak = {streak} consecutive days logged.\n"
-        "Keep low-cost work going to protect the streak."
-    )
+    # Streak badge — flame emoji + number, tappable hint
+    if streak == 0:
+        streak_badge = html.Div([
+            html.Div("🔥", style={"fontSize": "36px", "lineHeight": "1", "opacity": "0.3"}),
+            html.Div("0", style={"fontSize": "28px", "fontWeight": "900", "color": "#bbb",
+                                  "lineHeight": "1", "margin": "2px 0"}),
+            html.Div("streak", style={"fontSize": "10px", "color": "#aaa", "fontWeight": "500"}),
+        ], style={"display": "flex", "flexDirection": "column", "alignItems": "center",
+                  "padding": "6px 0"})
+    else:
+        flame_size = "42px" if streak >= 7 else "36px"
+        flame_color = "#FF6D00" if streak >= 14 else "#FF9800" if streak >= 7 else "#FFA726"
+        streak_badge = html.Div([
+            html.Div("🔥", style={"fontSize": flame_size, "lineHeight": "1",
+                                   "filter": f"drop-shadow(0 2px 6px {flame_color}88)"}),
+            html.Div(str(streak), style={"fontSize": "28px", "fontWeight": "900",
+                                          "color": flame_color, "lineHeight": "1",
+                                          "margin": "2px 0",
+                                          "textShadow": f"0 2px 8px {flame_color}66"}),
+            html.Div("streak", style={"fontSize": "10px", "color": "#aaa", "fontWeight": "500"}),
+        ], style={"display": "flex", "flexDirection": "column", "alignItems": "center",
+                  "padding": "6px 0"})
+    streak_ui = streak_badge
     neuro_ui = dial_flip(
         apple_neuromuscular_ring(neuro_val), " ",
         f"Neuromuscular Readiness reflects nervous system state using fatigue, mood, sleep, soreness.{_src}"
@@ -4166,62 +4268,68 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     scrim.addColorStop(0.58,'rgba(0,0,0,0.55)');scrim.addColorStop(1.0,'rgba(0,0,0,0.82)');
     ctx.fillStyle=scrim;ctx.fillRect(0,0,EXPORT_W,EXPORT_H);
 
-    const PAD=80,CARD_TOP=EXPORT_H*0.48;
+    const PAD=80,CX=EXPORT_W/2;
 
-    // Dials — positioned first so brand sits directly above them
-    const DIAL_R=90,DIAL_SW=18,DIAL_Y=CARD_TOP+120,dialSpacing=(EXPORT_W-PAD*2)/4;
+    // ── Layout: hero ring, brand above, 2 small rings + flame badge below ────
+    const HERO_R=170,HERO_SW=30,HERO_Y=EXPORT_H*0.44;
+    const SMALL_R=95,SMALL_SW=20,SMALL_Y=HERO_Y+HERO_R+160;
+    const NEURO_X=CX-290,EXPO_X=CX+290;
 
-    // Logo + brand — centred, directly above the dials
-    const LOGO_SIZE=64;
-    const BRAND_Y=DIAL_Y-DIAL_R-90; // sit above dials
-    const BRAND_CX=EXPORT_W/2;
-    function drawBrand(){{
-      // Brand text centred
-      ctx.font='500 28px system-ui';ctx.fillStyle='rgba(255,255,255,0.70)';
-      ctx.textAlign='center';ctx.textBaseline='middle';
-      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',BRAND_CX+(logoImg?LOGO_SIZE/2+8:0),BRAND_Y+LOGO_SIZE/2);
+    // ── Reusable ring draw helper ─────────────────────────────────────────────
+    function drawRing(cx,cy,r,sw,pct100,color,valTxt,label,valFont,lblFont){{
+      ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
+      ctx.strokeStyle='rgba(255,255,255,0.12)';ctx.lineWidth=sw;ctx.lineCap='butt';ctx.stroke();
+      if(pct100>0){{
+        const start=-Math.PI/2,end=start+(Math.min(pct100,100)/100)*Math.PI*2;
+        ctx.beginPath();ctx.arc(cx,cy,r,start,end);
+        ctx.strokeStyle=color;ctx.lineWidth=sw;ctx.lineCap='round';ctx.stroke();ctx.lineCap='butt';
+      }}
+      ctx.font='bold '+valFont+'px system-ui';ctx.fillStyle='#fff';
+      ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(valTxt,cx,cy);
+      ctx.font=lblFont+'px system-ui';ctx.fillStyle='rgba(255,255,255,0.45)';
+      ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.fillText(label,cx,cy+r+44);
     }}
+
+    // ── Brand — centred above hero ────────────────────────────────────────────
+    const LOGO_SIZE=56,BRAND_Y=HERO_Y-HERO_R-90;
     if(logoImg&&logoImg.naturalWidth>0){{
-      const oc=document.createElement('canvas');
-      oc.width=LOGO_SIZE;oc.height=LOGO_SIZE;
+      const oc=document.createElement('canvas');oc.width=LOGO_SIZE;oc.height=LOGO_SIZE;
       const octx=oc.getContext('2d');
       octx.drawImage(logoImg,0,0,LOGO_SIZE,LOGO_SIZE);
       octx.globalCompositeOperation='source-in';
-      octx.fillStyle='rgba(255,255,255,0.90)';
-      octx.fillRect(0,0,LOGO_SIZE,LOGO_SIZE);
-      // Measure brand text to centre logo+text together
-      ctx.font='500 28px system-ui';
-      const textW=ctx.measureText('ACI \u00b7 ADAPTIVE COACHING').width;
-      const totalW=LOGO_SIZE+14+textW;
-      const startX=BRAND_CX-totalW/2;
-      ctx.drawImage(oc,startX,BRAND_Y,LOGO_SIZE,LOGO_SIZE);
-      ctx.font='500 28px system-ui';ctx.fillStyle='rgba(255,255,255,0.70)';
-      ctx.textAlign='left';ctx.textBaseline='middle';
-      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',startX+LOGO_SIZE+14,BRAND_Y+LOGO_SIZE/2);
+      octx.fillStyle='rgba(255,255,255,0.90)';octx.fillRect(0,0,LOGO_SIZE,LOGO_SIZE);
+      ctx.font='500 26px system-ui';
+      const tw=ctx.measureText('ACI \u00b7 ADAPTIVE COACHING').width;
+      const bx=CX-(LOGO_SIZE+12+tw)/2;
+      ctx.drawImage(oc,bx,BRAND_Y,LOGO_SIZE,LOGO_SIZE);
+      ctx.fillStyle='rgba(255,255,255,0.70)';ctx.textAlign='left';ctx.textBaseline='middle';
+      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',bx+LOGO_SIZE+12,BRAND_Y+LOGO_SIZE/2);
     }}else{{
-      drawBrand();
+      ctx.font='500 26px system-ui';ctx.fillStyle='rgba(255,255,255,0.70)';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',CX,BRAND_Y+LOGO_SIZE/2);
     }}
-    const dialData=[
-      {{val:{d_r},pct:{d_r},color:'{c_r}',label:'READINESS'}},
-      {{val:{d_n},pct:{d_n},color:'{c_n}',label:'NEURO'}},
-      {{val:{d_e},pct:{d_e},color:'{c_e}',label:'EXPOSURE'}},
-      {{val:{d_sn},pct:{d_sp},color:'{c_sp}',label:'STREAK'}},
-    ];
-    dialData.forEach(function(d,i){{
-      const cx=PAD+dialSpacing*i+dialSpacing/2,cy=DIAL_Y;
-      ctx.beginPath();ctx.arc(cx,cy,DIAL_R,0,Math.PI*2);
-      ctx.strokeStyle='rgba(255,255,255,0.12)';ctx.lineWidth=DIAL_SW;ctx.lineCap='butt';ctx.stroke();
-      const pct=Math.min(Math.max(d.pct,0),100)/100,start=-Math.PI/2,end=start+pct*Math.PI*2;
-      ctx.beginPath();ctx.arc(cx,cy,DIAL_R,start,end);
-      ctx.strokeStyle=d.color;ctx.lineWidth=DIAL_SW;ctx.lineCap='round';ctx.stroke();ctx.lineCap='butt';
-      ctx.font='bold 60px system-ui';ctx.fillStyle='#ffffff';
-      ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(d.val),cx,cy);
-      ctx.font='21px system-ui';ctx.fillStyle='rgba(255,255,255,0.5)';
-      ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.fillText(d.label,cx,cy+DIAL_R+40);
-    }});
 
-    // Divider
-    const divY=DIAL_Y+DIAL_R+80;
+    // ── Hero ring ─────────────────────────────────────────────────────────────
+    drawRing(CX,HERO_Y,HERO_R,HERO_SW,{d_r},'{c_r}','{d_r}','DAILY READINESS',100,26);
+
+    // ── Two small rings ───────────────────────────────────────────────────────
+    drawRing(NEURO_X,SMALL_Y,SMALL_R,SMALL_SW,{d_n},'{c_n}','{d_n}','NEURO',58,22);
+    drawRing(EXPO_X, SMALL_Y,SMALL_R,SMALL_SW,{d_e},'{c_e}','{d_e}','EXPOSURE',58,22);
+
+    // ── Streak flame badge ────────────────────────────────────────────────────
+    ctx.globalAlpha={d_sn}===0?0.28:1.0;
+    ctx.font='100px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('\uD83D\uDD25',CX,SMALL_Y-48);
+    ctx.globalAlpha=1.0;
+    ctx.font='bold 76px system-ui';
+    ctx.fillStyle={d_sn}===0?'rgba(255,255,255,0.3)':{d_sn}>=14?'#FF6D00':{d_sn}>=7?'#FF9800':'#FFA726';
+    ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('{d_sn}',CX,SMALL_Y+64);
+    ctx.font='22px system-ui';ctx.fillStyle='rgba(255,255,255,0.45)';
+    ctx.textBaseline='alphabetic';ctx.fillText('STREAK',CX,SMALL_Y+SMALL_R+44);
+
+    // ── Divider ───────────────────────────────────────────────────────────────
+    const divY=SMALL_Y+SMALL_R+100;
     ctx.beginPath();ctx.moveTo(PAD,divY);ctx.lineTo(EXPORT_W-PAD,divY);
     ctx.strokeStyle='rgba(255,255,255,0.18)';ctx.lineWidth=2;ctx.stroke();
 
