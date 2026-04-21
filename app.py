@@ -4699,5 +4699,6 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
 
     return [summary] + cards
 
+
 if __name__ == "__main__":
     app.run(debug=True)
