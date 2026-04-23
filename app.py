@@ -78,45 +78,23 @@ RAW_USER_LOGINS = os.getenv("USER_LOGINS", "").strip()
 
 USER_LOGINS = {}
 if RAW_USER_LOGINS:
-    # Try 1: direct parse
     try:
         USER_LOGINS = json.loads(RAW_USER_LOGINS)
-    except Exception as _e1:
-        print(f"⚠️ USER_LOGINS direct parse failed: {_e1}")
-        # Try 2: extract JSON object (handles leading/trailing garbage)
-        try:
-            maybe = extract_json_object(RAW_USER_LOGINS)
-            if maybe:
-                USER_LOGINS = json.loads(maybe)
-        except Exception as _e2:
-            print(f"⚠️ USER_LOGINS fallback parse failed: {_e2}")
-        # Try 3: fix common issues — single quotes, trailing commas
-        if not USER_LOGINS:
-            try:
-                import re as _re
-                fixed = RAW_USER_LOGINS
-                # Replace single quotes with double quotes
-                fixed = fixed.replace("'", '"')
-                # Remove trailing commas before } or ]
-                fixed = _re.sub(r',\s*([}\]])', r'', fixed)
-                USER_LOGINS = json.loads(fixed)
-            except Exception as _e3:
-                print(f"⚠️ USER_LOGINS repair parse failed: {_e3}")
-                print(f"RAW value (first 200 chars): {RAW_USER_LOGINS[:200]}")
+    except Exception:
+        maybe = extract_json_object(RAW_USER_LOGINS)
+        if maybe:
+            USER_LOGINS = json.loads(maybe)
 
 print("User login config loaded keys:", list(USER_LOGINS.keys()))
 
 if not USER_LOGINS:
     USER_LOGINS = {
-        "Dylan Hicks":     {"username": "Dylan",    "password": "1234", "sheet": "Dylan Hicks",    "role": "coach"},
-        "Harrison Hunt":   {"username": "Harrison", "password": "4624", "sheet": "Harrison Hunt",  "role": "athlete"},
-        "Default":         {"username": "Default",  "password": "1234", "sheet": "Default",        "role": "coach"},
-        "Cailen Hejka":    {"username": "Cailen",   "password": "1071", "sheet": "Cailen Hejka",   "role": "athlete"},
-        "Corey Baker":     {"username": "Corey",    "password": "1096", "sheet": "Corey Baker",    "role": "coach"},
-        "Gaby Philis":     {"username": "Gaby",     "password": "0000", "sheet": "Gaby Philis",    "role": "coach"},
-        "Alex Dunn":       {"username": "Alex",     "password": "1444", "sheet": "Alex Dunn",      "role": "athlete"},
-        "Max Thompson":    {"username": "Max",      "password": "5371", "sheet": "Max Thompson",   "role": "athlete"},
-        "Michael Moschou": {"username": "Michael",  "password": "1048", "sheet": "Michael Moschou","role": "athlete"},
+        "dylan": {
+            "username": "dylan",
+            "password": "1234",
+            "sheet": "Dylan Hicks",
+            "role": "coach",
+        }
     }
     print("⚠️ USER_LOGINS not found — using local fallback login.")
 
@@ -181,6 +159,7 @@ else:
 MOBILE_PLOT_LAYOUT = dict(
     autosize=True,
     height=360,
+    margin=dict(l=24, r=16, t=48, b=80),
     font=dict(size=13),
     hoverlabel=dict(
         bgcolor="white",
@@ -191,7 +170,7 @@ MOBILE_PLOT_LAYOUT = dict(
     legend=dict(
         orientation="h",
         yanchor="top",
-        y=-0.16,
+        y=-0.22,
         xanchor="center",
         x=0.5,
         font=dict(size=10),
@@ -199,21 +178,6 @@ MOBILE_PLOT_LAYOUT = dict(
         itemsizing="constant",
         itemwidth=40,
     ),
-    margin=dict(l=24, r=16, t=48, b=85),
-    xaxis=dict(
-        showgrid=False,
-        linecolor="rgba(0,0,0,0.15)",
-        linewidth=1,
-        tickfont=dict(size=11),
-    ),
-    yaxis=dict(
-        gridcolor="rgba(0,0,0,0.06)",
-        gridwidth=1,
-        linecolor="rgba(0,0,0,0.15)",
-        tickfont=dict(size=11),
-    ),
-    plot_bgcolor="rgba(255,255,255,0.0)",
-    paper_bgcolor="rgba(255,255,255,0.0)",
 )
 
 BLUE       = "#1565C0"
@@ -1666,14 +1630,14 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
         x = g["Week"]
 
         fig.add_bar(x=x, y=g["Load_display"], name="Load",
-                    marker=dict(color="rgba(30,107,214,0.55)", line=dict(color=_BLUE, width=2.0)),
+                    marker=dict(color="rgba(30,107,214,0.35)", line=dict(color=_BLUE, width=1.8)),
                     hovertemplate="Load: %{y:,.0f}<extra></extra>")
         fig.add_trace(go.Scatter(x=x, y=g["Acute"], name="Acute (4wk)", mode="lines",
-                                 line=dict(color=_TEAL, width=2.4, dash="dot"), line_shape="spline", line_smoothing=0.75,
+                                 line=dict(color=_TEAL, width=2.0, dash="dot"), line_shape="spline", line_smoothing=0.75,
                                  hovertemplate="Acute: %{y:,.0f}<extra></extra>"))
         fig.add_trace(go.Scatter(x=x, y=g["Chronic"], name="Chronic (16wk)", mode="lines",
-                                 line=dict(color=_GREEN_DARK, width=2.2, dash="dash"), line_shape="spline",
-                                 line_smoothing=0.75, opacity=0.85,
+                                 line=dict(color=_GREEN_DARK, width=2.0, dash="dash"), line_shape="spline",
+                                 line_smoothing=0.75, opacity=0.7,
                                  hovertemplate="Chronic: %{y:,.0f}<extra></extra>"))
         fig.add_trace(go.Scatter(x=x, y=g["ACWR"], name="ACWR", mode="lines", yaxis="y2",
                                  line=dict(color=_PURPLE, width=1.2, dash="dot"), line_shape="spline", line_smoothing=0.75,
@@ -1727,14 +1691,14 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
     x = d["Date"]
 
     fig.add_bar(x=x, y=d["Load_display"], name="Load",
-                marker=dict(color="rgba(30,107,214,0.55)", line=dict(color=_BLUE, width=2.0)),
+                marker=dict(color="rgba(30,107,214,0.35)", line=dict(color=_BLUE, width=1.8)),
                 hovertemplate="Load: %{y:,.0f}<extra></extra>")
     fig.add_trace(go.Scatter(x=x, y=d["EWMA7"], name="7d EWMA", mode="lines",
-                             line=dict(color=_TEAL, width=2.4, dash="dot"), line_shape="spline", line_smoothing=0.75,
+                             line=dict(color=_TEAL, width=2.0, dash="dot"), line_shape="spline", line_smoothing=0.75,
                              hovertemplate="7d: %{y:,.0f}<extra></extra>"))
     fig.add_trace(go.Scatter(x=x, y=d["EWMA28"], name="28d EWMA", mode="lines",
-                             line=dict(color=_GREEN_DARK, width=2.2, dash="dash"), line_shape="spline",
-                             line_smoothing=0.75, opacity=0.85,
+                             line=dict(color=_GREEN_DARK, width=2.0, dash="dash"), line_shape="spline",
+                             line_smoothing=0.75, opacity=0.7,
                              hovertemplate="28d: %{y:,.0f}<extra></extra>"))
     fig.add_trace(go.Scatter(x=x, y=d["ACWR"], name="ACWR", mode="lines", yaxis="y2",
                              line=dict(color=_PURPLE, width=1.2, dash="dot"), line_shape="spline", line_smoothing=0.75,
@@ -1788,7 +1752,7 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
                                      fillcolor=f"rgba{tuple(int(color[i:i+2], 16) for i in (1,3,5)) + (0.12,)}",
                                      hoverinfo="skip", showlegend=False))
             fig.add_trace(go.Scatter(x=x, y=roll, name=label, mode="lines",
-                                     line=dict(color=color, width=1.0), line_shape="spline", line_smoothing=0.7,
+                                     line=dict(color=color, width=2.6), line_shape="spline", line_smoothing=0.7,
                                      hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>"))
 
         fig.update_layout(
@@ -1822,7 +1786,7 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
                                  fillcolor=f"rgba{tuple(int(color[i:i+2], 16) for i in (1,3,5)) + (0.12,)}",
                                  hoverinfo="skip", showlegend=False))
         fig.add_trace(go.Scatter(x=x, y=roll, name=label, mode="lines",
-                                 line=dict(color=color, width=1.0), line_shape="spline", line_smoothing=0.7,
+                                 line=dict(color=color, width=2.6), line_shape="spline", line_smoothing=0.7,
                                  hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>",
                                  visible="legendonly" if label == "Mood" else True))
 
@@ -1861,18 +1825,18 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
     if view_mode == "daily":
         x = d["Date"]
         fig.add_bar(x=x, y=speed, name="Speed",
-                    marker=dict(color="rgba(37,99,235,0.25)", line=dict(color=_BLUE, width=1.5)),
+                    marker=dict(color="rgba(37,99,235,0.35)", line=dict(color=_BLUE, width=1.6)),
                     hovertemplate="Speed: %{y:,.0f} m<extra></extra>")
         fig.add_bar(x=x, y=tempo, name="Tempo",
-                    marker=dict(color="rgba(245,158,11,0.28)", line=dict(color=_ORANGE, width=1.5)),
+                    marker=dict(color="rgba(245,158,11,0.35)", line=dict(color=_ORANGE, width=1.6)),
                     hovertemplate="Tempo: %{y:,.0f} m<extra></extra>")
         fig.add_trace(go.Scatter(x=x, y=speed.ewm(span=7, adjust=False, min_periods=1).mean(),
                                  name="Speed trend", mode="lines",
-                                 line=dict(color=_BLUE, width=2.4), line_shape="spline", line_smoothing=0.7,
+                                 line=dict(color=_BLUE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
                                  hovertemplate="Speed trend: %{y:,.0f} m<extra></extra>"))
         fig.add_trace(go.Scatter(x=x, y=tempo.ewm(span=7, adjust=False, min_periods=1).mean(),
                                  name="Tempo trend", mode="lines",
-                                 line=dict(color=_ORANGE, width=2.4), line_shape="spline", line_smoothing=0.7,
+                                 line=dict(color=_ORANGE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
                                  hovertemplate="Tempo trend: %{y:,.0f} m<extra></extra>"))
         fig.update_layout(title="Daily Speed & Tempo Volumes", xaxis_title="", yaxis_title="Metres",
                           barmode="stack", hovermode="x unified", **MOBILE_PLOT_LAYOUT)
@@ -1889,18 +1853,18 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
     x = g["Week"]
 
     fig.add_bar(x=x, y=g["Speed"], name="Speed",
-                marker=dict(color="rgba(37,99,235,0.25)", line=dict(color=_BLUE, width=1.5)),
+                marker=dict(color="rgba(37,99,235,0.35)", line=dict(color=_BLUE, width=1.6)),
                 hovertemplate="Speed: %{y:,.0f} m<extra></extra>")
     fig.add_bar(x=x, y=g["Tempo"], name="Tempo",
-                marker=dict(color="rgba(245,158,11,0.28)", line=dict(color=_ORANGE, width=1.5)),
+                marker=dict(color="rgba(245,158,11,0.35)", line=dict(color=_ORANGE, width=1.6)),
                 hovertemplate="Tempo: %{y:,.0f} m<extra></extra>")
     fig.add_trace(go.Scatter(x=x, y=g["Speed"].ewm(span=4, adjust=False, min_periods=1).mean(),
                              name="Speed trend", mode="lines",
-                             line=dict(color=_BLUE, width=2.4), line_shape="spline", line_smoothing=0.7,
+                             line=dict(color=_BLUE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
                              hovertemplate="Speed trend: %{y:,.0f} m<extra></extra>"))
     fig.add_trace(go.Scatter(x=x, y=g["Tempo"].ewm(span=4, adjust=False, min_periods=1).mean(),
                              name="Tempo trend", mode="lines",
-                             line=dict(color=_ORANGE, width=2.4), line_shape="spline", line_smoothing=0.7,
+                             line=dict(color=_ORANGE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
                              hovertemplate="Tempo trend: %{y:,.0f} m<extra></extra>"))
     fig.update_layout(title="Weekly Speed & Tempo Volumes", xaxis_title="", yaxis_title="Metres",
                       barmode="stack", hovermode="x unified", **MOBILE_PLOT_LAYOUT)
@@ -2137,118 +2101,64 @@ app.index_string = """
             .dial-secondary-item .dial-center { --dial-size: 120px !important; }
             .dial-secondary-label { display: none; }
           }
-          /* Hero + small dial sizing */
-          .dial-hero  { --dial-size: 160px !important; }
-          .dial-small { --dial-size: 96px !important; }
+          @media (max-width: 767px) {
+            .dial-hero-row .dial-center { --dial-size: 140px !important; }
+            .dial-secondary-item .dial-center { --dial-size: 88px !important; }
+            .dial-label-desktop-only { display: none !important; }
+          }
           @media (min-width: 768px) {
-            .dial-layout-wrap {
-              flex-direction: row !important;
-              justify-content: space-around !important;
-              align-items: flex-start !important;
-            }
-            /* On desktop hero becomes same size as others */
-            .dial-layout-wrap > div:first-child { margin-bottom: 0 !important; }
+            .mobile-dial-label { display: none !important; }
+            .desktop-dial-label { display: block !important; }
           }
 
           /* Dial colours handled by assets/dashboard.css */
         </style>
         <script>
-        // Share card: free drag anywhere, pinch-to-resize, Strava-style
-        function initShareDrag() {
-          const modal = document.getElementById('share-card-modal');
-          const handle = document.getElementById('share-card-drag-handle');
-          if (!modal || !handle) { setTimeout(initShareDrag, 600); return; }
-
-          let dragging = false, dx = 0, dy = 0, bx = 0, by = 0;
-
-          function snapToGrid(v) { return v; } // no snap — free movement
-
-          function getPos() {
-            const r = modal.getBoundingClientRect();
-            return { left: r.left, top: r.top };
-          }
-
-          function setPos(left, top) {
-            // Clamp to viewport
-            const mw = modal.offsetWidth, mh = modal.offsetHeight;
-            left = Math.max(0, Math.min(left, window.innerWidth  - mw));
-            top  = Math.max(0, Math.min(top,  window.innerHeight - 60));
-            modal.style.transform = 'none';
-            modal.style.left  = left  + 'px';
-            modal.style.top   = top   + 'px';
-            modal.style.right = 'auto';
-          }
-
-          // Mouse drag
-          handle.addEventListener('mousedown', function(e) {
-            const p = getPos(); bx = p.left; by = p.top;
-            dx = e.clientX - bx; dy = e.clientY - by;
-            dragging = true;
-            handle.style.cursor = 'grabbing';
-            e.preventDefault();
-          });
-          document.addEventListener('mousemove', function(e) {
-            if (!dragging) return;
-            setPos(e.clientX - dx, e.clientY - dy);
-          });
-          document.addEventListener('mouseup', function() {
-            dragging = false; handle.style.cursor = 'grab';
-          });
-
-          // Touch drag (single finger on handle)
-          let t0x, t0y, tb_left, tb_top;
-          handle.addEventListener('touchstart', function(e) {
-            if (e.touches.length !== 1) return;
-            const p = getPos(); tb_left = p.left; tb_top = p.top;
-            t0x = e.touches[0].clientX; t0y = e.touches[0].clientY;
-            dragging = true;
-          }, {passive: true});
-          document.addEventListener('touchmove', function(e) {
-            if (!dragging || e.touches.length !== 1) return;
-            const nx = tb_left + e.touches[0].clientX - t0x;
-            const ny = tb_top  + e.touches[0].clientY - t0y;
-            setPos(nx, ny);
-          }, {passive: true});
-          document.addEventListener('touchend', function() { dragging = false; });
-
-          // Pinch-to-resize the whole card (two fingers anywhere on modal)
-          let pinchStartDist = 0, pinchStartW = 0, pinchStartH = 0;
-          modal.addEventListener('touchstart', function(e) {
-            if (e.touches.length === 2) {
-              const dx2 = e.touches[0].clientX - e.touches[1].clientX;
-              const dy2 = e.touches[0].clientY - e.touches[1].clientY;
-              pinchStartDist = Math.sqrt(dx2*dx2 + dy2*dy2);
-              pinchStartW = modal.offsetWidth;
-              pinchStartH = modal.offsetHeight;
-            }
-          }, {passive: true});
-          modal.addEventListener('touchmove', function(e) {
-            if (e.touches.length === 2) {
-              const dx2 = e.touches[0].clientX - e.touches[1].clientX;
-              const dy2 = e.touches[0].clientY - e.touches[1].clientY;
-              const newDist = Math.sqrt(dx2*dx2 + dy2*dy2);
-              const scale = newDist / pinchStartDist;
-              const newW = Math.max(260, Math.min(window.innerWidth, Math.round(pinchStartW * scale)));
-              modal.style.width = newW + 'px';
-              modal.style.maxHeight = '95vh';
-              e.preventDefault();
-            }
-          }, {passive: false});
-        }
+        // Make share card draggable
         document.addEventListener('DOMContentLoaded', function() {
-          setTimeout(initShareDrag, 800);
-          // Re-init when Dash updates the DOM
-          const obs = new MutationObserver(function(ml) {
-            for (const m of ml) {
-              for (const n of m.addedNodes) {
-                if (n.id === 'share-card-drag-handle' ||
-                    (n.querySelectorAll && n.querySelectorAll('#share-card-drag-handle').length)) {
-                  setTimeout(initShareDrag, 100);
-                }
-              }
-            }
-          });
-          obs.observe(document.body, {childList: true, subtree: true});
+          function initDrag() {
+            const modal = document.getElementById('share-card-modal');
+            const handle = document.getElementById('share-card-drag-handle');
+            if (!modal || !handle) { setTimeout(initDrag, 500); return; }
+            let isDragging = false, startX, startY, origLeft, origTop;
+            handle.addEventListener('mousedown', function(e) {
+              isDragging = true;
+              startX = e.clientX; startY = e.clientY;
+              const rect = modal.getBoundingClientRect();
+              origLeft = rect.left; origTop = rect.top;
+              modal.style.transform = 'none';
+              modal.style.left = origLeft + 'px';
+              modal.style.top = origTop + 'px';
+              handle.style.cursor = 'grabbing';
+              e.preventDefault();
+            });
+            document.addEventListener('mousemove', function(e) {
+              if (!isDragging) return;
+              modal.style.left = (origLeft + e.clientX - startX) + 'px';
+              modal.style.top  = (origTop  + e.clientY - startY) + 'px';
+            });
+            document.addEventListener('mouseup', function() {
+              isDragging = false;
+              handle.style.cursor = 'grab';
+            });
+            // Touch drag
+            handle.addEventListener('touchstart', function(e) {
+              isDragging = true;
+              startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+              const rect = modal.getBoundingClientRect();
+              origLeft = rect.left; origTop = rect.top;
+              modal.style.transform = 'none';
+              modal.style.left = origLeft + 'px';
+              modal.style.top = origTop + 'px';
+            }, {passive: true});
+            document.addEventListener('touchmove', function(e) {
+              if (!isDragging) return;
+              modal.style.left = (origLeft + e.touches[0].clientX - startX) + 'px';
+              modal.style.top  = (origTop  + e.touches[0].clientY - startY) + 'px';
+            }, {passive: true});
+            document.addEventListener('touchend', function() { isDragging = false; });
+          }
+          setTimeout(initDrag, 1000);
         });
         </script>
         {%css%}
@@ -2358,57 +2268,23 @@ def build_main_layout(auth_data):
                     ], lg=6, md=6, width=12),
                 ],
             ),
-            html.Div([
-                # ── Hero ring — Daily Readiness ──────────────────────────────
-                html.Div([
-                    html.Div("DAILY READINESS", style={
-                        "fontSize": "10px", "fontWeight": "700", "letterSpacing": "0.12em",
-                        "color": "#888", "textAlign": "center", "marginBottom": "8px",
-                        "textTransform": "uppercase",
-                    }),
-                    html.Div(id="readiness-dial-container", className="dial-center",
-                             style={"--dial-size": "160px"}),
-                ], style={"display": "flex", "flexDirection": "column", "alignItems": "center",
-                          "marginBottom": "20px"}),
-
-                # ── 3 small rings row: Neuro, Exposure, Streak ───────────────
-                html.Div([
-                    html.Div([
-                        html.Div(id="neuromuscular-dial-container", className="dial-center",
-                                 style={"--dial-size": "88px"}),
-                        html.Div("Neuro", style={"fontSize": "10px", "color": "#aaa",
-                                                  "textAlign": "center", "marginTop": "6px",
-                                                  "fontWeight": "600", "letterSpacing": "0.05em",
-                                                  "textTransform": "uppercase"}),
-                    ], style={"display": "flex", "flexDirection": "column", "alignItems": "center",
-                              "flex": "1"}),
-
-                    html.Div([
-                        html.Div(id="weekly-dial-container", className="dial-center",
-                                 style={"--dial-size": "88px"}),
-                        html.Div("Exposure", style={"fontSize": "10px", "color": "#aaa",
-                                                     "textAlign": "center", "marginTop": "6px",
-                                                     "fontWeight": "600", "letterSpacing": "0.05em",
-                                                     "textTransform": "uppercase"}),
-                    ], style={"display": "flex", "flexDirection": "column", "alignItems": "center",
-                              "flex": "1"}),
-
-                    html.Div([
-                        html.Div(id="streak-badge-container", className="dial-center",
-                                 style={"--dial-size": "88px"}),
-                        html.Div("Streak", style={"fontSize": "10px", "color": "#aaa",
-                                                    "textAlign": "center", "marginTop": "6px",
-                                                    "fontWeight": "600", "letterSpacing": "0.05em",
-                                                    "textTransform": "uppercase"}),
-                    ], style={"display": "flex", "flexDirection": "column", "alignItems": "center",
-                              "flex": "1"}),
-                ], style={"display": "flex", "justifyContent": "space-around",
-                          "alignItems": "flex-start", "width": "100%",
-                          "maxWidth": "420px", "margin": "0 auto"}),
-            ], className="dial-layout-wrap", style={
-                "display": "flex", "flexDirection": "column", "alignItems": "center",
-                "padding": "12px 0 8px 0",
-            }),
+            dbc.Row(
+                className="g-2 align-items-stretch mt-1 dial-row",
+                children=[
+                    dbc.Col(html.Div([html.Div("Daily Readiness",        className="dial-label"),
+                                      html.Div(id="readiness-dial-container",    className="dial-center")], className="dial-block"),
+                            lg=3, md=3, sm=6, xs=6, width=6),
+                    dbc.Col(html.Div([html.Div("Neuromuscular Readiness", className="dial-label"),
+                                      html.Div(id="neuromuscular-dial-container", className="dial-center")], className="dial-block"),
+                            lg=3, md=3, sm=6, xs=6, width=6),
+                    dbc.Col(html.Div([html.Div("Training Exposure",       className="dial-label"),
+                                      html.Div(id="weekly-dial-container",        className="dial-center")], className="dial-block"),
+                            lg=3, md=3, sm=6, xs=6, width=6),
+                    dbc.Col(html.Div([html.Div("Training Streak",         className="dial-label"),
+                                      html.Div(id="streak-dial-container",        className="dial-center")], className="dial-block"),
+                            lg=3, md=3, sm=6, xs=6, width=6),
+                ],
+            ),
             html.Div(id="welcome-message", className="mt-3"),
             html.Div(id="motivational-message", style={"display": "none"}),
             html.Div(id="garmin-status-badge", className="mt-2"),
@@ -2922,7 +2798,7 @@ def update_calendar(athlete_tab, window_start, selected_date):
 @app.callback(
     Output("today-date",                  "children"),
     Output("weekly-dial-container",       "children"),
-    Output("streak-badge-container",      "children"),
+    Output("streak-dial-container",       "children"),
     Output("neuromuscular-dial-container","children"),
     Output("readiness-dial-container",    "children"),
     Output("load-plot",      "figure"),
@@ -3503,7 +3379,6 @@ def save_and_ai(
     workout_val     = safe(df, row_idx, "Workout", "")
     status_msg      = "✅ Saved, coaching feedback generated & email sent to Coach."
 
-    coach3_email = safe(df, row_idx, "Coach_email3") if "Coach_email3" in df.columns else ""
     try:
         send_email_payload({
             "sheet_name": athlete_name, "row": row_idx + 1,
@@ -3513,35 +3388,14 @@ def save_and_ai(
             "Sleep_1_5": sleep, "Fatigue_1_5": fatigue, "Mood_1_5": mood, "Soreness_1_5": soreness,
             "Athlete_Notes": notes, "Sets_Reps_Load": sets_reps_load, "Track_Reps_Times": track_reps_times,
             "AI_Suggestion_1": ai1, "AI_Suggestion_2": ai2, "Athlete_email": athlete_email,
-            "Coach_email3": coach3_email,
         })
     except Exception as e:
         status_msg = f"⚠️ Saved + coaching feedback generated, but email failed: {e}"
 
-    ai1_div = html.Div(
-        html.Div([
-            html.Div("💡 Coaching Feedback 1",
-                     style={"fontSize": "11px", "fontWeight": "700", "color": "#555",
-                            "textTransform": "uppercase", "letterSpacing": "0.06em",
-                            "marginBottom": "8px"}),
-            html.P(ai1, style={"fontSize": "13px", "lineHeight": "1.6", "color": "#333", "margin": 0}),
-        ], style={"background": "#f8f8f8", "border": "1px solid #e4e4e4",
-                  "borderRadius": "12px", "padding": "14px 16px",
-                  "boxShadow": "0 1px 4px rgba(0,0,0,0.06)"}),
-        style={"marginBottom": "10px"}
-    )
-    ai2_div = html.Div(
-        html.Div([
-            html.Div("💡 Coaching Feedback 2",
-                     style={"fontSize": "11px", "fontWeight": "700", "color": "#555",
-                            "textTransform": "uppercase", "letterSpacing": "0.06em",
-                            "marginBottom": "8px"}),
-            html.P(ai2, style={"fontSize": "13px", "lineHeight": "1.6", "color": "#333", "margin": 0}),
-        ], style={"background": "#f8f8f8", "border": "1px solid #e4e4e4",
-                  "borderRadius": "12px", "padding": "14px 16px",
-                  "boxShadow": "0 1px 4px rgba(0,0,0,0.06)"}),
-        style={"marginBottom": "10px"}
-    )
+    ai1_div = html.Div(html.Div([html.Div("💡 Coaching Feedback 1", className="ai-title"), html.P(ai1)],
+                                 className="ai-card ai-card-green"))
+    ai2_div = html.Div(html.Div([html.Div("💡 Coaching Feedback 2", className="ai-title"), html.P(ai2)],
+                                 className="ai-card ai-card-blue"))
 
     return ai1_div, ai2_div, html.Span(
         status_msg,
@@ -4312,68 +4166,62 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     scrim.addColorStop(0.58,'rgba(0,0,0,0.55)');scrim.addColorStop(1.0,'rgba(0,0,0,0.82)');
     ctx.fillStyle=scrim;ctx.fillRect(0,0,EXPORT_W,EXPORT_H);
 
-    const PAD=80,CX=EXPORT_W/2;
+    const PAD=80,CARD_TOP=EXPORT_H*0.48;
 
-    // ── Layout: hero ring, brand above, 2 small rings + flame badge below ────
-    const HERO_R=170,HERO_SW=30,HERO_Y=EXPORT_H*0.44;
-    const SMALL_R=95,SMALL_SW=20,SMALL_Y=HERO_Y+HERO_R+160;
-    const NEURO_X=CX-290,EXPO_X=CX+290;
+    // Dials — positioned first so brand sits directly above them
+    const DIAL_R=90,DIAL_SW=18,DIAL_Y=CARD_TOP+120,dialSpacing=(EXPORT_W-PAD*2)/4;
 
-    // ── Reusable ring draw helper ─────────────────────────────────────────────
-    function drawRing(cx,cy,r,sw,pct100,color,valTxt,label,valFont,lblFont){{
-      ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
-      ctx.strokeStyle='rgba(255,255,255,0.12)';ctx.lineWidth=sw;ctx.lineCap='butt';ctx.stroke();
-      if(pct100>0){{
-        const start=-Math.PI/2,end=start+(Math.min(pct100,100)/100)*Math.PI*2;
-        ctx.beginPath();ctx.arc(cx,cy,r,start,end);
-        ctx.strokeStyle=color;ctx.lineWidth=sw;ctx.lineCap='round';ctx.stroke();ctx.lineCap='butt';
-      }}
-      ctx.font='bold '+valFont+'px system-ui';ctx.fillStyle='#fff';
-      ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(valTxt,cx,cy);
-      ctx.font=lblFont+'px system-ui';ctx.fillStyle='rgba(255,255,255,0.45)';
-      ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.fillText(label,cx,cy+r+44);
+    // Logo + brand — centred, directly above the dials
+    const LOGO_SIZE=64;
+    const BRAND_Y=DIAL_Y-DIAL_R-90; // sit above dials
+    const BRAND_CX=EXPORT_W/2;
+    function drawBrand(){{
+      // Brand text centred
+      ctx.font='500 28px system-ui';ctx.fillStyle='rgba(255,255,255,0.70)';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',BRAND_CX+(logoImg?LOGO_SIZE/2+8:0),BRAND_Y+LOGO_SIZE/2);
     }}
-
-    // ── Brand — centred above hero ────────────────────────────────────────────
-    const LOGO_SIZE=56,BRAND_Y=HERO_Y-HERO_R-90;
     if(logoImg&&logoImg.naturalWidth>0){{
-      const oc=document.createElement('canvas');oc.width=LOGO_SIZE;oc.height=LOGO_SIZE;
+      const oc=document.createElement('canvas');
+      oc.width=LOGO_SIZE;oc.height=LOGO_SIZE;
       const octx=oc.getContext('2d');
       octx.drawImage(logoImg,0,0,LOGO_SIZE,LOGO_SIZE);
       octx.globalCompositeOperation='source-in';
-      octx.fillStyle='rgba(255,255,255,0.90)';octx.fillRect(0,0,LOGO_SIZE,LOGO_SIZE);
-      ctx.font='500 26px system-ui';
-      const tw=ctx.measureText('ACI \u00b7 ADAPTIVE COACHING').width;
-      const bx=CX-(LOGO_SIZE+12+tw)/2;
-      ctx.drawImage(oc,bx,BRAND_Y,LOGO_SIZE,LOGO_SIZE);
-      ctx.fillStyle='rgba(255,255,255,0.70)';ctx.textAlign='left';ctx.textBaseline='middle';
-      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',bx+LOGO_SIZE+12,BRAND_Y+LOGO_SIZE/2);
+      octx.fillStyle='rgba(255,255,255,0.90)';
+      octx.fillRect(0,0,LOGO_SIZE,LOGO_SIZE);
+      // Measure brand text to centre logo+text together
+      ctx.font='500 28px system-ui';
+      const textW=ctx.measureText('ACI \u00b7 ADAPTIVE COACHING').width;
+      const totalW=LOGO_SIZE+14+textW;
+      const startX=BRAND_CX-totalW/2;
+      ctx.drawImage(oc,startX,BRAND_Y,LOGO_SIZE,LOGO_SIZE);
+      ctx.font='500 28px system-ui';ctx.fillStyle='rgba(255,255,255,0.70)';
+      ctx.textAlign='left';ctx.textBaseline='middle';
+      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',startX+LOGO_SIZE+14,BRAND_Y+LOGO_SIZE/2);
     }}else{{
-      ctx.font='500 26px system-ui';ctx.fillStyle='rgba(255,255,255,0.70)';
-      ctx.textAlign='center';ctx.textBaseline='middle';
-      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',CX,BRAND_Y+LOGO_SIZE/2);
+      drawBrand();
     }}
+    const dialData=[
+      {{val:{d_r},pct:{d_r},color:'{c_r}',label:'READINESS'}},
+      {{val:{d_n},pct:{d_n},color:'{c_n}',label:'NEURO'}},
+      {{val:{d_e},pct:{d_e},color:'{c_e}',label:'EXPOSURE'}},
+      {{val:{d_sn},pct:{d_sp},color:'{c_sp}',label:'STREAK'}},
+    ];
+    dialData.forEach(function(d,i){{
+      const cx=PAD+dialSpacing*i+dialSpacing/2,cy=DIAL_Y;
+      ctx.beginPath();ctx.arc(cx,cy,DIAL_R,0,Math.PI*2);
+      ctx.strokeStyle='rgba(255,255,255,0.12)';ctx.lineWidth=DIAL_SW;ctx.lineCap='butt';ctx.stroke();
+      const pct=Math.min(Math.max(d.pct,0),100)/100,start=-Math.PI/2,end=start+pct*Math.PI*2;
+      ctx.beginPath();ctx.arc(cx,cy,DIAL_R,start,end);
+      ctx.strokeStyle=d.color;ctx.lineWidth=DIAL_SW;ctx.lineCap='round';ctx.stroke();ctx.lineCap='butt';
+      ctx.font='bold 60px system-ui';ctx.fillStyle='#ffffff';
+      ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(d.val),cx,cy);
+      ctx.font='21px system-ui';ctx.fillStyle='rgba(255,255,255,0.5)';
+      ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.fillText(d.label,cx,cy+DIAL_R+40);
+    }});
 
-    // ── Hero ring ─────────────────────────────────────────────────────────────
-    drawRing(CX,HERO_Y,HERO_R,HERO_SW,{d_r},'{c_r}','{d_r}','DAILY READINESS',100,26);
-
-    // ── Two small rings ───────────────────────────────────────────────────────
-    drawRing(NEURO_X,SMALL_Y,SMALL_R,SMALL_SW,{d_n},'{c_n}','{d_n}','NEURO',58,22);
-    drawRing(EXPO_X, SMALL_Y,SMALL_R,SMALL_SW,{d_e},'{c_e}','{d_e}','EXPOSURE',58,22);
-
-    // ── Streak flame badge ────────────────────────────────────────────────────
-    ctx.globalAlpha={d_sn}===0?0.28:1.0;
-    ctx.font='100px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText('\uD83D\uDD25',CX,SMALL_Y-48);
-    ctx.globalAlpha=1.0;
-    ctx.font='bold 76px system-ui';
-    ctx.fillStyle={d_sn}===0?'rgba(255,255,255,0.3)':{d_sn}>=14?'#FF6D00':{d_sn}>=7?'#FF9800':'#FFA726';
-    ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('{d_sn}',CX,SMALL_Y+64);
-    ctx.font='22px system-ui';ctx.fillStyle='rgba(255,255,255,0.45)';
-    ctx.textBaseline='alphabetic';ctx.fillText('STREAK',CX,SMALL_Y+SMALL_R+44);
-
-    // ── Divider ───────────────────────────────────────────────────────────────
-    const divY=SMALL_Y+SMALL_R+100;
+    // Divider
+    const divY=DIAL_Y+DIAL_R+80;
     ctx.beginPath();ctx.moveTo(PAD,divY);ctx.lineTo(EXPORT_W-PAD,divY);
     ctx.strokeStyle='rgba(255,255,255,0.18)';ctx.lineWidth=2;ctx.stroke();
 
