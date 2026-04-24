@@ -2818,20 +2818,15 @@ def close_session_context(n, style):
      Output("ai-view",      "style"),
      Output("squad-view",   "style"),
      Output("bottom-nav-click", "data")],
-    [Input("nav-home",         "n_clicks"),
-     Input("nav-calendar",     "n_clicks"),
-     Input("nav-graphs",       "n_clicks"),
-     Input("nav-ai",           "n_clicks"),
-     Input("nav-squad",        "n_clicks")],
-    [State("bottom-nav-click", "data")],
+    [Input("nav-home",     "n_clicks"),
+     Input("nav-calendar", "n_clicks"),
+     Input("nav-graphs",   "n_clicks"),
+     Input("nav-ai",       "n_clicks"),
+     Input("nav-squad",    "n_clicks")],
 )
-def show_section(h, c, g, a, s, current_tab):
+def show_section(h, c, g, a, s):
     ctx = callback_context
-    if not ctx.triggered:
-        tab = current_tab or "home"
-    else:
-        triggered = ctx.triggered[0]["prop_id"].split(".")[0]
-        tab = triggered.replace("nav-", "")
+    tab = "home" if not ctx.triggered else ctx.triggered[0]["prop_id"].split(".")[0].replace("nav-", "")
     out = [{"display": "block"} if key == tab else {"display": "none"}
            for key in ["home", "calendar", "graphs", "ai", "squad"]]
     out.append(tab)
