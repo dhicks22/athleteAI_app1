@@ -2316,8 +2316,7 @@ def build_main_layout(auth_data):
         options = [
             {"label": info.get("sheet", ""), "value": info.get("sheet", "")}
             for _, info in USER_LOGINS.items()
-            if info.get("sheet", "")
-            # Include even if not in tabs list — Sheets may be slow on cold start
+            if info.get("sheet", "") and info.get("role", "athlete") == "athlete"
         ]
     else:
         options = [{"label": athlete_sheet, "value": athlete_sheet}]
@@ -2400,7 +2399,7 @@ def build_main_layout(auth_data):
                      style={"display": "flex", "justifyContent": "flex-end",
                             "marginTop": "10px", "marginRight": "4px"}),
         ],
-        style={"display": "block"},
+        style={"display": "none" if is_coach else "block"},
     )
 
     calendar_view = html.Div(
@@ -2664,7 +2663,7 @@ def build_main_layout(auth_data):
     # Squad view — coach only, but squad-cards-container always in DOM for callback stability
     squad_view = html.Div(
         id="squad-view",
-        style={"display": "none"},
+        style={"display": "block" if is_coach else "none"},
         children=[
             html.H4("Squad Overview", className="mt-3 mb-1"),
             html.P("All athletes — readiness, wellness and session status",
@@ -2719,7 +2718,7 @@ def build_main_layout(auth_data):
             app_header(center=False),
             dcc.Store(id="selected-date-store"),
             dcc.Store(id="calendar-window-start"),
-            dcc.Store(id="bottom-nav-click", data="home"),
+            dcc.Store(id="bottom-nav-click", data="squad" if is_coach else "home"),
             home_view,
             calendar_view,
             graphs_view,
