@@ -1202,7 +1202,7 @@ def call_openai_chat(messages: list, max_tokens: int = 700) -> str:
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
             json={
-                "model": "gpt-4o-mini",
+                "model": "gpt-4.1-mini",
                 "messages": messages,
                 "temperature": 0.6,
                 "max_tokens": max_tokens,
@@ -2818,15 +2818,20 @@ def close_session_context(n, style):
      Output("ai-view",      "style"),
      Output("squad-view",   "style"),
      Output("bottom-nav-click", "data")],
-    [Input("nav-home",     "n_clicks"),
-     Input("nav-calendar", "n_clicks"),
-     Input("nav-graphs",   "n_clicks"),
-     Input("nav-ai",       "n_clicks"),
-     Input("nav-squad",    "n_clicks")],
+    [Input("nav-home",         "n_clicks"),
+     Input("nav-calendar",     "n_clicks"),
+     Input("nav-graphs",       "n_clicks"),
+     Input("nav-ai",           "n_clicks"),
+     Input("nav-squad",        "n_clicks")],
+    [State("bottom-nav-click", "data")],
 )
-def show_section(h, c, g, a, s):
+def show_section(h, c, g, a, s, current_tab):
     ctx = callback_context
-    tab = "home" if not ctx.triggered else ctx.triggered[0]["prop_id"].split(".")[0].replace("nav-", "")
+    if not ctx.triggered:
+        tab = current_tab or "home"
+    else:
+        triggered = ctx.triggered[0]["prop_id"].split(".")[0]
+        tab = triggered.replace("nav-", "")
     out = [{"display": "block"} if key == tab else {"display": "none"}
            for key in ["home", "calendar", "graphs", "ai", "squad"]]
     out.append(tab)
