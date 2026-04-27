@@ -200,7 +200,7 @@ _CLEAN_AXES = dict(showgrid=False, zeroline=False, showline=False)
 _LEGEND_ROW = dict(
     orientation="h", yanchor="top", y=-0.14, xanchor="center", x=0.5,
     font=dict(size=10), tracegroupgap=0, itemsizing="constant",
-    itemwidth=40, bgcolor="rgba(255,255,255,0)",
+    itemwidth=120, bgcolor="rgba(255,255,255,0)",
 )
 
 BLUE       = "#1565C0"
@@ -1775,7 +1775,6 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
             r, g2, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
             fig.add_trace(go.Scatter(x=x, y=roll, name=label, mode="lines",
                                      line=dict(color=color, width=2.0), line_shape="spline", line_smoothing=0.7,
-                                     fill="tozeroy", fillcolor=f"rgba({r},{g2},{b},0.08)",
                                      hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>"))
 
         fig.update_layout(
@@ -1802,10 +1801,8 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
         if y.dropna().empty:
             continue
         roll = y.rolling(window, min_periods=1).mean()
-        r, g2, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
         fig.add_trace(go.Scatter(x=x, y=roll, name=label, mode="lines",
                                  line=dict(color=color, width=2.0), line_shape="spline", line_smoothing=0.7,
-                                 fill="tozeroy", fillcolor=f"rgba({r},{g2},{b},0.08)",
                                  hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>",
                                  visible="legendonly" if label == "Mood" else True))
 
@@ -4532,6 +4529,7 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
         info.get("sheet", "")
         for _, info in USER_LOGINS.items()
         if info.get("sheet", "") and info.get("sheet", "") not in EXCLUDE
+        and info.get("role", "athlete") == "athlete"
     ])
 
     TRAFFIC = {
