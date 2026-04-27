@@ -190,7 +190,7 @@ MOBILE_PLOT_LAYOUT = dict(
         align="left",
     ),
     margin=dict(l=24, r=16, t=48, b=100),
-    plot_bgcolor="rgba(255,255,255,0.0)",
+    plot_bgcolor="rgba(220,232,245,0.4)",
     paper_bgcolor="rgba(255,255,255,0.0)",
 )
 
@@ -200,7 +200,7 @@ _CLEAN_AXES = dict(showgrid=False, zeroline=False, showline=False)
 _LEGEND_ROW = dict(
     orientation="h", yanchor="top", y=-0.14, xanchor="center", x=0.5,
     font=dict(size=10), tracegroupgap=0, itemsizing="constant",
-    itemwidth=120, bgcolor="rgba(255,255,255,0)",
+    itemwidth=70, bgcolor="rgba(255,255,255,0)",
 )
 
 BLUE       = "#1565C0"
@@ -1783,7 +1783,7 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
             title_font=dict(family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=14, color="#1a1a2e"),
             xaxis=_CLEAN_AXES,
             yaxis=dict(title="Scale (1–5)", range=[0.8, 5.2], tickvals=[1, 2, 3, 4, 5], **_CLEAN_AXES),
-            plot_bgcolor="rgba(255,255,255,0.0)",
+            plot_bgcolor="rgba(220,232,245,0.4)",
             paper_bgcolor="rgba(255,255,255,0.0)",
             hovermode="x unified",
             legend=_LEGEND_ROW,
@@ -1801,8 +1801,10 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
         if y.dropna().empty:
             continue
         roll = y.rolling(window, min_periods=1).mean()
+        r2, g2, b2 = int(color[1:3],16), int(color[3:5],16), int(color[5:7],16)
         fig.add_trace(go.Scatter(x=x, y=roll, name=label, mode="lines",
                                  line=dict(color=color, width=2.0), line_shape="spline", line_smoothing=0.7,
+                                 fill="tozeroy", fillcolor=f"rgba({r2},{g2},{b2},0.07)",
                                  hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>",
                                  visible="legendonly" if label == "Mood" else True))
 
@@ -1812,7 +1814,7 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
         title_font=dict(family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=14, color="#1a1a2e"),
         xaxis=_CLEAN_AXES,
         yaxis=dict(title="Scale (1–5)", range=[0.8, 5.2], tickvals=[1, 2, 3, 4, 5], **_CLEAN_AXES),
-        plot_bgcolor="rgba(255,255,255,0.0)",
+        plot_bgcolor="rgba(220,232,245,0.4)",
         paper_bgcolor="rgba(255,255,255,0.0)",
         hovermode="x unified",
         legend=_LEGEND_ROW,
