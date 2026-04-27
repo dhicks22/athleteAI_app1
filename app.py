@@ -1775,6 +1775,7 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
             r, g2, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
             fig.add_trace(go.Scatter(x=x, y=roll, name=label, mode="lines",
                                      line=dict(color=color, width=2.0), line_shape="spline", line_smoothing=0.7,
+                                     fill="tozeroy", fillcolor=f"rgba({r},{g2},{b},0.07)",
                                      hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>"))
 
         fig.update_layout(
