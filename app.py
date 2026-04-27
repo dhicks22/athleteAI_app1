@@ -3441,6 +3441,22 @@ def save_and_ai(
     if unplanned_venue   and unplanned_venue.strip():   unplanned_extras["Venue"]    = unplanned_venue.strip()
     if unplanned_duration:                              unplanned_extras["Duration"] = str(int(unplanned_duration))
 
+    # Recalculate Load using athlete's actual RPE (1-5 → scaled to 1-10) × duration
+    # This replaces the coach's planned sRPE-based Load with the actual session load
+    actual_rpe_10 = float(rpe) * 2.0  # scale athlete 1-5 RPE to 1-10 sRPE
+    duration_val = None
+    try:
+        # Use unplanned duration if entered, otherwise read from sheet row
+        if unplanned_duration:
+            duration_val = int(unplanned_duration)
+        elif row_idx is not None and "Duration" in df.columns:
+            d_raw = pd.to_numeric(df.at[row_idx, "Duration"], errors="coerce")
+            if pd.notna(d_raw) and d_raw > 0:
+                duration_val = float(d_raw)
+    except Exception:
+        duration_val = None
+    actual_load = round(actual_rpe_10 * duration_val, 1) if duration_val else None
+
     payload = {
         **unplanned_extras,
         "RPE_Post_Session": rpe, "Session_1_5": session_quality,
@@ -3449,6 +3465,9 @@ def save_and_ai(
         "AI_Suggestion_1": ai1, "AI_Suggestion_2": ai2,
         "Last_Updated": dt.datetime.now().isoformat(timespec="seconds"),
     }
+    # Only overwrite Load if we could calculate it from actual RPE + duration
+    if actual_load is not None:
+        payload["Load"] = actual_load
 
     try:
         write_row(athlete_name, row_idx, payload)
