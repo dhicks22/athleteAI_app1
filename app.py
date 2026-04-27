@@ -4274,12 +4274,12 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     const PAD=80,CX=EXPORT_W/2;
 
     // ── Layout: 4 equal rings in a row ──────────────────────────────────────
-    const RING_R=105,RING_SW=22,RING_Y=EXPORT_H*0.50;
-    const SPACING=(EXPORT_W-PAD*2)/4;
-    const R1_X=PAD+SPACING*0+SPACING/2;
-    const R2_X=PAD+SPACING*1+SPACING/2;
-    const R3_X=PAD+SPACING*2+SPACING/2;
-    const R4_X=PAD+SPACING*3+SPACING/2;
+    const RING_R=88,RING_SW=18,RING_Y=EXPORT_H*0.50;
+    const SPACING=EXPORT_W/4;
+    const R1_X=SPACING*0+SPACING/2;
+    const R2_X=SPACING*1+SPACING/2;
+    const R3_X=SPACING*2+SPACING/2;
+    const R4_X=SPACING*3+SPACING/2;
 
     // ── Reusable ring draw helper ─────────────────────────────────────────────
     function drawRing(cx,cy,r,sw,pct100,color,valTxt,label,valFont,lblFont){{
@@ -4297,7 +4297,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     }}
 
     // ── Brand — centred above rings ───────────────────────────────────────────
-    const LOGO_SIZE=56,BRAND_Y=RING_Y-RING_R-110;
+    const LOGO_SIZE=48,BRAND_Y=RING_Y-RING_R-90;
     if(logoImg&&logoImg.naturalWidth>0){{
       const oc=document.createElement('canvas');oc.width=LOGO_SIZE;oc.height=LOGO_SIZE;
       const octx=oc.getContext('2d');
