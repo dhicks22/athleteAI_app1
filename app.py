@@ -4273,10 +4273,13 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 
     const PAD=80,CX=EXPORT_W/2;
 
-    // ── Layout: hero ring, brand above, 2 small rings + flame badge below ────
-    const HERO_R=170,HERO_SW=30,HERO_Y=EXPORT_H*0.44;
-    const SMALL_R=95,SMALL_SW=20,SMALL_Y=HERO_Y+HERO_R+160;
-    const NEURO_X=CX-290,EXPO_X=CX+290;
+    // ── Layout: 4 equal rings in a row ──────────────────────────────────────
+    const RING_R=105,RING_SW=22,RING_Y=EXPORT_H*0.50;
+    const SPACING=(EXPORT_W-PAD*2)/4;
+    const R1_X=PAD+SPACING*0+SPACING/2;
+    const R2_X=PAD+SPACING*1+SPACING/2;
+    const R3_X=PAD+SPACING*2+SPACING/2;
+    const R4_X=PAD+SPACING*3+SPACING/2;
 
     // ── Reusable ring draw helper ─────────────────────────────────────────────
     function drawRing(cx,cy,r,sw,pct100,color,valTxt,label,valFont,lblFont){{
@@ -4293,8 +4296,8 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.fillText(label,cx,cy+r+44);
     }}
 
-    // ── Brand — centred above hero ────────────────────────────────────────────
-    const LOGO_SIZE=56,BRAND_Y=HERO_Y-HERO_R-90;
+    // ── Brand — centred above rings ───────────────────────────────────────────
+    const LOGO_SIZE=56,BRAND_Y=RING_Y-RING_R-110;
     if(logoImg&&logoImg.naturalWidth>0){{
       const oc=document.createElement('canvas');oc.width=LOGO_SIZE;oc.height=LOGO_SIZE;
       const octx=oc.getContext('2d');
@@ -4313,26 +4316,14 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',CX,BRAND_Y+LOGO_SIZE/2);
     }}
 
-    // ── Hero ring ─────────────────────────────────────────────────────────────
-    drawRing(CX,HERO_Y,HERO_R,HERO_SW,{d_r},'{c_r}','{d_r}','DAILY READINESS',100,26);
-
-    // ── Two small rings ───────────────────────────────────────────────────────
-    drawRing(NEURO_X,SMALL_Y,SMALL_R,SMALL_SW,{d_n},'{c_n}','{d_n}','NEURO',58,22);
-    drawRing(EXPO_X, SMALL_Y,SMALL_R,SMALL_SW,{d_e},'{c_e}','{d_e}','EXPOSURE',58,22);
-
-    // ── Streak flame badge ────────────────────────────────────────────────────
-    ctx.globalAlpha={d_sn}===0?0.28:1.0;
-    ctx.font='100px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText('\uD83D\uDD25',CX,SMALL_Y-48);
-    ctx.globalAlpha=1.0;
-    ctx.font='bold 76px system-ui';
-    ctx.fillStyle={d_sn}===0?'rgba(255,255,255,0.3)':{d_sn}>=14?'#FF6D00':{d_sn}>=7?'#FF9800':'#FFA726';
-    ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('{d_sn}',CX,SMALL_Y+64);
-    ctx.font='22px system-ui';ctx.fillStyle='rgba(255,255,255,0.45)';
-    ctx.textBaseline='alphabetic';ctx.fillText('STREAK',CX,SMALL_Y+SMALL_R+44);
+    // ── 4 equal rings ────────────────────────────────────────────────────────
+    drawRing(R1_X,RING_Y,RING_R,RING_SW,{d_r},'{c_r}','{d_r}','READINESS',62,22);
+    drawRing(R2_X,RING_Y,RING_R,RING_SW,{d_n},'{c_n}','{d_n}','NEURO',62,22);
+    drawRing(R3_X,RING_Y,RING_R,RING_SW,{d_e},'{c_e}','{d_e}','EXPOSURE',62,22);
+    drawRing(R4_X,RING_Y,RING_R,RING_SW,{d_sp},'{c_sp}','{d_sn}','STREAK',62,22);
 
     // ── Divider ───────────────────────────────────────────────────────────────
-    const divY=SMALL_Y+SMALL_R+100;
+    const divY=RING_Y+RING_R+100;
     ctx.beginPath();ctx.moveTo(PAD,divY);ctx.lineTo(EXPORT_W-PAD,divY);
     ctx.strokeStyle='rgba(255,255,255,0.18)';ctx.lineWidth=2;ctx.stroke();
 
