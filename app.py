@@ -3052,8 +3052,10 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
     load_series = pd.to_numeric(df_time.get("Load"), errors="coerce")
 
     # Prefer post-session RPE; fall back to planned RPE col if no athlete logs yet
-    rpe_post = pd.to_numeric(df_time.get("RPE_Post_Session"), errors="coerce")
-    rpe_plan = pd.to_numeric(df_time.get("RPE"), errors="coerce")
+    rpe_post = pd.to_numeric(
+        df_time["RPE_Post_Session"] if "RPE_Post_Session" in df_time.columns else pd.Series(dtype=float),
+        errors="coerce")
+    rpe_plan = pd.to_numeric(df_time["RPE"] if "RPE" in df_time.columns else pd.Series(dtype=float), errors="coerce")
     if rpe_post.notna().sum() > 0:
         rpe_series = rpe_post
     elif rpe_plan.notna().sum() > 0:
@@ -3718,8 +3720,11 @@ def update_welcome(athlete_id, _today):
             df_time = df_time.reindex(full_range)
 
             load_series = pd.to_numeric(df_time.get("Load"), errors="coerce")
-            rpe_post_w = pd.to_numeric(df_time.get("RPE_Post_Session"), errors="coerce")
-            rpe_plan_w = pd.to_numeric(df_time.get("RPE"), errors="coerce")
+            rpe_post_w = pd.to_numeric(
+                df_time["RPE_Post_Session"] if "RPE_Post_Session" in df_time.columns else pd.Series(dtype=float),
+                errors="coerce")
+            rpe_plan_w = pd.to_numeric(df_time["RPE"] if "RPE" in df_time.columns else pd.Series(dtype=float),
+                                       errors="coerce")
             if rpe_post_w.notna().sum() > 0:
                 rpe_series = rpe_post_w
             elif rpe_plan_w.notna().sum() > 0:
@@ -4764,8 +4769,11 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
                 dft = dft.reindex(pd.date_range(dft.index.min(), today, freq="D"))
 
                 load_s = pd.to_numeric(dft.get("Load"), errors="coerce")
-                rpe_post = pd.to_numeric(dft.get("RPE_Post_Session"), errors="coerce")
-                rpe_plan = pd.to_numeric(dft.get("RPE"), errors="coerce")
+                rpe_post = pd.to_numeric(
+                    dft["RPE_Post_Session"] if "RPE_Post_Session" in dft.columns else pd.Series(dtype=float),
+                    errors="coerce")
+                rpe_plan = pd.to_numeric(dft["RPE"] if "RPE" in dft.columns else pd.Series(dtype=float),
+                                         errors="coerce")
                 if rpe_post.notna().sum() > 0:
                     rpe_s = rpe_post
                 elif rpe_plan.notna().sum() > 0:
@@ -4942,6 +4950,44 @@ def debug_dates(tab_name):
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)})
+
+
+@server.route("/debug/dashboard/<tab_name>")
+def debug_dashboard(tab_name):
+    try:
+        df = load_tab(tab_name)
+        if df is None or df.empty:
+            return jsonify({"error": "empty dataframe"})
+
+        info = {
+            "rows": len(df),
+            "cols": list(df.columns),
+            "date_sample": [str(x) for x in df["Date"].head(5).tolist()] if "Date" in df.columns else "no Date col",
+            "date_nulls": int(df["Date"].isna().sum()) if "Date" in df.columns else "N/A",
+            "load_sample": [str(x) for x in df["Load"].head(5).tolist()] if "Load" in df.columns else "no Load col",
+        }
+
+        # Test readiness calc
+        try:
+            today = today_adl()
+            dft = df.copy()
+            dft["Date"] = pd.to_datetime(dft["Date"], errors="coerce")
+            dft = dft.sort_values("Date")
+            dft = dft[~dft["Date"].duplicated(keep="last")].set_index("Date")
+            dft = dft.reindex(pd.date_range(dft.index.min(), today, freq="D"))
+            load_series = pd.to_numeric(dft.get("Load"), errors="coerce")
+            info["load_series_len"] = len(load_series)
+            info["load_non_null"] = int(load_series.notna().sum())
+            rpe_series = pd.Series(dtype=float, index=dft.index)
+            readiness = calc_daily_readiness(load_series, rpe_series, pd.Series(dtype=float, index=dft.index))
+            info["readiness"] = readiness
+        except Exception as e:
+            info["readiness_error"] = str(e)
+
+        return jsonify(info)
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()})
 
 
 if __name__ == "__main__":
