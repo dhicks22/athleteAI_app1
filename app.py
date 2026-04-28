@@ -642,51 +642,48 @@ def load_tab(tab_name: str) -> pd.DataFrame:
         df[f"{col}_url"] = urls
 
     if "Date" in df.columns:
-        # Use UNFORMATTED_VALUE for Date — always returns serial number for date cells
-        # regardless of how the cell is formatted or what formula generates it
-        if unformatted_values and len(unformatted_values) > 1:
+        # Use FORMATTED_VALUE dates (e.g. "2-May-2026") — debug confirmed this is reliable
+        # Override df["Date"] with formatted values first
+        if formatted_values and len(formatted_values) > 1:
             try:
-                ufmt_headers = unformatted_values[0]
-                if "Date" in ufmt_headers:
-                    date_col_idx = ufmt_headers.index("Date")
-                    ufmt_rows = unformatted_values[1:]
-                    raw_dates = [
+                fmt_headers = formatted_values[0]
+                if "Date" in fmt_headers:
+                    date_col_idx = fmt_headers.index("Date")
+                    fmt_rows = formatted_values[1:]
+                    fmt_dates = [
                         row[date_col_idx] if date_col_idx < len(row) else ""
-                        for row in ufmt_rows
+                        for row in fmt_rows
                     ]
-
-                    def _serial_to_date(val):
-                        if val == "" or val is None:
-                            return pd.NaT
-                        try:
-                            serial = float(val)
-                            if 40000 < serial < 60000:
-                                return pd.Timestamp("1899-12-30") + pd.Timedelta(days=int(serial))
-                        except (ValueError, TypeError):
-                            pass
-                        # Fallback: try parsing as string
-                        s = str(val).strip()
-                        for fmt in ("%d-%b-%Y", "%d/%m/%Y", "%Y-%m-%d", "%d-%B-%Y"):
-                            try:
-                                return pd.to_datetime(s, format=fmt)
-                            except Exception:
-                                pass
-                        try:
-                            return pd.to_datetime(s, dayfirst=True)
-                        except Exception:
-                            return pd.NaT
-
-                    parsed = [_serial_to_date(v) for v in raw_dates]
-                    # Pad if sheet has more rows than unformatted fetch
-                    while len(parsed) < len(df):
-                        parsed.append(pd.NaT)
-                    df["Date"] = [p.date() if pd.notna(p) else None for p in parsed[:len(df)]]
-                else:
-                    df["Date"] = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True).dt.date
+                    df["Date"] = fmt_dates + [""] * max(0, len(df) - len(fmt_dates))
             except Exception:
-                df["Date"] = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True).dt.date
-        else:
-            df["Date"] = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True).dt.date
+                pass
+
+        # Now parse — handles "2-May-2026", serials, and other formats
+        def _parse_any_date(val):
+            if val is None or str(val).strip() in ("", "nan", "None"):
+                return pd.NaT
+            s = str(val).strip()
+            # Serial number
+            try:
+                serial = float(s)
+                if 40000 < serial < 60000:
+                    return pd.Timestamp("1899-12-30") + pd.Timedelta(days=int(serial))
+            except (ValueError, TypeError):
+                pass
+            # Named formats
+            for fmt in ("%d-%b-%Y", "%d/%m/%Y", "%Y-%m-%d", "%d-%B-%Y", "%d %b %Y"):
+                try:
+                    return pd.to_datetime(s, format=fmt)
+                except Exception:
+                    pass
+            try:
+                return pd.to_datetime(s, dayfirst=True)
+            except Exception:
+                return pd.NaT
+
+        df["Date"] = df["Date"].apply(_parse_any_date).apply(
+            lambda x: x.date() if pd.notna(x) else None
+        )
 
     return df
 
