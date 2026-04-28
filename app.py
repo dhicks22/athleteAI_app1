@@ -3408,7 +3408,8 @@ def populate_session_context(selected_date, athlete_name):
 @app.callback(
     [Output("ai-suggestion-1", "children"),
      Output("ai-suggestion-2", "children"),
-     Output("save-status", "children")],
+     Output("save-status", "children"),
+     Output("refresh-btn", "n_clicks")],
     Input("btn-generate-ai", "n_clicks"),
     [State("athlete-dropdown", "value"),
      State("selected-date-store", "data"),
@@ -3428,7 +3429,8 @@ def populate_session_context(selected_date, athlete_name):
      Input("slider-sleep", "value"),
      Input("slider-fatigue", "value"),
      Input("slider-mood", "value"),
-     Input("slider-soreness", "value")],
+     Input("slider-soreness", "value"),
+     State("refresh-btn", "n_clicks")],
     prevent_initial_call=True,
 )
 def save_and_ai(
@@ -3438,12 +3440,13 @@ def save_and_ai(
         unplanned_workout, unplanned_focus, unplanned_venue,
         unplanned_key_distance, unplanned_duration, unplanned_srpe,
         rpe, session_quality, sleep, fatigue, mood, soreness,
+        refresh_n,
 ):
     if not n_clicks:          raise PreventUpdate
-    if not athlete_name:      return no_update, no_update, "⚠️ Please select an athlete first."
+    if not athlete_name:      return no_update, no_update, "⚠️ Please select an athlete first.", no_update
     if not ai_mode_1 or not ai_mode_2:
-        return no_update, no_update, "⚠️ Please select coaching feedback."
-    if not selected_date:     return no_update, no_update, "⚠️ Please select a date from the calendar first."
+        return no_update, no_update, "⚠️ Please select coaching feedback.", no_update
+    if not selected_date:     return no_update, no_update, "⚠️ Please select a date from the calendar first.", no_update
 
     rpe = 3.0 if rpe is None else float(rpe)
     session_quality = 3.0 if session_quality is None else float(session_quality)
@@ -3458,14 +3461,14 @@ def save_and_ai(
 
     df = load_tab(athlete_name)
     if df is None or df.empty or "Date" not in df.columns:
-        return no_update, no_update, "⚠️ Athlete sheet missing or has no Date column."
+        return no_update, no_update, "⚠️ Athlete sheet missing or has no Date column.", no_update
 
     df = df.copy()
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
 
     selected_date_dt = pd.to_datetime(selected_date, errors="coerce")
     if pd.isna(selected_date_dt):
-        return no_update, no_update, "⚠️ Selected date is invalid."
+        return no_update, no_update, "⚠️ Selected date is invalid.", no_update
     selected_date_dt = selected_date_dt.date()
 
     row_matches = df.index[df["Date"] == selected_date_dt].tolist()
@@ -3492,7 +3495,7 @@ def save_and_ai(
                 row_matches = df.index[df["Date"] == selected_date_dt].tolist()
                 if row_matches: row_idx = row_matches[0]
         except Exception as e:
-            return no_update, no_update, f"❌ Could not create row: {e}"
+            return no_update, no_update, f"❌ Could not create row: {e}", no_update
     else:
         row_idx = row_matches[0]
         row = df.iloc[row_idx]
@@ -3533,21 +3536,9 @@ def save_and_ai(
     if unplanned_venue and unplanned_venue.strip():   unplanned_extras["Venue"] = unplanned_venue.strip()
     if unplanned_duration:                              unplanned_extras["Duration"] = str(int(unplanned_duration))
 
-    # Recalculate Load using athlete's actual RPE (1-5 → scaled to 1-10) × duration
-    # This replaces the coach's planned sRPE-based Load with the actual session load
-    actual_rpe_10 = float(rpe) * 2.0  # scale athlete 1-5 RPE to 1-10 sRPE
-    duration_val = None
-    try:
-        # Use unplanned duration if entered, otherwise read from sheet row
-        if unplanned_duration:
-            duration_val = int(unplanned_duration)
-        elif row_idx is not None and "Duration" in df.columns:
-            d_raw = pd.to_numeric(df.at[row_idx, "Duration"], errors="coerce")
-            if pd.notna(d_raw) and d_raw > 0:
-                duration_val = float(d_raw)
-    except Exception:
-        duration_val = None
-    actual_load = round(actual_rpe_10 * duration_val, 1) if duration_val else None
+    # Write athlete's actual RPE (scaled 1-5 → 1-10) into sRPE column
+    # Load column is a formula (=sRPE*Duration) so it recalculates automatically
+    actual_rpe_10 = round(float(rpe) * 2.0, 1)  # scale 1-5 to 1-10
 
     payload = {
         **unplanned_extras,
@@ -3557,14 +3548,13 @@ def save_and_ai(
         "AI_Suggestion_1": ai1, "AI_Suggestion_2": ai2,
         "Last_Updated": dt.datetime.now().isoformat(timespec="seconds"),
     }
-    # Only overwrite Load if we could calculate it from actual RPE + duration
-    if actual_load is not None:
-        payload["Load"] = actual_load
+    # Write scaled RPE into sRPE so the Load formula recalculates
+    payload["sRPE"] = actual_rpe_10
 
     try:
         write_row(athlete_name, row_idx, payload)
     except Exception as e:
-        return no_update, no_update, f"❌ Save failed: {e}"
+        return no_update, no_update, f"❌ Save failed: {e}", no_update
 
     athlete_email = safe(df, row_idx, "Athlete_email") if "Athlete_email" in df.columns else ""
     athlete_display = safe(df, row_idx, "Athlete", athlete_name)
@@ -3596,7 +3586,7 @@ def save_and_ai(
     return ai1_div, ai2_div, html.Span(
         status_msg,
         style={"color": "#2E7D32" if status_msg.startswith("✅") else "#C62828", "fontWeight": 600}
-    )
+    ), (refresh_n or 0) + 1
 
 
 @app.callback(
