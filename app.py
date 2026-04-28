@@ -637,7 +637,16 @@ def load_tab(tab_name: str) -> pd.DataFrame:
             if not val or str(val).strip() in ("", "nan", "None"):
                 return pd.NaT
             s = str(val).strip()
-            for fmt in ("%d-%b-%Y", "%d/%m/%Y", "%Y-%m-%d", "%m/%d/%Y", "%d-%B-%Y"):
+            # Handle Google Sheets serial numbers (integer days since 1899-12-30)
+            try:
+                serial = int(float(s))
+                if 40000 < serial < 60000:  # plausible date range 2009-2064
+                    return pd.Timestamp("1899-12-30") + pd.Timedelta(days=serial)
+            except (ValueError, TypeError):
+                pass
+            # Try common formats
+            for fmt in ("%d-%b-%Y", "%d/%m/%Y", "%Y-%m-%d", "%m/%d/%Y",
+                        "%d-%B-%Y", "%d %b %Y", "%d %B %Y"):
                 try:
                     return pd.to_datetime(s, format=fmt)
                 except Exception:
@@ -2331,14 +2340,13 @@ def build_main_layout(auth_data):
             for _, info in USER_LOGINS.items()
             if info.get("sheet", "") and info.get("role", "athlete") == "athlete"
         ]
+        default_tab = None  # coaches see placeholder "Select athlete"
     else:
         options = [{"label": athlete_sheet, "value": athlete_sheet}]
-
-    if default_tab is None and options:
-        default_tab = options[0]["value"]
-    # Ensure default_tab is always set if we have options
-    if not default_tab and options:
-        default_tab = options[0]["value"]
+        if default_tab is None and options:
+            default_tab = options[0]["value"]
+        if not default_tab and options:
+            default_tab = options[0]["value"]
 
     home_view = html.Div(
         id="home-view",
