@@ -609,7 +609,7 @@ def load_tab(tab_name: str) -> pd.DataFrame:
     # for computed cells — pd.to_numeric can't parse these, so we must use
     # the evaluated/formatted values for all numeric and date columns.
     NUMERIC_OVERRIDE_COLS = {
-        "Date", "Load", "SPEED (m)", "TEMPO (m)", "sRPE", "RPE", "Duration",
+        "Load", "SPEED (m)", "TEMPO (m)", "sRPE", "RPE", "Duration",
         "EWMA 28", "EMWA 28", "EWMA 7", "EMWA 7",
         "Sleep_1_5", "Fatigue_1_5", "Mood_1_5", "Soreness_1_5",
         "RPE_Post_Session", "Session_1_5",
