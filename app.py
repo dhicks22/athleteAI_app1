@@ -633,7 +633,20 @@ def load_tab(tab_name: str) -> pd.DataFrame:
         df[f"{col}_url"] = urls
 
     if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True).dt.date
+        def _parse_date(val):
+            if not val or str(val).strip() in ("", "nan", "None"):
+                return pd.NaT
+            s = str(val).strip()
+            for fmt in ("%d-%b-%Y", "%d/%m/%Y", "%Y-%m-%d", "%m/%d/%Y", "%d-%B-%Y"):
+                try:
+                    return pd.to_datetime(s, format=fmt)
+                except Exception:
+                    pass
+            try:
+                return pd.to_datetime(s, dayfirst=True)
+            except Exception:
+                return pd.NaT
+        df["Date"] = df["Date"].apply(_parse_date).dt.date
 
     return df
 
