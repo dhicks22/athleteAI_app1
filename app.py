@@ -571,12 +571,18 @@ def load_tab(tab_name: str) -> pd.DataFrame:
         except Exception:
             return pd.DataFrame()
 
-    # Also fetch formatted values — this gives us human-readable dates
-    # even when the cell contains a formula like =C206+1 (serial number)
+    # Fetch formatted values for numeric columns
     try:
         formatted_values = ws.get_all_values(value_render_option="FORMATTED_VALUE")
     except Exception:
         formatted_values = all_values
+
+    # Fetch unformatted values specifically for Date — gives raw serial numbers
+    # which we can convert reliably regardless of sheet locale/format settings
+    try:
+        unformatted_values = ws.get_all_values(value_render_option="UNFORMATTED_VALUE")
+    except Exception:
+        unformatted_values = None
 
     if not all_values:
         return pd.DataFrame()
@@ -633,29 +639,49 @@ def load_tab(tab_name: str) -> pd.DataFrame:
         df[f"{col}_url"] = urls
 
     if "Date" in df.columns:
-        def _parse_date(val):
-            if not val or str(val).strip() in ("", "nan", "None"):
-                return pd.NaT
-            s = str(val).strip()
-            # Handle Google Sheets serial numbers (integer days since 1899-12-30)
+        # Use UNFORMATTED_VALUE for Date — always returns serial number for date cells
+        # regardless of how the cell is formatted or what formula generates it
+        if unformatted_values and len(unformatted_values) > 1:
             try:
-                serial = int(float(s))
-                if 40000 < serial < 60000:  # plausible date range 2009-2064
-                    return pd.Timestamp("1899-12-30") + pd.Timedelta(days=serial)
-            except (ValueError, TypeError):
-                pass
-            # Try common formats
-            for fmt in ("%d-%b-%Y", "%d/%m/%Y", "%Y-%m-%d", "%m/%d/%Y",
-                        "%d-%B-%Y", "%d %b %Y", "%d %B %Y"):
-                try:
-                    return pd.to_datetime(s, format=fmt)
-                except Exception:
-                    pass
-            try:
-                return pd.to_datetime(s, dayfirst=True)
+                ufmt_headers = unformatted_values[0]
+                if "Date" in ufmt_headers:
+                    date_col_idx = ufmt_headers.index("Date")
+                    ufmt_rows = unformatted_values[1:]
+                    raw_dates = [
+                        row[date_col_idx] if date_col_idx < len(row) else ""
+                        for row in ufmt_rows
+                    ]
+                    def _serial_to_date(val):
+                        if val == "" or val is None:
+                            return pd.NaT
+                        try:
+                            serial = float(val)
+                            if 40000 < serial < 60000:
+                                return pd.Timestamp("1899-12-30") + pd.Timedelta(days=int(serial))
+                        except (ValueError, TypeError):
+                            pass
+                        # Fallback: try parsing as string
+                        s = str(val).strip()
+                        for fmt in ("%d-%b-%Y", "%d/%m/%Y", "%Y-%m-%d", "%d-%B-%Y"):
+                            try:
+                                return pd.to_datetime(s, format=fmt)
+                            except Exception:
+                                pass
+                        try:
+                            return pd.to_datetime(s, dayfirst=True)
+                        except Exception:
+                            return pd.NaT
+                    parsed = [_serial_to_date(v) for v in raw_dates]
+                    # Pad if sheet has more rows than unformatted fetch
+                    while len(parsed) < len(df):
+                        parsed.append(pd.NaT)
+                    df["Date"] = [p.date() if pd.notna(p) else None for p in parsed[:len(df)]]
+                else:
+                    df["Date"] = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True).dt.date
             except Exception:
-                return pd.NaT
-        df["Date"] = df["Date"].apply(_parse_date).dt.date
+                df["Date"] = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True).dt.date
+        else:
+            df["Date"] = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True).dt.date
 
     return df
 
