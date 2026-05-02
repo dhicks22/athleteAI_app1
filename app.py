@@ -372,10 +372,7 @@ def calc_daily_readiness(load_series, rpe_series, quality_series, span=7):
     # so the dial isn't permanently blank for athletes who haven't post-logged yet
     rpe_valid = df["rpe"].dropna()
     if rpe_valid.empty:
-        if pd.isna(load_ref) or load_ref <= 0:
-            return None
-        # Load exists but no post-session RPE — assume moderate RPE (3/5) as placeholder
-        df["rpe"] = 3.0
+        return None  # ← remove the RPE=3 fallback entirely
 
     if pd.isna(load_ref) or load_ref <= 0:
         return None
