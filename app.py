@@ -1255,7 +1255,7 @@ def call_openai_chat(messages: list, max_tokens: int = 700) -> str:
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
             json={
-                "model": "gpt-4.1-mini",
+                "model": "gpt-4.1-nano",
                 "messages": messages,
                 "temperature": 0.6,
                 "max_tokens": max_tokens,
@@ -1275,6 +1275,8 @@ def make_ai_suggestions(
         sleep, fatigue, mood, soreness, notes, sets_reps_load,
         track_reps_times, ai_mode_1, ai_mode_2,
 ):
+    from concurrent.futures import ThreadPoolExecutor
+
     df = load_tab(athlete_name)
 
     if df is None or df.empty:
@@ -1355,23 +1357,13 @@ def make_ai_suggestions(
         "Keep to 3–5 sentences. No waffle, no generics."
     )
 
-    ai1 = call_openai_chat(
-        [{"role": "system", "content": system_1}, {"role": "user", "content": user_1}],
-        max_tokens=500,
-    )
-
     persona_2 = persona_prompt(ai_mode_2)
-    ai1_summary = (
-        f"The primary coach ({ai_mode_1}) has already addressed the main training focus. "
-        f"Here is what they said:\n\"{ai1}\"\n\n"
-        "Your job is to add a DIFFERENT perspective — not to repeat or agree with the above."
-    )
     system_2 = (
         f"{persona_2}\n\n"
         f"You are a secondary coach giving {first_name} a complementary perspective. "
-        f"{ai1_summary}"
-        "Focus on what the primary coach did NOT cover. "
-        "Be specific and practical. Do NOT repeat training load or speed advice if that was covered above. "
+        f"The primary coach ({ai_mode_1}) is handling the main training focus. "
+        "Focus on what they will NOT cover. "
+        "Be specific and practical. Do NOT repeat training load or speed advice. "
         f"Always open with '{first_name},' — this is mandatory."
     )
     user_2 = (
@@ -1387,13 +1379,22 @@ def make_ai_suggestions(
         "3–4 sentences maximum. Be direct."
     )
 
-    ai2 = call_openai_chat(
-        [{"role": "system", "content": system_2}, {"role": "user", "content": user_2}],
-        max_tokens=400,
-    )
+    # ── Run both calls in parallel — cuts total wait time roughly in half ──
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_1 = executor.submit(
+            call_openai_chat,
+            [{"role": "system", "content": system_1}, {"role": "user", "content": user_1}],
+            300,
+        )
+        future_2 = executor.submit(
+            call_openai_chat,
+            [{"role": "system", "content": system_2}, {"role": "user", "content": user_2}],
+            250,
+        )
+        ai1 = future_1.result()
+        ai2 = future_2.result()
 
     return (ai1 or "").strip(), (ai2 or "").strip()
-
 
 # ============================================================
 #  Email webhook
@@ -2502,12 +2503,20 @@ def build_main_layout(auth_data):
                     dbc.Button("Reset", id="reset-session-button", color="warning", outline=True,
                                size="sm", className="mb-3 ms-2"),
                     html.H5(id="selected-date-header", className="mb-2"),
-                    html.Div(
+
+                    dbc.Row([
+                        dbc.Col([html.Div(
                         [html.Div(id="ctx-workout"), html.Div(id="ctx-focus"), html.Div(id="ctx-venue")],
                         id="session-context-wrapper",
+                        style={
+                            "border": "1px solid #e0e0e0",
+                            "borderRadius": "10px",
+                            "padding": "10px",
+                            "boxShadow": "0 2px 4px rgba(0,0,0,0.08)",
+                            "marginBottom": "12px",
+                            "background": "#fafafa",
+                        }
                     ),
-                    dbc.Row([
-                        dbc.Col([
                             input_card([html.Label("Athlete Notes"),
                                         dcc.Textarea(id="athlete-notes",
                                                      placeholder="e.g., Last two reps were my best...",
@@ -3373,31 +3382,52 @@ def populate_session_context(selected_date, athlete_name):
     workout_url = str(row.get("Workout_url", "") or "").strip()
     focus_url = str(row.get("Focus_url", "") or "").strip()
 
-    workout_card = [
-        html.Div("🏃 Workout", className="ctx-title"),
-        html.A(workout, href=workout_url, target="_blank", className="ctx-main",
-               style={"color": "#1565C0", "textDecoration": "underline"})
-        if (workout and workout_url and workout_url != "None")
-        else html.Div(workout or "—", className="ctx-main"),
-        html.Div(f"📏 Key Distance: {key_distance}", className="ctx-sub") if key_distance else None,
-    ]
-    focus_card = [
-        html.Div("🎯 Session Focus", className="ctx-title"),
-        html.A(focus, href=focus_url, target="_blank", className="ctx-main",
-               style={"color": "#1565C0", "textDecoration": "underline"})
-        if (focus and focus_url and focus_url != "None")
-        else html.Div(focus or "—", className="ctx-main"),
+    workout_card = html.Div([
         html.Div([
-            html.Div(f"🔥 Planned sRPE: {srpe}") if srpe else None,
-            html.Div(f"⏱ Duration: {duration} min") if duration else None,
-            html.Div(f"⚖️ Load: {load}") if load else None,
-        ], className="ctx-sub"),
-    ]
-    venue_card = [
-        html.Div("📍 Venue & Notes", className="ctx-title"),
-        html.Div(venue or "—", className="ctx-main"),
-        html.Div(f"📝 {notes}", className="ctx-sub") if notes else None,
-    ]
+            html.Span("Workout: ", style={"fontWeight": "700", "fontSize": "16px", "color": "#555"}),
+            html.A(workout, href=workout_url, target="_blank",
+                   style={"fontSize": "16px", "color": "#1565C0", "textDecoration": "underline"})
+            if (workout and workout_url and workout_url != "None")
+            else html.Span(workout or "—", style={"fontSize": "16px", "color": "#444"}),
+        ]),
+        html.Div([
+            html.Span("Key Distance: ", style={"fontWeight": "700", "fontSize": "16px", "color": "#555"}),
+            html.Span(str(key_distance), style={"fontSize": "16px", "color": "#444"}),
+        ], style={"marginTop": "3px"}) if key_distance else None,
+    ], style={"paddingBottom": "7px", "marginBottom": "7px", "borderBottom": "1px solid #ebebeb"})
+
+    focus_card = html.Div([
+        html.Div([
+            html.Span("Session Focus: ", style={"fontWeight": "700", "fontSize": "16px", "color": "#555"}),
+            html.A(focus, href=focus_url, target="_blank",
+                   style={"fontSize": "14px", "color": "#1565C0", "textDecoration": "underline"})
+            if (focus and focus_url and focus_url != "None")
+            else html.Span(focus or "—", style={"fontSize": "16px", "color": "#444"}),
+        ]),
+        html.Div([
+            html.Span("Planned sRPE: ", style={"fontWeight": "700", "fontSize": "16px", "color": "#555"}),
+            html.Span(str(srpe), style={"fontSize": "16px", "color": "#444"}),
+        ], style={"marginTop": "3px"}) if srpe else None,
+        html.Div([
+            html.Span("Duration: ", style={"fontWeight": "700", "fontSize": "16px", "color": "#555"}),
+            html.Span(f"{duration} min", style={"fontSize": "16px", "color": "#444"}),
+        ], style={"marginTop": "3px"}) if duration else None,
+        html.Div([
+            html.Span("Load: ", style={"fontWeight": "700", "fontSize": "16px", "color": "#555"}),
+            html.Span(str(load), style={"fontSize": "16px", "color": "#444"}),
+        ], style={"marginTop": "3px"}) if load else None,
+    ], style={"paddingBottom": "7px", "marginBottom": "7px", "borderBottom": "1px solid #ebebeb"})
+
+    venue_card = html.Div([
+        html.Div([
+            html.Span("Venue: ", style={"fontWeight": "700", "fontSize": "16px", "color": "#555"}),
+            html.Span(venue or "—", style={"fontSize": "16px", "color": "#444"}),
+        ]),
+        html.Div([
+            html.Span("Notes: ", style={"fontWeight": "700", "fontSize": "16px", "color": "#555"}),
+            html.Span(str(notes), style={"fontSize": "16px", "color": "#444"}),
+        ], style={"marginTop": "3px"}) if notes else None,
+    ])
 
     return workout_card, focus_card, venue_card
 
@@ -4649,37 +4679,45 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
     ])
 
     TRAFFIC = {
-        "green": {"bg": "#e8f5e9", "border": "#2E7D32", "dot": "#2E7D32"},
-        "amber": {"bg": "#fff8e1", "border": "#F9A825", "dot": "#F9A825"},
-        "red": {"bg": "#ffebee", "border": "#C62828", "dot": "#C62828"},
-        "grey": {"bg": "#f5f5f5", "border": "#bdbdbd", "dot": "#bdbdbd"},
+        "blue": {"border": "#1E88E5"},
+        "green": {"border": "#43A047"},
+        "amber": {"border": "#F9A825"},
+        "red": {"border": "#E53935"},
+        "grey": {"border": "#bdbdbd"},
     }
 
-    def score_colour(val, invert=False):
+    def score_colour(val):
         if val is None: return "grey"
-        v = (100 - val) if invert else val
-        if v >= 70: return "green"
-        if v >= 45: return "amber"
+        if val >= 80: return "blue"
+        if val >= 60: return "green"
+        if val >= 40: return "amber"
         return "red"
 
     def mini_ring(value, color, size=52):
-        """Small ring dial using CSS — reliable top-fill, no Plotly quirks."""
-        colour_map = {"green": "#2E7D32", "amber": "#F9A825", "red": "#C62828", "grey": "#e0e0e0"}
-        c = colour_map.get(score_colour(value), "#e0e0e0")
+        colour_map = {
+            "blue": "#1E88E5",  # matches dial-blue in dashboard.css
+            "green": "#43A047",  # matches dial-green
+            "amber": "#F9A825",  # matches dial-amber
+            "red": "#E53935",  # matches dial-red
+            "grey": "#e0e0e0",
+            "pink": "#E91E8C",  # matches dial-pink (streak)
+        }
+        # Honour explicit colour arg (e.g. "pink" for streak) — otherwise derive from value
+        if color in colour_map:
+            c = colour_map[color]
+        else:
+            c = colour_map.get(score_colour(value), "#e0e0e0")
+
         txt = "—" if value is None else str(int(round(value)))
         pct = 0 if value is None else min(max(float(value), 0), 100)
 
-        # Use SVG via dcc.Graph with Scatter arc — works on all browsers
-        # Build arc path for the filled portion
         import math
         if pct >= 100:
-            # Full circle — use two semicircle arcs
             arc_d = "M 26 6 A 20 20 0 1 1 25.999 6 Z"
         elif pct <= 0:
             arc_d = ""
         else:
             angle = (pct / 100) * 360
-            # Start at top (270deg in standard math = -90deg from east)
             start_rad = math.radians(-90)
             end_rad = math.radians(-90 + angle)
             x1 = 26 + 20 * math.cos(start_rad)
@@ -4705,7 +4743,6 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
         svg_parts.append('</svg>')
         svg_str = "".join(svg_parts)
 
-        # Use an img tag with SVG data URI — works everywhere including iOS Safari
         import base64
         svg_b64 = base64.b64encode(svg_str.encode()).decode()
         data_uri = f"data:image/svg+xml;base64,{svg_b64}"
@@ -4725,7 +4762,6 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
         except Exception:
             df = pd.DataFrame()
 
-        # Compute all metrics
         readiness_val = None
         neuro_val = None
         streak = 0
@@ -4737,10 +4773,8 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
 
         if not df.empty:
             try:
-                # Streak
                 streak, _ = compute_streaks(df)
 
-                # Weekly exposure
                 dow = today.weekday()
                 ws = today - dt.timedelta(days=(dow - 5) % 7)
                 we = ws + dt.timedelta(days=6)
@@ -4748,7 +4782,6 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
                 logged_n = count_logged_sessions_in_week(df, ws, we)
                 weekly_pct = int(round(logged_n / planned * 100)) if planned > 0 else 0
 
-                # Readiness
                 dft = df.copy()
                 dft["Date"] = pd.to_datetime(dft["Date"], errors="coerce")
                 dft = dft.sort_values("Date")
@@ -4770,11 +4803,8 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
                     rpe_s = pd.Series(dtype=float, index=dft.index)
                 qual_s = pd.to_numeric(dft.get("Session_1_5"), errors="coerce")
                 readiness_val = calc_daily_readiness(load_s, rpe_s, qual_s)
-
-                # Neuro (shared helper)
                 neuro_val = compute_neuro_for_athlete(df, today)
 
-                # Last logged session
                 df2 = df.copy()
                 df2["Date"] = pd.to_datetime(df2["Date"], errors="coerce").dt.date
                 df2 = df2.sort_values("Date")
@@ -4784,7 +4814,6 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
                     last_logged = max(logged_days)
                     days_ago = (today - last_logged).days
 
-                # Today's session note/RPE
                 today_rows = df2[df2["Date"] == today]
                 if not today_rows.empty:
                     row = today_rows.iloc[-1]
@@ -4797,37 +4826,32 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
             except Exception as ex:
                 print(f"Squad card error for {sheet_name}: {ex}")
 
-        # ── Status badge ──────────────────────────────────────────────────────
         if days_ago is None:
-            status_label = "No data"
-            status_bg = "#f5f5f5"
+            status_label = "No data";
+            status_bg = "#f5f5f5";
             status_color = "#999"
         elif days_ago == 0:
-            status_label = "Logged today ✓"
-            status_bg = "#e8f5e9"
+            status_label = "Logged today ✓";
+            status_bg = "#e8f5e9";
             status_color = "#2E7D32"
         elif days_ago == 1:
-            status_label = "Yesterday"
-            status_bg = "#fff8e1"
+            status_label = "Yesterday";
+            status_bg = "#fff8e1";
             status_color = "#F9A825"
         elif days_ago <= 3:
-            status_label = f"{days_ago}d ago"
-            status_bg = "#fff3e0"
+            status_label = f"{days_ago}d ago";
+            status_bg = "#fff3e0";
             status_color = "#E65100"
         else:
-            status_label = f"{days_ago}d ago ⚠"
-            status_bg = "#ffebee"
+            status_label = f"{days_ago}d ago ⚠";
+            status_bg = "#ffebee";
             status_color = "#C62828"
 
-        # ── Readiness colour ──────────────────────────────────────────────────
         r_col = score_colour(readiness_val)
         n_col = score_colour(neuro_val)
         card_border = TRAFFIC[r_col]["border"]
 
-        # ── Build card ────────────────────────────────────────────────────────
         card = html.Div([
-
-            # Header row: name + status badge
             html.Div([
                 html.Div(sheet_name, style={"fontWeight": "700", "fontSize": "15px", "color": "#1a1a1a"}),
                 html.Div(status_label, style={
@@ -4837,7 +4861,6 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
             ], style={"display": "flex", "justifyContent": "space-between",
                       "alignItems": "center", "marginBottom": "12px"}),
 
-            # Dials row
             html.Div([
                 # Readiness
                 html.Div([
@@ -4857,17 +4880,15 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
                     html.Div("Exposure", style={"fontSize": "10px", "color": "#888",
                                                 "textAlign": "center", "marginTop": "3px"}),
                 ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
-                # Streak
+                # Streak — always pink like the home dial
                 html.Div([
-                    mini_ring(streak if streak else None,
-                              "grey" if not streak else score_colour(min((streak / 14) * 100, 100))),
+                    mini_ring(streak if streak else None, "pink" if streak else "grey"),
                     html.Div("Streak", style={"fontSize": "10px", "color": "#888",
                                               "textAlign": "center", "marginTop": "3px"}),
                 ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
             ], style={"display": "flex", "justifyContent": "space-around",
                       "marginBottom": "10px" if (session_note or session_rpe) else "0"}),
 
-            # Today's session summary if logged
             html.Div([
                 html.Div([
                     html.Span("Today: ", style={"fontSize": "11px", "color": "#888", "fontWeight": "600"}),
