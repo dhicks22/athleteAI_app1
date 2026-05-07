@@ -572,11 +572,18 @@ def load_tab(tab_name: str) -> pd.DataFrame:
         except Exception:
             return pd.DataFrame()
 
-        # Fetch formatted values for numeric columns
-        try:
-            formatted_values = ws.get_all_values(value_render_option="FORMATTED_VALUE")
-        except Exception:
-            formatted_values = all_values
+    # Fetch formatted values for numeric columns
+    try:
+        formatted_values = ws.get_all_values(value_render_option="FORMATTED_VALUE")
+    except Exception:
+        formatted_values = all_values
+
+    # Fetch unformatted values specifically for Date — gives raw serial numbers
+    # which we can convert reliably regardless of sheet locale/format settings
+    #try:
+     #   unformatted_values = ws.get_all_values(value_render_option="UNFORMATTED_VALUE")
+    #except Exception:
+    #    unformatted_values = None
 
     if not all_values:
         return pd.DataFrame()
@@ -678,9 +685,9 @@ def load_tab(tab_name: str) -> pd.DataFrame:
 
     return df
 
-# ── Squad cache — avoids re-fetching sheets on repeated refreshes ──
+# ── Squad cache ──
 _squad_cache = {}
-SQUAD_CACHE_TTL = 60  # seconds
+SQUAD_CACHE_TTL = 60
 
 def load_tab_cached(tab_name: str) -> pd.DataFrame:
     now = time.time()
@@ -4761,13 +4768,20 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
 
     cards = []
 
-    for sheet_name in sorted(all_sheets):
-        first_name = sheet_name.strip().split()[0] if sheet_name.strip() else sheet_name
+    # NEW — parallel, fast
+    from concurrent.futures import ThreadPoolExecutor
 
+    def _load_safe(name):
         try:
-            df = load_tab(sheet_name)
+            return name, load_tab_cached(name)
         except Exception:
-            df = pd.DataFrame()
+            return name, pd.DataFrame()
+
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        results = dict(executor.map(_load_safe, sorted(all_sheets)))
+
+    for sheet_name in sorted(all_sheets):
+        df = results.get(sheet_name, pd.DataFrame())
 
         readiness_val = None
         neuro_val = None
