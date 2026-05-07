@@ -12,6 +12,7 @@
 import os
 import re
 import json
+import time
 import datetime as dt
 from zoneinfo import ZoneInfo
 
@@ -571,18 +572,11 @@ def load_tab(tab_name: str) -> pd.DataFrame:
         except Exception:
             return pd.DataFrame()
 
-    # Fetch formatted values for numeric columns
-    try:
-        formatted_values = ws.get_all_values(value_render_option="FORMATTED_VALUE")
-    except Exception:
-        formatted_values = all_values
-
-    # Fetch unformatted values specifically for Date — gives raw serial numbers
-    # which we can convert reliably regardless of sheet locale/format settings
-    try:
-        unformatted_values = ws.get_all_values(value_render_option="UNFORMATTED_VALUE")
-    except Exception:
-        unformatted_values = None
+        # Fetch formatted values for numeric columns
+        try:
+            formatted_values = ws.get_all_values(value_render_option="FORMATTED_VALUE")
+        except Exception:
+            formatted_values = all_values
 
     if not all_values:
         return pd.DataFrame()
@@ -684,6 +678,19 @@ def load_tab(tab_name: str) -> pd.DataFrame:
 
     return df
 
+# ── Squad cache — avoids re-fetching sheets on repeated refreshes ──
+_squad_cache = {}
+SQUAD_CACHE_TTL = 60  # seconds
+
+def load_tab_cached(tab_name: str) -> pd.DataFrame:
+    now = time.time()
+    if tab_name in _squad_cache:
+        ts, df = _squad_cache[tab_name]
+        if now - ts < SQUAD_CACHE_TTL:
+            return df
+    df = load_tab(tab_name)
+    _squad_cache[tab_name] = (now, df)
+    return df
 
 def write_row(tab_name: str, row_idx_0: int, payload: dict):
     if sh is None:
