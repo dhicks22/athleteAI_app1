@@ -2914,13 +2914,14 @@ def close_session_context(n, style):
      Output("graphs-view", "style"),
      Output("ai-view", "style"),
      Output("squad-view", "style"),
-     Output("bottom-nav-click", "data")],
+     Output("bottom-nav-click", "data", allow_duplicate=True)],
     [Input("nav-home", "n_clicks"),
      Input("nav-calendar", "n_clicks"),
      Input("nav-graphs", "n_clicks"),
      Input("nav-ai", "n_clicks"),
      Input("nav-squad", "n_clicks")],
     [State("bottom-nav-click", "data")],
+    prevent_initial_call=True,
 )
 def show_section(h, c, g, a, s, current_tab):
     ctx = callback_context
@@ -4901,7 +4902,7 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
                                                 "textAlign": "center", "marginTop": "3px"}),
                 ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
                 html.Div([
-                    mini_ring(min(streak / 31 * 100, 100) if streak else None, "pink" if streak else "grey"),
+                    mini_ring(min(streak / 31 * 100, 100) if streak else None, "pink" if streak else "grey", display_override=str(streak) if streak else None),
                     html.Div("Streak", style={"fontSize": "10px", "color": "#888",
                                               "textAlign": "center", "marginTop": "3px"}),
                 ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
