@@ -3001,7 +3001,7 @@ def update_dashboard(athlete_id, view_mode, n_clicks):
 
     today = today_adl()
     today_date_str = today.strftime("%d %b %Y")
-    df = load_tab(athlete_id)
+    df = load_tab_cached(athlete_id)
 
     dow = today.weekday()
     days_since_sat = (dow - 5) % 7
@@ -3738,7 +3738,7 @@ def update_welcome(athlete_id, _today):
     streak = 0
 
     try:
-        df = load_tab(athlete_id)
+        df = load_tab_cached(athlete_id)
         if not df.empty:
             streak, _ = compute_streaks(df)
 
@@ -4883,27 +4883,23 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
                       "alignItems": "center", "marginBottom": "12px"}),
 
             html.Div([
-                # Readiness
                 html.Div([
                     mini_ring(readiness_val, r_col),
                     html.Div("Readiness", style={"fontSize": "10px", "color": "#888",
                                                  "textAlign": "center", "marginTop": "3px"}),
                 ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
-                # Neuro
                 html.Div([
                     mini_ring(neuro_val, n_col),
                     html.Div("Neuro", style={"fontSize": "10px", "color": "#888",
                                              "textAlign": "center", "marginTop": "3px"}),
                 ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
-                # Exposure
                 html.Div([
                     mini_ring(weekly_pct, score_colour(weekly_pct)),
                     html.Div("Exposure", style={"fontSize": "10px", "color": "#888",
                                                 "textAlign": "center", "marginTop": "3px"}),
                 ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
-                # Streak — always pink like the home dial
                 html.Div([
-                    mini_ring(streak if streak else None, "pink" if streak else "grey"),
+                    mini_ring(min(streak / 31 * 100, 100) if streak else None, "pink" if streak else "grey"),
                     html.Div("Streak", style={"fontSize": "10px", "color": "#888",
                                               "textAlign": "center", "marginTop": "3px"}),
                 ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
@@ -4921,14 +4917,17 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
                 ]) if (session_note or session_rpe) else None,
             ]),
 
-        ], style={
-            "background": "white",
-            "borderRadius": "14px",
-            "padding": "14px 16px",
-            "boxShadow": "0 2px 8px rgba(0,0,0,0.08)",
-            "borderLeft": f"4px solid {card_border}",
-            "marginBottom": "12px",
-        })
+        ], id={"type": "squad-card", "sheet": sheet_name},
+            n_clicks=0,
+            style={
+                "background": "white",
+                "borderRadius": "14px",
+                "padding": "14px 16px",
+                "boxShadow": "0 2px 8px rgba(0,0,0,0.08)",
+                "borderLeft": f"4px solid {card_border}",
+                "marginBottom": "12px",
+                "cursor": "pointer",
+            })
 
         cards.append(card)
 
@@ -4950,6 +4949,27 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
 
     return [summary] + cards
 
+@app.callback(
+    Output("athlete-dropdown", "value"),
+    Output("bottom-nav-click", "data", allow_duplicate=True),
+    Input({"type": "squad-card", "sheet": ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def squad_card_click(n_clicks_list):
+    ctx = callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    if not n_clicks_list or all((n or 0) == 0 for n in n_clicks_list):
+        raise PreventUpdate
+
+    try:
+        triggered = json.loads(ctx.triggered[0]["prop_id"].split(".")[0])
+        sheet_name = triggered.get("sheet")
+        if not sheet_name:
+            raise PreventUpdate
+        return sheet_name, "home"
+    except Exception:
+        raise PreventUpdate
 
 @server.route("/debug/dates/<tab_name>")
 def debug_dates(tab_name):
