@@ -2914,14 +2914,13 @@ def close_session_context(n, style):
      Output("graphs-view", "style"),
      Output("ai-view", "style"),
      Output("squad-view", "style"),
-     Output("bottom-nav-click", "data", allow_duplicate=True)],
+     Output("bottom-nav-click", "data")],
     [Input("nav-home", "n_clicks"),
      Input("nav-calendar", "n_clicks"),
      Input("nav-graphs", "n_clicks"),
      Input("nav-ai", "n_clicks"),
      Input("nav-squad", "n_clicks")],
     [State("bottom-nav-click", "data")],
-    prevent_initial_call=True,
 )
 def show_section(h, c, g, a, s, current_tab):
     ctx = callback_context
