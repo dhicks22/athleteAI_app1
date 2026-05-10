@@ -4672,6 +4672,8 @@ def garmin_status():
     prevent_initial_call=True,
 )
 def update_squad_view(nav_clicks, refresh_clicks, auth_data):
+    global _squad_cache
+    _squad_cache = {}  # bust cache so streak/readiness always reflects latest data
     print(f"🏟️ Squad callback fired — nav={nav_clicks} refresh={refresh_clicks} auth={auth_data}")
     if not auth_data:
         print("⚠️ No auth_data")

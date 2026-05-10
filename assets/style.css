@@ -812,3 +812,14 @@ body {
 .dial-pink .dial-circle {
   --dial-color: #E91E8C;
 }
+
+.nav-item {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.bottom-nav {
+    touch-action: manipulation;
+}
