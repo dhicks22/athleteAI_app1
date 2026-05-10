@@ -4707,7 +4707,7 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
         if val >= 40: return "amber"
         return "red"
 
-    def mini_ring(value, color, size=52):
+    def mini_ring(value, color, size=52, display_override=None):
         colour_map = {
             "blue": "#1E88E5",  # matches dial-blue in dashboard.css
             "green": "#43A047",  # matches dial-green
@@ -4722,7 +4722,7 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
         else:
             c = colour_map.get(score_colour(value), "#e0e0e0")
 
-        txt = "—" if value is None else str(int(round(value)))
+        txt = display_override if display_override is not None else ("—" if value is None else str(int(round(value))))
         pct = 0 if value is None else min(max(float(value), 0), 100)
 
         import math
@@ -4950,7 +4950,7 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
     return [summary] + cards
 
 @app.callback(
-    Output("athlete-dropdown", "value"),
+    Output("athlete-dropdown", "value", allow_duplicate=True),
     Output("bottom-nav-click", "data", allow_duplicate=True),
     Input({"type": "squad-card", "sheet": ALL}, "n_clicks"),
     prevent_initial_call=True,
