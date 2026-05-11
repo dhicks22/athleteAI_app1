@@ -1382,10 +1382,11 @@ def make_ai_suggestions(
         f"Write feedback as the {ai_mode_1}.\n"
         f"Open with '{first_name},'\n"
         "Give 3 concrete, specific recommendations tied DIRECTLY to the logged session data above.\n"
+        "Write in past tense — the athlete has already completed this session. React to what they did.\n"
         "You MUST reference the actual exercises, loads, or times the athlete entered.\n"
         "Do NOT give generic recovery, hydration, or nutrition advice unless the wellness data specifically justifies it.\n"
         "Focus on what to DO in the next 24–48 hours. Be a coach, not a chatbot.\n"
-        "Keep to 3–5 sentences. No waffle, no generics."
+        "Keep to 3–4 sentences. No waffle, no generics."
     )
 
     persona_2 = persona_prompt(ai_mode_2)
@@ -1405,6 +1406,7 @@ def make_ai_suggestions(
         f"Write as the {ai_mode_2}.\n"
         f"Open with '{first_name},'\n"
         "Add 2 specific observations tied to the actual session data — reference the exercises or loads logged.\n"
+        "Write in past tense — the athlete has already completed this session. React to what they did.\n"
         "Do NOT mention hydration, nutrition, or mindfulness unless wellness scores specifically warrant it.\n"
         "End with ONE pointed reflective question about their training, not their lifestyle.\n"
         "3–4 sentences maximum. Be direct."
@@ -1415,7 +1417,7 @@ def make_ai_suggestions(
         future_1 = executor.submit(
             call_openai_chat,
             [{"role": "system", "content": system_1}, {"role": "user", "content": user_1}],
-            300,
+            250,
         )
         future_2 = executor.submit(
             call_openai_chat,
