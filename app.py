@@ -3353,7 +3353,7 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
             }) if mode_1_label else None,
         ], style={"margin": "14px 0 6px"}))
         body.append(html.Div(ai1, style={"borderLeft": "3px solid #1565C0", "background": "#e3f2fd",
-                                         "borderRadius": "0 8px 8px 0", "padding": "10px 12px",
+                                         "borderRadius": "8px", "padding": "10px 12px",
                                          "fontSize": "12px", "color": "#0d47a1", "lineHeight": "1.5"}))
 
     if ai2 != "—":
@@ -3368,7 +3368,7 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
             }) if mode_2_label else None,
         ], style={"margin": "14px 0 6px"}))
         body.append(html.Div(ai2, style={"borderLeft": "3px solid #2E7D32", "background": "#e8f5e9",
-                                         "borderRadius": "0 8px 8px 0", "padding": "10px 12px",
+                                         "borderRadius": "8px", "padding": "10px 12px",
                                          "fontSize": "12px", "color": "#1b5e20", "lineHeight": "1.5"}))
 
     modal_title = html.Div([
