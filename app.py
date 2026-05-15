@@ -3678,26 +3678,30 @@ def save_and_ai(
 
     ai1_div = html.Div(html.Div([
         html.Div([
-            html.Span("ADAPTIVE Insight 1", className="ai-title"),
+            html.Span("ADAPTIVE Insight 1", className="ai-title",
+                      style={"display": "inline", "verticalAlign": "middle"}),
             html.Span(f" · {ai_mode_1.replace(' Coach', '')}", style={
                 "fontSize": "11px", "color": "#2E7D32", "fontWeight": "600",
                 "background": "#e8f5e9", "padding": "2px 8px",
-                "borderRadius": "999px", "marginLeft": "8px"
+                "borderRadius": "999px", "marginLeft": "8px",
+                "verticalAlign": "middle", "display": "inline-block",
             }),
-        ], style={"display": "flex", "alignItems": "center", "marginBottom": "6px"}),
-        html.P(ai1)
+        ], style={"marginBottom": "8px", "lineHeight": "1.6"}),
+        html.P(ai1, style={"margin": 0})
     ], className="ai-card ai-card-green"))
 
     ai2_div = html.Div(html.Div([
         html.Div([
-            html.Span("ADAPTIVE Insight 2", className="ai-title"),
+            html.Span("ADAPTIVE Insight 2", className="ai-title",
+                      style={"display": "inline", "verticalAlign": "middle"}),
             html.Span(f" · {ai_mode_2.replace(' Coach', '')}", style={
                 "fontSize": "11px", "color": "#1565C0", "fontWeight": "600",
                 "background": "#e3f2fd", "padding": "2px 8px",
-                "borderRadius": "999px", "marginLeft": "8px"
+                "borderRadius": "999px", "marginLeft": "8px",
+                "verticalAlign": "middle", "display": "inline-block",
             }),
-        ], style={"display": "flex", "alignItems": "center", "marginBottom": "6px"}),
-        html.P(ai2)
+        ], style={"marginBottom": "8px", "lineHeight": "1.6"}),
+        html.P(ai2, style={"margin": 0})
     ], className="ai-card ai-card-blue"))
 
     return ai1_div, ai2_div, html.Span(
