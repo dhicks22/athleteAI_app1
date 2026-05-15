@@ -2370,19 +2370,22 @@ def app_header(center=False):
     return html.Div(
         [
             html.Img(src="/assets/app_icon.png",
-                     style={"height": "50px", "marginRight": "10px", "verticalAlign": "middle"}),
+                     style={"height": "50px", "marginRight": "12px", "flexShrink": "0"}),
             html.Div(
                 [
                     html.H3("ADAPTIV",
-                            style={"margin": 0, "fontWeight": 600, "textAlign": align}),
+                            style={"margin": 0, "fontWeight": 600, "lineHeight": "1.1"}),
                     html.Small("AI Powered Athlete Insights",
-                               style={"color": "#555", "textAlign": align, "display": "block"}),
+                               style={"color": "#555", "display": "block", "lineHeight": "1.3"}),
                 ],
-                style={"display": "inline-block", "verticalAlign": "middle"},
             ),
         ],
-
-        style={"textAlign": align, "marginBottom": "20px"},
+        style={
+            "display": "flex",
+            "alignItems": "center",
+            "justifyContent": "center" if center else "flex-start",
+            "marginBottom": "20px",
+        },
     )
 
 
