@@ -1367,8 +1367,11 @@ def make_ai_suggestions(
     system_1 = (
         f"{persona_1}\n\n"
         f"You are giving post-session feedback to {first_name}. "
-        "Be specific, direct, and grounded in the numbers provided. "
-        "Do NOT give generic advice. Do NOT repeat what was said in previous sessions. "
+        "The athlete has JUST completed this session. Write entirely in past tense. "
+        "ONLY reference information explicitly provided in the session data below. "
+        "Do NOT invent exercises, times, loads, or details not present in the data. "
+        "If a field says 'none provided', do not reference it. "
+        "Do NOT give generic advice that could apply to any athlete. "
         "Do NOT mention injury or medical issues. "
         f"Always open with '{first_name},' — this is mandatory."
     )
@@ -1381,21 +1384,24 @@ def make_ai_suggestions(
         "TASK — PRIMARY COACH:\n"
         f"Write feedback as the {ai_mode_1}.\n"
         f"Open with '{first_name},'\n"
-        "Give 3 concrete, specific recommendations tied DIRECTLY to the logged session data above.\n"
-        "Write in past tense — the athlete has already completed this session. React to what they did.\n"
-        "You MUST reference the actual exercises, loads, or times the athlete entered.\n"
-        "Do NOT give generic recovery, hydration, or nutrition advice unless the wellness data specifically justifies it.\n"
-        "Focus on what to DO in the next 24–48 hours. Be a coach, not a chatbot.\n"
-        "Keep to 3–4 sentences. No waffle, no generics."
+        "The athlete has just finished this session. React to what they actually did.\n"
+        "Reference ONLY the workout, focus, venue, RPE, sets/reps/load, track times, and notes explicitly listed above.\n"
+        "If sets/reps or track times say 'none provided', do not mention them.\n"
+        "Do NOT fabricate any exercise names, distances, loads, or times not in the data.\n"
+        "Give 2-3 specific observations grounded entirely in the logged data.\n"
+        "End with one forward-looking action for the next 24-48 hours, tied to what was logged.\n"
+        "3-4 sentences. No waffle, no generics."
     )
 
     persona_2 = persona_prompt(ai_mode_2)
     system_2 = (
         f"{persona_2}\n\n"
-        f"You are a secondary coach giving {first_name} a complementary perspective. "
+        f"You are a secondary coach giving {first_name} a complementary perspective after their session. "
         f"The primary coach ({ai_mode_1}) is handling the main training focus. "
-        "Focus on what they will NOT cover. "
-        "Be specific and practical. Do NOT repeat training load or speed advice. "
+        "The athlete has JUST completed this session. Write entirely in past tense. "
+        "ONLY reference information explicitly provided in the session data. "
+        "Do NOT invent details not present in the data. "
+        "Focus on what the primary coach will NOT cover. "
         f"Always open with '{first_name},' — this is mandatory."
     )
     user_2 = (
@@ -1405,11 +1411,13 @@ def make_ai_suggestions(
         "TASK — SECONDARY COACH:\n"
         f"Write as the {ai_mode_2}.\n"
         f"Open with '{first_name},'\n"
-        "Add 2 specific observations tied to the actual session data — reference the exercises or loads logged.\n"
-        "Write in past tense — the athlete has already completed this session. React to what they did.\n"
-        "Do NOT mention hydration, nutrition, or mindfulness unless wellness scores specifically warrant it.\n"
-        "End with ONE pointed reflective question about their training, not their lifestyle.\n"
-        "3–4 sentences maximum. Be direct."
+        "The athlete has just finished this session. React to what they actually did.\n"
+        "Reference ONLY data explicitly listed above — workout, focus, RPE, wellness scores, notes logged.\n"
+        "If a field says 'none provided', skip it entirely.\n"
+        "Do NOT fabricate exercises, loads, or times not in the data.\n"
+        "Give 2 specific observations from the logged data.\n"
+        "End with ONE reflective question about their training based on what was logged.\n"
+        "3-4 sentences maximum. Be direct."
     )
 
     # ── Run both calls in parallel — cuts total wait time roughly in half ──
@@ -2525,7 +2533,7 @@ def build_main_layout(auth_data):
             ]),
             html.Hr(),
             html.H4("Selected Session & Athlete Input", className="mt-3 mb-1"),
-            html.P("Log your session data and generate coaching feedback",
+            html.P("Log your session data and generate ADAPTIVE insights",
                    style={"color": "#6e6e6e", "fontSize": "13px", "margin": "0 0 12px 0"}),
             html.Div(
                 id="session-input-container",
@@ -2623,7 +2631,7 @@ def build_main_layout(auth_data):
                         ], md=6),
                         dbc.Col([
                             html.Div([
-                                dbc.Label("Primary Coaching Feedback (select one)"),
+                                dbc.Label("Primary ADAPTIVE insight (select one)"),
                                 dcc.RadioItems(
                                     id="ai-mode-1",
                                     options=[
@@ -2638,7 +2646,7 @@ def build_main_layout(auth_data):
                                 ),
                             ], style={"marginBottom": "16px"}),
                             html.Div([
-                                dbc.Label("Secondary Coaching Feedback (select one)"),
+                                dbc.Label("Secondary ADAPTIVE insight (select one)"),
                                 dcc.RadioItems(
                                     id="ai-mode-2",
                                     options=[
@@ -2652,7 +2660,7 @@ def build_main_layout(auth_data):
                                     inputClassName="coach-radio-input", labelClassName="coach-radio-label",
                                 ),
                             ], style={"marginBottom": "4px"}),
-                            dbc.Button("Log Session & Generate Coaching Feedback",
+                            dbc.Button("Log Session & Generate ADAPTIVE insights",
                                        id="btn-generate-ai", className="mt-4 w-100 ai-save-btn"),
                             html.Div(id="save-status", className="mt-2"),
                             dcc.Loading(id="ai-loader", type="circle", children=[
@@ -3325,12 +3333,12 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
         body.append(html.Div(gym_items))
 
     if ai1 != "—":
-        body.append(section_label("Primary Coaching Feedback"))
+        body.append(section_label("Primary ADAPTIVE insights"))
         body.append(html.Div(ai1, style={"borderLeft": "3px solid #1565C0", "background": "#e3f2fd",
                                          "borderRadius": "0 8px 8px 0", "padding": "10px 12px",
                                          "fontSize": "12px", "color": "#0d47a1", "lineHeight": "1.5"}))
     if ai2 != "—":
-        body.append(section_label("Secondary Coaching Feedback"))
+        body.append(section_label("Secondary ADAPTIVE insights"))
         body.append(html.Div(ai2, style={"borderLeft": "3px solid #2E7D32", "background": "#e8f5e9",
                                          "borderRadius": "0 8px 8px 0", "padding": "10px 12px",
                                          "fontSize": "12px", "color": "#1b5e20", "lineHeight": "1.5"}))
@@ -3505,7 +3513,7 @@ def save_and_ai(
     if not n_clicks:          raise PreventUpdate
     if not athlete_name:      return no_update, no_update, "⚠️ Please select an athlete first.", no_update
     if not ai_mode_1 or not ai_mode_2:
-        return no_update, no_update, "⚠️ Please select coaching feedback.", no_update
+        return no_update, no_update, "⚠️ Please select focus of ADAPTIVE insight.", no_update
     if not selected_date:     return no_update, no_update, "⚠️ Please select a date from the calendar first.", no_update
 
     rpe = 3.0 if rpe is None else float(rpe)
@@ -3621,7 +3629,7 @@ def save_and_ai(
     focus_val = safe(df, row_idx, "Focus", "")
     venue_val = safe(df, row_idx, "Venue", "")
     workout_val = safe(df, row_idx, "Workout", "")
-    status_msg = "✅ Saved, coaching feedback generated & email sent to Coach."
+    status_msg = "✅ Saved, ADAPTIVE insights generated & email sent to Coach."
 
     coach3_email = safe(df, row_idx, "Coach_email3") if "Coach_email3" in df.columns else ""
     try:
@@ -3634,14 +3642,34 @@ def save_and_ai(
             "Athlete_Notes": notes, "Sets_Reps_Load": sets_reps_load, "Track_Reps_Times": track_reps_times,
             "AI_Suggestion_1": ai1, "AI_Suggestion_2": ai2, "Athlete_email": athlete_email,
             "Coach_email3": coach3_email,
+            "AI_Mode_1": ai_mode_1, "AI_Mode_2": ai_mode_2,
         })
     except Exception as e:
-        status_msg = f"⚠️ Saved + coaching feedback generated, but email failed: {e}"
+        status_msg = f"⚠️ Saved + ADAPTIVE insights generated, but email failed: {e}"
 
-    ai1_div = html.Div(html.Div([html.Div("💡 Coaching Feedback 1", className="ai-title"), html.P(ai1)],
-                                className="ai-card ai-card-green"))
-    ai2_div = html.Div(html.Div([html.Div("💡 Coaching Feedback 2", className="ai-title"), html.P(ai2)],
-                                className="ai-card ai-card-blue"))
+    ai1_div = html.Div(html.Div([
+        html.Div([
+            html.Span("ADAPTIVE Insight 1", className="ai-title"),
+            html.Span(f" · {ai_mode_1.replace(' Coach', '')}", style={
+                "fontSize": "11px", "color": "#2E7D32", "fontWeight": "600",
+                "background": "#e8f5e9", "padding": "2px 8px",
+                "borderRadius": "999px", "marginLeft": "8px"
+            }),
+        ], style={"display": "flex", "alignItems": "center", "marginBottom": "6px"}),
+        html.P(ai1)
+    ], className="ai-card ai-card-green"))
+
+    ai2_div = html.Div(html.Div([
+        html.Div([
+            html.Span("ADAPTIVE Insight 2", className="ai-title"),
+            html.Span(f" · {ai_mode_2.replace(' Coach', '')}", style={
+                "fontSize": "11px", "color": "#1565C0", "fontWeight": "600",
+                "background": "#e3f2fd", "padding": "2px 8px",
+                "borderRadius": "999px", "marginLeft": "8px"
+            }),
+        ], style={"display": "flex", "alignItems": "center", "marginBottom": "6px"}),
+        html.P(ai2)
+    ], className="ai-card ai-card-blue"))
 
     return ai1_div, ai2_div, html.Span(
         status_msg,
