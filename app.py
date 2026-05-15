@@ -3333,12 +3333,34 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
         body.append(html.Div(gym_items))
 
     if ai1 != "—":
-        body.append(section_label("Primary ADAPTIVE insights"))
+        ai_mode_1_val = v("AI_Mode_1", "—")
+        mode_1_label = ai_mode_1_val.replace(" Coach", "") if ai_mode_1_val != "—" else ""
+        body.append(html.Div([
+            html.Span("PRIMARY ADAPTIVE INSIGHTS", style={
+                "fontSize": "11px", "fontWeight": "600", "color": "#999",
+                "textTransform": "uppercase", "letterSpacing": "0.05em"}),
+            html.Span(f" · {mode_1_label}", style={
+                "fontSize": "11px", "fontWeight": "600", "color": "#1565C0",
+                "background": "#e3f2fd", "padding": "2px 8px",
+                "borderRadius": "999px", "marginLeft": "6px"
+            }) if mode_1_label else None,
+        ], style={"margin": "14px 0 6px"}))
         body.append(html.Div(ai1, style={"borderLeft": "3px solid #1565C0", "background": "#e3f2fd",
                                          "borderRadius": "0 8px 8px 0", "padding": "10px 12px",
                                          "fontSize": "12px", "color": "#0d47a1", "lineHeight": "1.5"}))
     if ai2 != "—":
-        body.append(section_label("Secondary ADAPTIVE insights"))
+        ai_mode_2_val = v("AI_Mode_2", "—")
+        mode_2_label = ai_mode_2_val.replace(" Coach", "") if ai_mode_2_val != "—" else ""
+        body.append(html.Div([
+            html.Span("SECONDARY ADAPTIVE INSIGHTS", style={
+                "fontSize": "11px", "fontWeight": "600", "color": "#999",
+                "textTransform": "uppercase", "letterSpacing": "0.05em"}),
+            html.Span(f" · {mode_2_label}", style={
+                "fontSize": "11px", "fontWeight": "600", "color": "#2E7D32",
+                "background": "#e8f5e9", "padding": "2px 8px",
+                "borderRadius": "999px", "marginLeft": "6px"
+            }) if mode_2_label else None,
+        ], style={"margin": "14px 0 6px"}))
         body.append(html.Div(ai2, style={"borderLeft": "3px solid #2E7D32", "background": "#e8f5e9",
                                          "borderRadius": "0 8px 8px 0", "padding": "10px 12px",
                                          "fontSize": "12px", "color": "#1b5e20", "lineHeight": "1.5"}))
