@@ -2381,6 +2381,7 @@ def app_header(center=False):
                 style={"display": "inline-block", "verticalAlign": "middle"},
             ),
         ],
+
         style={"textAlign": align, "marginBottom": "20px"},
     )
 
