@@ -1397,10 +1397,12 @@ def make_ai_suggestions(
     system_2 = (
         f"{persona_2}\n\n"
         f"You are a secondary coach giving {first_name} a complementary perspective after their session. "
-        f"The primary coach ({ai_mode_1}) is handling the main training focus. "
+        f"The primary coach ({ai_mode_1}) has already covered the main training focus. "
         "The athlete has JUST completed this session. Write entirely in past tense. "
         "ONLY reference information explicitly provided in the session data. "
         "Do NOT invent details not present in the data. "
+        f"You MUST NOT repeat or echo anything the {ai_mode_1} would say. "
+        "Your observations must come from a completely different coaching lens. "
         "Focus on what the primary coach will NOT cover. "
         f"Always open with '{first_name},' — this is mandatory."
     )
@@ -1414,8 +1416,9 @@ def make_ai_suggestions(
         "The athlete has just finished this session. React to what they actually did.\n"
         "Reference ONLY data explicitly listed above — workout, focus, RPE, wellness scores, notes logged.\n"
         "If a field says 'none provided', skip it entirely.\n"
-        "Do NOT fabricate exercises, loads, or times not in the data.\n"
-        "Give 2 specific observations from the logged data.\n"
+         "Do NOT fabricate exercises, loads, or times not in the data.\n"
+        f"Do NOT repeat observations already covered by the {ai_mode_1} — your angle must be distinct.\n"
+        "Give 2 specific observations from the logged data that the primary coach would not address.\n"
         "End with ONE reflective question about their training based on what was logged.\n"
         "3-4 sentences maximum. Be direct."
     )
@@ -3213,35 +3216,46 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
         val = pd.to_numeric(row.get(col, np.nan), errors="coerce")
         return int(val) if pd.notna(val) and val > 0 else None
 
-    workout = v("Workout");
-    focus = v("Focus");
+    workout = v("Workout")
+    focus = v("Focus")
     venue = v("Venue")
-    notes = v("Athlete_Notes");
-    sets = v("Sets_Reps_Load");
+    notes = v("Athlete_Notes")
+    sets = v("Sets_Reps_Load")
     track = v("Track_Reps_Times")
-    ai1 = v("AI_Suggestion_1");
+
+    ai1 = v("AI_Suggestion_1")
     ai2 = v("AI_Suggestion_2")
 
-    sleep_v = num("Sleep_1_5");
+    # Extract mode label from prefix e.g. "[Recovery & Readiness Coach] Dylan,..."
+    import re
+    mode_1_label, mode_2_label = "", ""
+    m1 = re.match(r'^\[(.+?)\]\s*', ai1)
+    m2 = re.match(r'^\[(.+?)\]\s*', ai2)
+    if m1:
+        mode_1_label = m1.group(1).replace(" Coach", "")
+        ai1 = ai1[m1.end():]
+    if m2:
+        mode_2_label = m2.group(1).replace(" Coach", "")
+        ai2 = ai2[m2.end():]
+
+    sleep_v = num("Sleep_1_5")
     fatigue_v = num("Fatigue_1_5")
-    mood_v = num("Mood_1_5");
+    mood_v = num("Mood_1_5")
     soreness_v = num("Soreness_1_5")
-    rpe_v = num("RPE_Post_Session");
+    rpe_v = num("RPE_Post_Session")
     quality_v = num("Session_1_5")
 
     def metric_box(label, val, invert=False):
-        # Traffic light: higher=better for sleep/fatigue/mood/quality
-        # invert=True for soreness/RPE where lower=better
         if val is None:
             bg, dot, txt = "#f5f5f5", "#ccc", "#ccc"
         else:
-            score = (6 - val) if invert else val  # flip so 1=worst always
+            score = (6 - val) if invert else val
             if score >= 4:
-                bg, dot, txt = "#e8f5e9", "#2E7D32", "#1b5e20"  # green
+                bg, dot, txt = "#e8f5e9", "#2E7D32", "#1b5e20"
             elif score == 3:
-                bg, dot, txt = "#fff8e1", "#F9A825", "#5d4037"  # amber
+                bg, dot, txt = "#fff8e1", "#F9A825", "#5d4037"
             else:
-                bg, dot, txt = "#ffebee", "#C62828", "#B71C1C"  # red
+                bg, dot, txt = "#ffebee", "#C62828", "#B71C1C"
         return html.Div([
             html.Div(label, style={"fontSize": "11px", "color": "#888", "marginBottom": "2px"}),
             html.Div([str(val), html.Span("/5", style={"fontSize": "11px", "color": txt, "opacity": "0.7"})],
@@ -3254,10 +3268,6 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
         return html.Div(text, style={"fontSize": "11px", "fontWeight": "600", "color": "#999",
                                      "textTransform": "uppercase", "letterSpacing": "0.05em",
                                      "margin": "14px 0 6px"})
-
-    pill_style = {"display": "inline-block", "fontSize": "12px", "padding": "3px 10px",
-                  "borderRadius": "999px", "background": "#f0f0f0", "color": "#555",
-                  "marginRight": "6px", "marginBottom": "4px"}
 
     body = []
     body.append(html.Div([
@@ -3290,7 +3300,6 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
     sets_url = str(row.get("Sets_Reps_Load_url", "") or "").strip()
     track_url = str(row.get("Track_Reps_Times_url", "") or "").strip()
 
-    # Rectangle style matching athlete notes — no pills
     rect_base = {"background": "#f5f5f5", "borderRadius": "8px", "padding": "10px 12px",
                  "fontSize": "13px", "color": "#444", "lineHeight": "1.5", "marginBottom": "6px"}
     rect_link = {"background": "#e3f2fd", "borderRadius": "8px", "padding": "10px 12px",
@@ -3333,8 +3342,6 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
         body.append(html.Div(gym_items))
 
     if ai1 != "—":
-        ai_mode_1_val = v("AI_Mode_1", "—")
-        mode_1_label = ai_mode_1_val.replace(" Coach", "") if ai_mode_1_val != "—" else ""
         body.append(html.Div([
             html.Span("PRIMARY ADAPTIVE INSIGHTS", style={
                 "fontSize": "11px", "fontWeight": "600", "color": "#999",
@@ -3348,9 +3355,8 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
         body.append(html.Div(ai1, style={"borderLeft": "3px solid #1565C0", "background": "#e3f2fd",
                                          "borderRadius": "0 8px 8px 0", "padding": "10px 12px",
                                          "fontSize": "12px", "color": "#0d47a1", "lineHeight": "1.5"}))
+
     if ai2 != "—":
-        ai_mode_2_val = v("AI_Mode_2", "—")
-        mode_2_label = ai_mode_2_val.replace(" Coach", "") if ai_mode_2_val != "—" else ""
         body.append(html.Div([
             html.Span("SECONDARY ADAPTIVE INSIGHTS", style={
                 "fontSize": "11px", "fontWeight": "600", "color": "#999",
@@ -3635,7 +3641,8 @@ def save_and_ai(
         "RPE_Post_Session": rpe, "Session_1_5": session_quality,
         "Sleep_1_5": sleep, "Fatigue_1_5": fatigue, "Mood_1_5": mood, "Soreness_1_5": soreness,
         "Athlete_Notes": notes, "Sets_Reps_Load": sets_reps_load, "Track_Reps_Times": track_reps_times,
-        "AI_Suggestion_1": ai1, "AI_Suggestion_2": ai2,
+        "AI_Suggestion_1": f"[{ai_mode_1}] {ai1}",
+        "AI_Suggestion_2": f"[{ai_mode_2}] {ai2}",
         "Last_Updated": dt.datetime.now().isoformat(timespec="seconds"),
     }
     # Write scaled RPE into sRPE so the Load formula recalculates
