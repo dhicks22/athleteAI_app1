@@ -2112,7 +2112,7 @@ app = Dash(
     __name__,
     external_stylesheets=[dbc.themes.BOOTSTRAP],
     suppress_callback_exceptions=True,
-    title="Adaptive Coaching Intelligence",
+    title="ADAPTIV",
     update_title=None,
 )
 
@@ -2132,7 +2132,7 @@ app.index_string = """
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
         <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
         <link rel="apple-touch-icon" href="/assets/icon-192.png">
-        <title>Adaptive Coaching Intelligence</title>
+        <title>ADAPTIV</title>
         <style>
           .coach-radio {
             display: flex;
@@ -2373,9 +2373,9 @@ def app_header(center=False):
                      style={"height": "50px", "marginRight": "10px", "verticalAlign": "middle"}),
             html.Div(
                 [
-                    html.H3("Adaptive Coaching Intelligence",
+                    html.H3("ADAPTIV",
                             style={"margin": 0, "fontWeight": 600, "textAlign": align}),
-                    html.Small("Empowering performance through athlete insight",
+                    html.Small("AI Powered Athlete Insights",
                                style={"color": "#555", "textAlign": align, "display": "block"}),
                 ],
                 style={"display": "inline-block", "verticalAlign": "middle"},
@@ -2536,7 +2536,7 @@ def build_main_layout(auth_data):
             ]),
             html.Hr(),
             html.H4("Selected Session & Athlete Input", className="mt-3 mb-1"),
-            html.P("Log your session data and generate ADAPTIVE insights",
+            html.P("Log your session data and generate ADAPTIV insights",
                    style={"color": "#6e6e6e", "fontSize": "13px", "margin": "0 0 12px 0"}),
             html.Div(
                 id="session-input-container",
@@ -2634,7 +2634,7 @@ def build_main_layout(auth_data):
                         ], md=6),
                         dbc.Col([
                             html.Div([
-                                dbc.Label("Primary ADAPTIVE insight (select one)"),
+                                dbc.Label("Primary ADAPTIV insight (select one)"),
                                 dcc.RadioItems(
                                     id="ai-mode-1",
                                     options=[
@@ -2649,7 +2649,7 @@ def build_main_layout(auth_data):
                                 ),
                             ], style={"marginBottom": "16px"}),
                             html.Div([
-                                dbc.Label("Secondary ADAPTIVE insight (select one)"),
+                                dbc.Label("Secondary ADAPTIV insight (select one)"),
                                 dcc.RadioItems(
                                     id="ai-mode-2",
                                     options=[
@@ -2663,7 +2663,7 @@ def build_main_layout(auth_data):
                                     inputClassName="coach-radio-input", labelClassName="coach-radio-label",
                                 ),
                             ], style={"marginBottom": "4px"}),
-                            dbc.Button("Log Session & Generate ADAPTIVE insights",
+                            dbc.Button("Log Session & Generate ADAPTIV insights",
                                        id="btn-generate-ai", className="mt-4 w-100 ai-save-btn"),
                             html.Div(id="save-status", className="mt-2"),
                             dcc.Loading(id="ai-loader", type="circle", children=[
@@ -2866,8 +2866,8 @@ app.layout = html.Div([
         id="splash-screen",
         children=[
             html.Img(src="/assets/app_icon.png", className="splash-logo"),
-            html.H2("Adaptive Coaching Intelligence", className="splash-title"),
-            html.P("Empowering performance through athlete insight", className="splash-subtitle"),
+            html.H2("ADAPTIV", className="splash-title"),
+            html.P("AI Powered Athlete Insight", className="splash-subtitle"),
             html.Div(className="spinner"),
         ]
     ),
@@ -3343,7 +3343,7 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
 
     if ai1 != "—":
         body.append(html.Div([
-            html.Span("PRIMARY ADAPTIVE INSIGHTS", style={
+            html.Span("PRIMARY ADAPTIV INSIGHTS", style={
                 "fontSize": "11px", "fontWeight": "600", "color": "#999",
                 "textTransform": "uppercase", "letterSpacing": "0.05em"}),
             html.Span(f" · {mode_1_label}", style={
@@ -3358,7 +3358,7 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
 
     if ai2 != "—":
         body.append(html.Div([
-            html.Span("SECONDARY ADAPTIVE INSIGHTS", style={
+            html.Span("SECONDARY ADAPTIV INSIGHTS", style={
                 "fontSize": "11px", "fontWeight": "600", "color": "#999",
                 "textTransform": "uppercase", "letterSpacing": "0.05em"}),
             html.Span(f" · {mode_2_label}", style={
@@ -3541,7 +3541,7 @@ def save_and_ai(
     if not n_clicks:          raise PreventUpdate
     if not athlete_name:      return no_update, no_update, "⚠️ Please select an athlete first.", no_update
     if not ai_mode_1 or not ai_mode_2:
-        return no_update, no_update, "⚠️ Please select focus of ADAPTIVE insight.", no_update
+        return no_update, no_update, "⚠️ Please select focus of ADAPTIV insight.", no_update
     if not selected_date:     return no_update, no_update, "⚠️ Please select a date from the calendar first.", no_update
 
     rpe = 3.0 if rpe is None else float(rpe)
@@ -3658,7 +3658,7 @@ def save_and_ai(
     focus_val = safe(df, row_idx, "Focus", "")
     venue_val = safe(df, row_idx, "Venue", "")
     workout_val = safe(df, row_idx, "Workout", "")
-    status_msg = "✅ Saved, ADAPTIVE insights generated & email sent to Coach."
+    status_msg = "✅ Saved, ADAPTIV insights generated & email sent to Coach."
 
     coach3_email = safe(df, row_idx, "Coach_email3") if "Coach_email3" in df.columns else ""
     try:
@@ -3674,11 +3674,11 @@ def save_and_ai(
             "AI_Mode_1": ai_mode_1, "AI_Mode_2": ai_mode_2,
         })
     except Exception as e:
-        status_msg = f"⚠️ Saved + ADAPTIVE insights generated, but email failed: {e}"
+        status_msg = f"⚠️ Saved + ADAPTIV insights generated, but email failed: {e}"
 
     ai1_div = html.Div(html.Div([
         html.Div([
-            html.Span("ADAPTIVE Insight 1", className="ai-title",
+            html.Span("ADAPTIV Insight 1", className="ai-title",
                       style={"display": "inline", "verticalAlign": "middle"}),
             html.Span(f" · {ai_mode_1.replace(' Coach', '')}", style={
                 "fontSize": "11px", "color": "#2E7D32", "fontWeight": "600",
@@ -3692,7 +3692,7 @@ def save_and_ai(
 
     ai2_div = html.Div(html.Div([
         html.Div([
-            html.Span("ADAPTIVE Insight 2", className="ai-title",
+            html.Span("ADAPTIV Insight 2", className="ai-title",
                       style={"display": "inline", "verticalAlign": "middle"}),
             html.Span(f" · {ai_mode_2.replace(' Coach', '')}", style={
                 "fontSize": "11px", "color": "#1565C0", "fontWeight": "600",
@@ -4283,7 +4283,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       <div class="topbar">
         <span class="brand">
           {"<img src='data:image/png;base64," + logo_b64 + "' alt='ACI' style='width:18px;height:18px;object-fit:contain;filter:brightness(0) invert(1);opacity:0.85'/>" if logo_b64 else ""}
-          ACI &middot; Adaptive Coaching
+          ACI &middot; ADAPTIV
         </span>
       </div>
       <div class="dials">
@@ -4534,15 +4534,15 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       octx.globalCompositeOperation='source-in';
       octx.fillStyle='rgba(255,255,255,0.90)';octx.fillRect(0,0,LOGO_SIZE,LOGO_SIZE);
       ctx.font='500 26px system-ui';
-      const tw=ctx.measureText('ACI \u00b7 ADAPTIVE COACHING').width;
+      const tw=ctx.measureText('ACI \u00b7 ADAPTIV').width;
       const bx=CX-(LOGO_SIZE+12+tw)/2;
       ctx.drawImage(oc,bx,BRAND_Y,LOGO_SIZE,LOGO_SIZE);
       ctx.fillStyle='rgba(255,255,255,0.70)';ctx.textAlign='left';ctx.textBaseline='middle';
-      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',bx+LOGO_SIZE+12,BRAND_Y+LOGO_SIZE/2);
+      ctx.fillText('ACI \u00b7 ADAPTIV',bx+LOGO_SIZE+12,BRAND_Y+LOGO_SIZE/2);
     }}else{{
       ctx.font='500 26px system-ui';ctx.fillStyle='rgba(255,255,255,0.70)';
       ctx.textAlign='center';ctx.textBaseline='middle';
-      ctx.fillText('ACI \u00b7 ADAPTIVE COACHING',CX,BRAND_Y+LOGO_SIZE/2);
+      ctx.fillText('ACI \u00b7 ADAPTIV',CX,BRAND_Y+LOGO_SIZE/2);
     }}
 
     // ── 4 equal rings ────────────────────────────────────────────────────────
