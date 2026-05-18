@@ -117,8 +117,8 @@ body {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  animation: splashFade 5.0s ease-in-out forwards;
-  animation-delay: 2.5s;
+  animation: splashFade 4.0s ease-in-out forwards;
+  animation-delay: 2.0s;
   z-index: 9999;
 }
 
