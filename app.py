@@ -1373,6 +1373,8 @@ def make_ai_suggestions(
         "If a field says 'none provided', do not reference it. "
         "Do NOT give generic advice that could apply to any athlete. "
         "Do NOT mention injury or medical issues. "
+        "BANNED PHRASES: looked, looks, looking, appeared, it looked like, looked controlled, looked strong — "
+        "these imply visual observation. Use felt, came in, registered, held, sat, tracked, ran, moved instead. "
         f"Always open with '{first_name},' — this is mandatory."
     )
     user_1 = (
@@ -1383,7 +1385,9 @@ def make_ai_suggestions(
         f"Wellness pattern scan (last 7 days):\n{wellness_scan}\n\n"
         "TASK — PRIMARY COACH:\n"
         f"Write feedback as the {ai_mode_1}.\n"
-        f"Open with '{first_name},'\n"
+        "BANNED PHRASES: looked, looks, looking, appeared, it looked like — "
+        "these imply visual observation. Use felt, came in, held, sat, tracked, ran, moved instead. "
+        f"Always open with '{first_name},' — this is mandatory."
         "The athlete has just finished this session. React to what they actually did.\n"
         "Reference ONLY the workout, focus, venue, RPE, sets/reps/load, track times, and notes explicitly listed above.\n"
         "If sets/reps or track times say 'none provided', do not mention them.\n"
@@ -1439,6 +1443,262 @@ def make_ai_suggestions(
         ai2 = future_2.result()
 
     return (ai1 or "").strip(), (ai2 or "").strip()
+
+
+_RADAR_PALETTE = [
+    "#2d96c3",
+    "#e8943a",
+]
+
+_WELLNESS_DIMS = [
+    "Session Quality",
+    "Sleep",
+    "Mood",
+    "Fatigue",
+    "Soreness",
+]
+
+
+def _radar_empty():
+
+    fig = go.Figure()
+
+    fig.update_layout(
+
+        paper_bgcolor="white",
+
+        plot_bgcolor="white",
+
+        annotations=[
+            dict(
+                text="No wellness data logged",
+                x=0.5,
+                y=0.5,
+                xref="paper",
+                yref="paper",
+                showarrow=False,
+                font=dict(
+                    size=13,
+                    color="#999",
+                ),
+            )
+        ],
+    )
+
+    return fig
+
+
+def _radar_fig(df, mode="curr"):
+
+    fig = go.Figure()
+
+    if df is None or df.empty:
+        return _radar_empty()
+
+    dfw = df.copy()
+
+    dims = ["Sleep", "Session Quality", "Soreness", "Fatigue", "Mood"]
+    dims_closed = dims + [dims[0]]
+
+    column_map = {
+        "Session Quality": "Session_1_5",
+        "Sleep":           "Sleep_1_5",
+        "Mood":            "Mood_1_5",
+        "Fatigue":         "Fatigue_1_5",
+        "Soreness":        "Soreness_1_5",
+    }
+
+    current_vals = []
+    compare_vals = []
+    any_real_data = False
+
+    for dim in dims:
+        col = column_map[dim]
+
+        if col not in dfw.columns:
+            current_vals.append(0.0)
+            compare_vals.append(0.0)
+            continue
+
+        v = pd.to_numeric(dfw[col], errors="coerce").dropna()
+
+        if v.empty:
+            current_vals.append(0.0)
+            compare_vals.append(0.0)
+            continue
+
+        any_real_data = True
+        current = v.tail(7).mean()
+
+        if mode == "curr":
+            compare = v.tail(14).head(7).mean()
+        elif mode == "2":
+            compare = v.tail(28).head(14).mean()
+        elif mode == "4":
+            compare = v.tail(56).head(28).mean()
+        else:
+            compare = current
+
+        if pd.isna(compare):
+            compare = current
+
+        if dim == "Soreness":
+            current = 6 - float(np.clip(current, 1, 5))
+            compare = 6 - float(np.clip(compare, 1, 5))
+
+        current_vals.append(float(np.clip(current, 0, 5)))
+        compare_vals.append(float(np.clip(compare, 0, 5)))
+
+    if not any_real_data:
+        return _radar_empty()
+
+    current_closed = current_vals + [current_vals[0]]
+    compare_closed = compare_vals + [compare_vals[0]]
+
+    fig.add_trace(go.Scatterpolar(
+        r=compare_closed, theta=dims_closed, mode="lines",
+        name="Previous Period",
+        line=dict(color="#f5a623", width=2),
+        fill="toself", fillcolor="rgba(245,166,35,0.16)",
+    ))
+
+    fig.add_trace(go.Scatterpolar(
+        r=current_closed, theta=dims_closed, mode="lines+markers",
+        name="Current Week",
+        line=dict(color="#2d96c3", width=3),
+        marker=dict(size=7, color="#2d96c3"),
+        fill="toself", fillcolor="rgba(45,150,195,0.24)",
+    ))
+
+    fig.update_layout(
+        polar=dict(
+            bgcolor="rgba(0,0,0,0)",
+            radialaxis=dict(
+                visible=True, range=[0, 5], tickvals=[1, 2, 3, 4, 5],
+                tickfont=dict(size=10, color="#888"),
+                gridcolor="rgba(0,0,0,0.10)", linecolor="rgba(0,0,0,0.12)",
+            ),
+            angularaxis=dict(
+                rotation=90, direction="clockwise",
+                tickfont=dict(size=13, color="#444", family="'Barlow Condensed', sans-serif"),
+                gridcolor="rgba(0,0,0,0.05)", linecolor="rgba(0,0,0,0.08)",
+            ),
+        ),
+        showlegend=True,
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.08, xanchor="center", x=0.5,
+            bgcolor="rgba(255,255,255,0.72)", bordercolor="rgba(0,0,0,0.06)",
+            borderwidth=1, font=dict(family="'Barlow Condensed', sans-serif", size=12, color="#555"),
+        ),
+        margin=dict(l=70, r=70, t=40, b=40),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+
+    return fig
+
+
+
+def _radar_ai_summary(df, athlete_name="", mode="curr"):
+
+    if df is None or df.empty:
+        return "No wellness data available."
+
+    try:
+
+        # ---------------------------------------------------------
+        # Recent wellness metrics
+        # ---------------------------------------------------------
+
+        def _col(col):
+            if col not in df.columns:
+                return pd.Series(dtype=float)
+            return pd.to_numeric(df[col], errors="coerce").dropna().tail(7)
+
+        sleep = _col("Sleep_1_5")
+        fatigue = _col("Fatigue_1_5")
+        soreness = _col("Soreness_1_5")
+        mood = _col("Mood_1_5")
+        quality = _col("Session_1_5")
+
+        # ---------------------------------------------------------
+        # Build comparison label
+        # ---------------------------------------------------------
+
+        compare_label = {
+            "curr": "previous week",
+            "2": "previous 2 weeks",
+            "4": "previous 4 weeks",
+        }.get(mode, "previous period")
+
+        # ---------------------------------------------------------
+        # Build AI context
+        # ---------------------------------------------------------
+
+        first_name = athlete_name.strip().split()[0] if athlete_name.strip() else "Athlete"
+        context = (
+            f"Athlete first name: {first_name}\n\n"
+            f"7-day wellness averages (1–5 scale):\n"
+            f"- Sleep: {round(float(sleep.mean()), 1) if not sleep.dropna().empty else 'n/a'}\n"
+            f"- Session quality: {round(float(quality.mean()), 1) if not quality.dropna().empty else 'n/a'}\n"
+            f"- Fatigue/energy: {round(float(fatigue.mean()), 1) if not fatigue.dropna().empty else 'n/a'}\n"
+            f"- Mood: {round(float(mood.mean()), 1) if not mood.dropna().empty else 'n/a'}\n"
+            f"- Soreness: {round(float(soreness.mean()), 1) if not soreness.dropna().empty else 'n/a'}\n\n"
+            f"Comparison window: {compare_label}\n\n"
+            f"Open with '{first_name},' then give 2 sentences of specific coaching insight based on these numbers. "
+            f"Reference the scores directly. Say what the pattern means for their training this week."
+        )
+
+        # ---------------------------------------------------------
+        # System prompt
+        # ---------------------------------------------------------
+
+        system_prompt = (
+            "You are a performance coach giving a direct, personal readiness summary to an athlete. "
+            "Always open with their first name followed by a comma — this is mandatory. "
+            "Write in past tense. Reference the actual numbers logged. "
+            "2 sentences maximum. No fluff, no generic advice. "
+            "Tone: direct, warm, like a coach who has looked at the data and has something real to say. "
+            "BANNED: greatness, journey, optimal, warrior, incredible, outstanding, dedication. "
+            "No emojis, no hashtags, no exclamation marks."
+        )
+
+        # ---------------------------------------------------------
+        # Call OpenAI
+        # ---------------------------------------------------------
+
+        insight = call_openai_chat(
+            [
+                {
+                    "role": "system",
+                    "content": system_prompt,
+                },
+                {
+                    "role": "user",
+                    "content": context,
+                },
+            ],
+            max_tokens=140,
+        )
+
+        if not insight:
+            return (
+                "Weekly wellness trends appear stable. "
+                "Current readiness markers are generally positive."
+            )
+
+        return insight.strip()
+
+    except Exception as e:
+
+        print("RADAR AI ERROR:", e)
+
+        return (
+            "Weekly wellness trends appear stable. "
+            "Current readiness markers are generally positive."
+        )
+
+
 
 # ============================================================
 #  Email webhook
@@ -2523,11 +2783,44 @@ def build_main_layout(auth_data):
     )
 
     calendar_view = html.Div(
+
         id="calendar-view",
+
+        style={
+            "padding": "26px 28px 120px 28px",
+        },
+
         children=[
-            html.H4("Training Program", className="mt-3"),
-            html.P("Your scheduled sessions and athlete logging",
-                   style={"color": "#6e6e6e", "fontSize": "13px", "margin": "-8px 0 12px 0"}),
+
+            html.H2(
+
+                "Training Program",
+
+                style={
+                    "fontSize": "28px",
+                    "fontWeight": "500",
+                    "letterSpacing": "-0.01em",
+                    "lineHeight": "1.05",
+                    "margin": "0",
+                    "color": "#222",
+                    "fontFamily": "'Barlow Condensed', sans-serif",
+                },
+            ),
+
+            html.P(
+
+                "Your scheduled sessions and athlete logging",
+
+                style={
+                    "color": "#7f8790",
+                    "fontSize": "13px",
+                    "fontWeight": "500",
+                    "lineHeight": "1.5",
+                    "margin": "8px 0 24px 0",
+                    "fontFamily": "'Barlow Condensed', sans-serif",
+                    "letterSpacing": "0.02em",
+                },
+            ),
             html.Div([
                 html.Div([
                     dbc.Button("◀", id="calendar-prev", size="sm", color="secondary", outline=True, className="me-2"),
@@ -2682,12 +2975,44 @@ def build_main_layout(auth_data):
     )
 
     graphs_view = html.Div(
+
         id="graphs-view",
-        style={"display": "none"},
+
+        style={
+            "display": "none",
+            "padding": "26px 28px 120px 28px",
+        },
+
         children=[
-            html.H4("Training Analytics", className="mt-3 mb-1"),
-            html.P("Load, wellness trends and speed/tempo volumes",
-                   style={"color": "#6e6e6e", "fontSize": "13px", "margin": "0 0 20px 0"}),
+
+            html.H2(
+
+                "Training Analytics",
+
+                style={
+                    "fontSize": "28px",
+                    "fontWeight": "500",
+                    "letterSpacing": "-0.02em",
+                    "lineHeight": "1.1",
+                    "margin": "0",
+                    "color": "#222",
+                    "fontFamily": "'Barlow Condensed', sans-serif",
+                },
+            ),
+
+            html.P(
+
+                "Load, wellness trends and speed/tempo volumes",
+
+                style={
+                    "color": "#7f8790",
+                    "fontSize": "13px",
+                    "fontWeight": "500",
+                    "lineHeight": "1.5",
+                    "margin": "8px 0 24px 0",
+                    "fontFamily": "'Barlow Condensed', sans-serif",
+                },
+            ),
             dbc.Row([
                 dbc.Col([
                     html.Div("View mode", className="fw-semibold text-muted mb-1"),
@@ -2711,71 +3036,220 @@ def build_main_layout(auth_data):
         ],
     )
 
-    ai_view = html.Div(id="ai-view", style={"display": "none"}, children=[
-        html.Div(className="page-wrap", children=[
-            html.Div(style={"marginBottom": "16px"}, children=[
-                html.Div(className="d-flex align-items-center justify-content-between mb-1", children=[
-                    html.H4("Training Session Builder", style={"margin": 0, "fontWeight": 600}),
-                    html.Div(style={"background": "rgba(30,136,229,0.10)", "border": "1px solid rgba(30,136,229,0.25)",
-                                    "color": "#1e88e5", "fontSize": "11px", "padding": "4px 10px",
-                                    "borderRadius": "999px", "fontWeight": 700,
-                                    "display": "inline-flex", "alignItems": "center", "gap": "6px"},
-                             children=[html.Div(className="pill-dot"), html.Span("ACI")]),
-                ]),
-                html.P("AI-generated sessions built around your recent data.",
-                       style={"color": "#6e6e6e", "fontSize": "13px", "margin": "2px 0 0 0"}),
-            ]),
-            dbc.Row(className="g-3", children=[
-                dbc.Col(md=5, children=[
-                    dbc.Card(className="premium-card", children=[
-                        dbc.CardHeader("Session Inputs"),
-                        dbc.CardBody(children=[
-                            html.Div("Keep the goal tight and specific. The plan will follow your recent trends.",
-                                     className="card-muted"),
-                            html.Div(className="divider-soft"),
-                            dbc.Label("Coaching Focus"),
-                            dcc.Dropdown(id="ai-plan-coach",
-                                         options=[{"label": k, "value": k} for k in [
-                                             "Acceleration & Speed Coach", "Tempo & Endurance Coach",
-                                             "Technical Sprint Coach", "Strength & Power Coach",
-                                             "Recovery & Readiness Coach",
-                                         ]],
-                                         placeholder="Select your coach style", clearable=False,
-                                         className="aw-dropdown premium-input"),
-                            html.Br(),
-                            dbc.Label("Main session goal / focus"),
-                            dcc.Textarea(id="ai-plan-goal",
-                                         placeholder="e.g., Lower body speed-strength + low CNS cost.",
-                                         className="form-control premium-textarea"),
-                            html.Br(),
-                            dbc.Label("Approx. session duration (min)"),
-                            dcc.Input(id="ai-plan-duration", type="number", min=10, max=120, step=5, value=45,
-                                      className="form-control premium-number"),
-                            html.Div(className="divider-soft"),
-                            dbc.Button([html.I(className="bi bi-magic me-2"), "Generate Session Plan"],
-                                       id="btn-generate-plan", color="primary", className="w-100 premium-btn"),
-                            html.Div(id="ai-plan-status", className="mt-2 text-danger small"),
-                        ]),
-                    ]),
-                ]),
-                dbc.Col(md=7, children=[
-                    dbc.Card(className="premium-card", children=[
-                        dbc.CardHeader("Suggested Session Plan"),
-                        dbc.CardBody(
-                            dcc.Loading(type="circle", children=html.Div(
-                                id="ai-plan-output",
-                                children=html.Div([
-                                    html.Div("Ready when you are.", className="fw-semibold"),
-                                    html.Div("Generate a session to see structured cards here.",
-                                             className="card-muted"),
-                                ])
-                            ))
-                        ),
-                    ]),
-                ]),
-            ]),
-        ])
-    ])
+    ai_view = html.Div(
+
+        id="ai-view",
+
+        style={"display": "none"},
+
+        children=[
+
+            html.Div(
+
+                className="page-wrap",
+
+                children=[
+
+                    html.Div(
+
+                        className="page-header-block",
+
+                        style={
+                            "paddingTop": "4px",
+                            "marginBottom": "18px",
+                        },
+
+                        children=[
+
+                            html.H2(
+
+                                "Wellness Radar",
+
+                                style={
+                                    "fontSize": "28px",
+                                    "fontWeight": "500",
+                                    "letterSpacing": "-0.02em",
+                                    "lineHeight": "1.1",
+                                    "margin": "0",
+                                    "color": "#222",
+                                    "fontFamily": "'Barlow Condensed', sans-serif",
+                                },
+                            ),
+
+                            html.Div(
+
+                                "Visualising athlete readiness, recovery and wellness trends across recent training exposure",
+
+                                style={
+                                    "color": "#7f8790",
+                                    "fontSize": "13px",
+                                    "fontWeight": "500",
+                                    "lineHeight": "1.5",
+                                    "margin": "8px 0 24px 0",
+                                    "fontFamily": "'Barlow Condensed', sans-serif",
+
+                                },
+                            ),
+                        ],
+                    ),
+                    html.Div(
+
+                        className="d-flex align-items-center gap-2 mb-2",
+
+                        children=[
+
+                            html.Span(
+                                "Compare",
+                                style={
+                                    "fontSize": "12px",
+                                    "fontWeight": "600",
+                                    "color": "#888",
+                                    "marginRight": "10px",
+                                },
+                            ),
+
+                            dcc.RadioItems(
+
+                                id="radar-week-mode",
+
+                                options=[
+                                    {
+                                        "label": "vs Last",
+                                        "value": "curr",
+                                    },
+                                    {
+                                        "label": "2 Weeks",
+                                        "value": "2",
+                                    },
+                                    {
+                                        "label": "4 Weeks",
+                                        "value": "4",
+                                    },
+                                ],
+
+                                value="curr",
+
+                                inline=True,
+
+                                labelStyle={
+                                    "display": "inline-flex",
+                                    "alignItems": "center",
+                                    "justifyContent": "center",
+                                    "padding": "10px 18px",
+                                    "borderRadius": "16px",
+                                    "background": "rgba(255,255,255,0.7)",
+                                    "marginRight": "10px",
+                                    "fontWeight": "600",
+                                    "fontSize": "13px",
+                                    "cursor": "pointer",
+                                    "backdropFilter": "blur(10px)",
+                                    "border": "1px solid rgba(0,0,0,0.06)",
+                                    "fontFamily": "Inter, sans-serif",
+                                },
+
+                                inputStyle={
+                                    "marginRight": "6px",
+                                },
+                            ),
+                        ],
+                    ),
+
+                    html.Div(
+
+                        style={
+                            "background": "rgba(255,255,255,0.55)",
+                            "backdropFilter": "blur(14px)",
+                            "borderRadius": "24px",
+                            "padding": "18px",
+                            "border": "1px solid rgba(255,255,255,0.4)",
+                            "boxShadow": "0 8px 32px rgba(31,38,135,0.10)",
+                        },
+
+                        children=[
+
+                            dcc.Graph(
+
+                                id="wellness-radar-plot",
+
+                                config={
+                                    "displayModeBar": False,
+                                },
+
+                                style={
+                                    "height": "440px",
+                                    "width": "100%",
+                                },
+                            )
+                        ],
+                    ),
+
+                    html.Div(
+
+                        id="wellness-radar-chips",
+
+                        style={
+                            "display": "flex",
+                            "flexWrap": "wrap",
+                            "justifyContent": "center",
+                            "marginTop": "10px",
+                        },
+                    ),
+
+                    html.Div(
+
+                        style={
+
+                            "background": "rgba(255,255,255,0.55)",
+
+                            "backdropFilter": "blur(18px)",
+
+                            "borderRadius": "24px",
+
+                            "padding": "20px 22px",
+
+                            "border": "1px solid rgba(255,255,255,0.45)",
+
+                            "boxShadow": "0 10px 32px rgba(31,38,135,0.08)",
+
+                            "marginTop": "22px",
+
+                            "marginBottom": "100px",
+                        },
+
+                        children=[
+
+                            html.Div(
+
+                                "READINESS INSIGHT",
+
+                                style={
+                                    "fontSize": "11px",
+                                    "fontWeight": "800",
+                                    "letterSpacing": "0.08em",
+                                    "color": "#2d96c3",
+                                    "marginBottom": "12px",
+                                    "fontFamily": "Inter, sans-serif",
+                                },
+                            ),
+
+                            html.Div(
+
+                                id="wellness-ai-summary",
+
+                                style={
+                                    "fontSize": "14px",
+                                    "lineHeight": "1.8",
+                                    "color": "#4b5563",
+                                    "fontWeight": "500",
+                                    "fontFamily": "Inter, sans-serif",
+                                },
+                            ),
+                        ],
+                    ),
+                ],
+            )
+        ],
+    )
 
     session_log_modal = dbc.Modal(
         [
@@ -2823,8 +3297,8 @@ def build_main_layout(auth_data):
         dbc.Col(html.Div([html.I(id="icon-graphs", className="bi bi-bar-chart-line nav-icon"),
                           html.Div("Graphs", className="nav-label")],
                          id="nav-graphs", n_clicks=0, className="nav-item")),
-        dbc.Col(html.Div([html.I(id="icon-ai", className="bi bi-cpu nav-icon"),
-                          html.Div("AI", className="nav-label")],
+        dbc.Col(html.Div([html.I(id="icon-ai", className="bi bi-bullseye nav-icon"),
+                          html.Div("Radar", className="nav-label")],
                          id="nav-ai", n_clicks=0, className="nav-item")),
     ]
     if is_coach:
@@ -2882,6 +3356,224 @@ app.layout = html.Div([
 # ============================================================
 #  Callbacks
 # ============================================================
+
+@app.callback(
+
+    Output("wellness-ai-summary", "children"),
+
+    Input("athlete-dropdown", "value"),
+    Input("radar-week-mode", "value"),
+
+)
+def update_radar_ai_summary(athlete_id, mode):
+
+    if not athlete_id:
+
+        return (
+            "Select an athlete to generate "
+            "readiness insights."
+        )
+
+    df = load_tab_cached(athlete_id)
+
+    if df is None or df.empty:
+
+        return (
+            "No wellness data available for "
+            "analysis."
+        )
+
+    try:
+
+        summary = _radar_ai_summary(
+
+            df,
+
+            athlete_name=athlete_id,
+
+            mode=mode,
+        )
+
+        return summary
+
+    except Exception as e:
+
+        print("RADAR AI CALLBACK ERROR:", e)
+
+        return (
+            "Unable to generate readiness insight."
+        )
+
+@app.callback(
+    Output("wellness-radar-plot", "figure"),
+    Input("athlete-dropdown", "value"),
+    Input("radar-week-mode", "value"),
+)
+def update_radar_plot(athlete_id, mode):
+    if not athlete_id:
+        return _radar_empty()
+    df = load_tab_cached(athlete_id)
+    if df is None or df.empty:
+        return _radar_empty()
+    return _radar_fig(df, mode or "curr")
+
+@app.callback(
+
+    Output("wellness-radar-chips", "children"),
+
+    Input("athlete-dropdown", "value"),
+    Input("radar-week-mode", "value"),
+
+)
+def update_radar_chips(athlete_id, mode):
+
+    if not athlete_id:
+        return []
+
+    df = load_tab_cached(athlete_id)
+
+    if df is None or df.empty:
+        return []
+
+    metrics = [
+
+        ("Sleep", "Sleep_1_5"),
+
+        ("Session Quality", "Session_1_5"),
+
+        ("Soreness", "Soreness_1_5"),
+
+        ("Fatigue", "Fatigue_1_5"),
+
+        ("Mood", "Mood_1_5"),
+    ]
+
+    chips = []
+
+    for label, col in metrics:
+
+        if col not in df.columns:
+            continue
+
+        v = pd.to_numeric(
+            df[col],
+            errors="coerce",
+        ).dropna()
+
+        if len(v) < 7:
+            continue
+
+        # ---------------------------------------------------------
+        # CURRENT
+        # ---------------------------------------------------------
+
+        recent = float(v.tail(7).mean())
+
+        # ---------------------------------------------------------
+        # COMPARISON WINDOWS
+        # ---------------------------------------------------------
+
+        if mode == "curr":
+
+            previous = float(
+                v.tail(14).head(7).mean()
+            )
+
+        elif mode == "2":
+
+            previous = float(
+                v.tail(28).head(14).mean()
+            )
+
+        elif mode == "4":
+
+            previous = float(
+                v.tail(56).head(28).mean()
+            )
+
+        else:
+
+            previous = recent
+
+        # ---------------------------------------------------------
+        # Handle missing comparison
+        # ---------------------------------------------------------
+
+        if np.isnan(previous):
+            previous = recent
+
+        # ---------------------------------------------------------
+        # Invert soreness
+        # Higher soreness = worse
+        # ---------------------------------------------------------
+
+        if label == "Soreness":
+
+            recent = 6 - recent
+            previous = 6 - previous
+
+        # ---------------------------------------------------------
+        # Delta
+        # ---------------------------------------------------------
+
+        delta = recent - previous
+
+        # ---------------------------------------------------------
+        # Chip styling
+        # ---------------------------------------------------------
+
+        if delta >= 0.25:
+
+            arrow = "↑"
+            colour = "#34c759"
+            bg = "rgba(52,199,89,0.08)"
+
+        elif delta <= -0.25:
+
+            arrow = "↓"
+            colour = "#ff3b30"
+            bg = "rgba(255,59,48,0.08)"
+
+        else:
+
+            arrow = "→"
+            colour = "#8e8e93"
+            bg = "rgba(255,255,255,0.72)"
+
+        chips.append(
+
+            html.Div(
+
+                f"{arrow} {label}",
+
+                style={
+
+                    "padding": "8px 14px",
+
+                    "borderRadius": "999px",
+
+                    "background": bg,
+
+                    "border": f"1px solid {colour}",
+
+                    "color": colour,
+
+                    "fontWeight": "700",
+
+                    "fontSize": "13px",
+
+                    "margin": "6px",
+
+                    "backdropFilter": "blur(10px)",
+
+                    "fontFamily": "'Barlow Condensed', sans-serif",
+
+                    "letterSpacing": "0.02em",
+                },
+            )
+        )
+
+    return chips
 
 @app.callback(Output("page-content", "children"), Input("auth-store", "data"))
 def render_page(auth_data):
@@ -3947,140 +4639,6 @@ def update_welcome(athlete_id, _today):
         html.Div(sub_line, style={"fontSize": "13px", "color": "#6e6e6e", "lineHeight": "1.4"}),
     ], style={"maxWidth": "1000px", "margin": "10px auto 4px auto", "textAlign": "center",
               "padding": "0px", "background": "transparent", "border": "none"})
-
-
-@app.callback(
-    Output("ai-plan-output", "children"),
-    Output("ai-plan-status", "children"),
-    Input("btn-generate-plan", "n_clicks"),
-    State("athlete-dropdown", "value"),
-    State("ai-plan-coach", "value"),
-    State("ai-plan-goal", "value"),
-    State("ai-plan-duration", "value"),
-    prevent_initial_call=True,
-)
-def generate_session_plan(n_clicks, athlete_id, coach_style, goal, duration):
-    if not n_clicks: raise PreventUpdate
-    if not coach_style:              return no_update, "⚠️ Please select a coaching focus."
-    if not goal or not goal.strip(): return no_update, "⚠️ Please enter a session goal."
-
-    duration = duration or 45
-    persona = persona_prompt(coach_style)
-
-    context_block = ""
-    if athlete_id:
-        try:
-            df = load_tab(athlete_id)
-            if not df.empty:
-                context_block = (
-                    f"Athlete context (last 7 days): {build_context_summary(df, days=7)}\n"
-                    f"Wellness scan: {build_wellness_flags(df, days=7)}\n"
-                    f"Upcoming sessions: {build_upcoming_context(df, today_adl(), n=3)}\n\n"
-                )
-        except Exception:
-            pass
-
-    COACH_STRUCTURE = {
-        "Acceleration & Speed Coach": (
-            "Structure: Warm-Up (CNS activation, A-drills, wickets), Primary (max velocity or acceleration reps — "
-            "specify exact distances e.g. 3×30m fly, rest periods, surface cues), Secondary (speed endurance or "
-            "plyometrics — box jumps, bounds, hurdle hops with contact time cues), Cool-Down (parasympathetic reset). "
-            "Every block must include exact rep counts, distances, rest periods, and at least one technical cue per block."
-        ),
-        "Tempo & Endurance Coach": (
-            "Structure: Warm-Up (aerobic activation, dynamic mobility), Primary (tempo runs — specify distances, "
-            "target % effort e.g. 10×100m @70%, rest:work ratio), Secondary (aerobic volume or lactate threshold work "
-            "with pace guidance), Cool-Down (active recovery, breathing). "
-            "Specify exact volumes, pacing targets, and rhythm cues."
-        ),
-        "Technical Sprint Coach": (
-            "Structure: Warm-Up (posture drills, arm mechanics, tall running), Primary (technical drill series — "
-            "A-skip, B-skip, wicket runs, wall drills — with specific coaching cues on projection angle, shin angle, "
-            "arm drive), Secondary (short acceleration runs applying the technical focus — e.g. 4×20m), "
-            "Cool-Down (movement review, feedback). Each block must name the specific technical fault being addressed "
-            "and the corrective cue."
-        ),
-        "Strength & Power Coach": (
-            "Structure: Warm-Up (potentiation — glute activation, bar warm-up sets), Primary (main lift — specify "
-            "exercise, sets×reps×%1RM or RPE, rest, bar speed cue), Secondary (supplementary — jumps, pulls, or "
-            "accessory lifts with sets×reps), Tertiary (single-leg or posterior chain accessory), "
-            "Cool-Down (tissue work, breathing). Must include exact loading parameters and bar speed or RPE targets."
-        ),
-        "Recovery & Readiness Coach": (
-            "Structure: Warm-Up (gentle mobilisation — hip 90/90, thoracic rotation), Primary (low-CNS aerobic "
-            "work — e.g. 20min easy bike, pool walk, or breath-work circuit at <65% HRmax), Secondary (parasympathetic "
-            "activation — foam roll, contrast breathing, progressive muscle relaxation), Cool-Down (sleep hygiene cue, "
-            "nutrition timing reminder). Flag any wellness markers from context that influenced session design."
-        ),
-    }
-
-    coach_structure = COACH_STRUCTURE.get(coach_style,
-                                          "Structure the session with Warm-Up, Primary, Secondary, and Cool-Down blocks. "
-                                          "Be specific: include exact sets, reps, distances, rest periods and coaching cues.")
-
-    system_msg = (
-        f"{persona}\n\n"
-        f"STRUCTURAL REQUIREMENTS FOR THIS SESSION TYPE:\n{coach_structure}\n\n"
-        "Output ONLY a JSON object — no markdown, no preamble, no explanation:\n"
-        '{"blocks": ['
-        '{"title": "Warm-Up", "duration_min": 10, "details": "..."},'
-        '{"title": "Primary", "duration_min": 20, "details": "..."},'
-        '{"title": "Secondary", "duration_min": 10, "details": "..."},'
-        '{"title": "Tertiary", "duration_min": 8, "details": "..."},'
-        '{"title": "Cool-Down", "duration_min": 5, "details": "..."}'
-        "]}\n\n"
-        "Rules: Always include all 5 blocks. Every 'details' field must be dense with specifics. No generic filler."
-    )
-    user_msg = (
-        f"{context_block}"
-        f"Session goal: {goal.strip()}\n"
-        f"Approx duration: {duration} minutes\n"
-        f"Coach style: {coach_style}\n\n"
-        "Build the session plan now. Return only valid JSON."
-    )
-
-    raw = call_openai_chat([{"role": "system", "content": system_msg}, {"role": "user", "content": user_msg}],
-                           max_tokens=900)
-
-    try:
-        clean = raw.replace("```json", "").replace("```", "").strip()
-        data = json.loads(clean)
-        blocks = data.get("blocks", [])
-    except Exception:
-        return html.Div([html.Div("Session Plan", className="fw-semibold mb-2"),
-                         html.Pre(raw, style={"whiteSpace": "pre-wrap", "fontSize": "13px"})]), ""
-
-    if not blocks:
-        return html.Div("No plan generated. Try adjusting your goal.", className="text-muted"), ""
-
-    BLOCK_COLORS = {
-        "Warm-Up": ("#e3f2fd", "#1565C0"),
-        "Primary": ("#e8f5e9", "#2E7D32"),
-        "Secondary": ("#fff3e0", "#E65100"),
-        "Tertiary": ("#f3e5f5", "#6A1B9A"),
-        "Cool-Down": ("#fce4ec", "#880E4F"),
-    }
-
-    cards = []
-    for b in blocks:
-        title = b.get("title", "Block")
-        dur = b.get("duration_min", "")
-        details = b.get("details", "")
-        bg, accent = BLOCK_COLORS.get(title, ("#f5f5f5", "#333"))
-        cards.append(html.Div([
-            html.Div([
-                html.Span(title, style={"fontWeight": 800, "fontSize": "14px", "color": accent}),
-                html.Span(f"~{dur} min", style={"fontSize": "12px", "color": accent, "opacity": "0.75",
-                                                "marginLeft": "8px", "fontWeight": 600}) if dur else None,
-            ], style={"marginBottom": "6px"}),
-            html.Div(details, style={"fontSize": "13px", "lineHeight": "1.5", "color": "#1a1a1a"}),
-        ], style={"background": bg, "border": f"1px solid {accent}33", "borderLeft": f"4px solid {accent}",
-                  "borderRadius": "10px", "padding": "14px 16px", "marginBottom": "10px"}))
-
-    total = sum(b.get("duration_min", 0) for b in blocks)
-    cards.append(html.Div(f"Total: ~{total} min  •  {coach_style}",
-                          style={"fontSize": "12px", "color": "#666", "textAlign": "right", "marginTop": "4px"}))
-    return html.Div(cards), ""
 
 
 @app.callback(
