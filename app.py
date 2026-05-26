@@ -1532,10 +1532,8 @@ def _radar_fig(df, mode="curr"):
 
         if mode == "curr":
             compare = v.tail(14).head(7).mean()
-        elif mode == "2":
-            compare = v.tail(28).head(14).mean()
         elif mode == "4":
-            compare = v.tail(56).head(28).mean()
+            compare = v.tail(35).head(28).mean()
         else:
             compare = current
 
@@ -1626,9 +1624,8 @@ def _radar_ai_summary(df, athlete_name="", mode="curr"):
         # ---------------------------------------------------------
 
         compare_label = {
-            "curr": "previous week",
-            "2": "previous 2 weeks",
-            "4": "previous 4 weeks",
+            "curr": "previous 7 days",
+            "4": "rolling 4-week average",
         }.get(mode, "previous period")
 
         # ---------------------------------------------------------
@@ -3118,10 +3115,6 @@ def build_main_layout(auth_data):
                                         "value": "curr",
                                     },
                                     {
-                                        "label": "2 Weeks",
-                                        "value": "2",
-                                    },
-                                    {
                                         "label": "4 Weeks",
                                         "value": "4",
                                     },
@@ -3474,21 +3467,13 @@ def update_radar_chips(athlete_id, mode):
         # ---------------------------------------------------------
 
         if mode == "curr":
-
             previous = float(
                 v.tail(14).head(7).mean()
             )
 
-        elif mode == "2":
-
-            previous = float(
-                v.tail(28).head(14).mean()
-            )
-
         elif mode == "4":
-
             previous = float(
-                v.tail(56).head(28).mean()
+                v.tail(35).head(28).mean()
             )
 
         else:
