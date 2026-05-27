@@ -3150,12 +3150,12 @@ def build_main_layout(auth_data):
                     html.Div(
 
                         style={
-                            "background": "rgba(255,255,255,0.55)",
+                            "background": "rgba(255,255,255,0)",
                             "backdropFilter": "blur(14px)",
                             "borderRadius": "24px",
                             "padding": "18px",
-                            "border": "1px solid rgba(255,255,255,0.4)",
-                            "boxShadow": "0 8px 32px rgba(31,38,135,0.10)",
+                            "border": "1px solid rgba(255,255,255,0)",
+                            "boxShadow": "none",
                         },
 
                         children=[
