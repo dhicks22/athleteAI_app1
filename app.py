@@ -3417,6 +3417,7 @@ def update_radar_plot(athlete_id, mode):
     Input("athlete-dropdown", "value"),
     Input("radar-week-mode", "value"),
 
+
 )
 def update_radar_chips(athlete_id, mode):
 
