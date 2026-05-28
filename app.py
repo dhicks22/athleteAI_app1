@@ -1588,7 +1588,7 @@ def _radar_fig(df, mode="curr"):
             bgcolor="rgba(255,255,255,0.72)", bordercolor="rgba(0,0,0,0.06)",
             borderwidth=1, font=dict(family="'Barlow Condensed', sans-serif", size=12, color="#555"),
         ),
-        margin=dict(l=70, r=70, t=40, b=40),
+        margin=dict(l=40, r=40, t=30, b=30),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
@@ -3169,7 +3169,7 @@ def build_main_layout(auth_data):
                                 },
 
                                 style={
-                                    "height": "440px",
+                                    "height": "520px",
                                     "width": "100%",
                                 },
                             )
