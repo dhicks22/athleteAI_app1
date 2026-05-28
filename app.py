@@ -1955,7 +1955,6 @@ def compute_neuro_for_athlete(df: pd.DataFrame, today: dt.date) -> float | None:
 # ============================================================
 #  Plot builders
 # ============================================================
-
 def build_load_plot(df: pd.DataFrame, view_mode: str):
     fig = go.Figure()
 
@@ -1974,28 +1973,24 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
     d["Load"] = pd.to_numeric(d["Load"], errors="coerce")
 
     if view_mode == "weekly":
-        # Fill full date range, then aggregate by week keeping ALL weeks (including rest weeks)
         d = d.dropna(subset=["Date"]).set_index("Date")
         full_idx = pd.date_range(d.index.min(), d.index.max(), freq="D")
         d = d.reindex(full_idx).reset_index().rename(columns={"index": "Date"})
         d["Load"] = pd.to_numeric(d["Load"], errors="coerce").fillna(0)
         d["Week"] = _week_agg_date(d["Date"])
         g = d.groupby("Week", as_index=False).agg(Load=("Load", lambda s: s.sum()))
-        # Keep rest weeks (Load=0) — they contribute to decay, don't drop them
-        # But hide zero bars visually
         g["Load_display"] = g["Load"].replace(0, float("nan"))
 
-        # EWMA using 1/N alpha convention — computed over all weeks including rest
-        alpha_a = 1 / 4  # 4-week acute
-        alpha_c = 1 / 16  # 16-week chronic
+        alpha_a = 1 / 4
+        alpha_c = 1 / 16
         load_w = g["Load"].values
         n_w = len(load_w)
         ewma_a = np.full(n_w, np.nan)
         ewma_c = np.full(n_w, np.nan)
         for i in range(n_w):
-            li = float(load_w[i])  # 0 for rest weeks, decays naturally
+            li = float(load_w[i])
             if i == 0:
-                ewma_a[i] = li;
+                ewma_a[i] = li
                 ewma_c[i] = li
             else:
                 ewma_a[i] = alpha_a * li + (1 - alpha_a) * ewma_a[i - 1]
@@ -2006,6 +2001,12 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
         g["ACWR"] = np.where(g["Chronic"] > 50,
                              (g["Acute"] / g["Chronic"]).clip(0, 2.5),
                              np.nan)
+
+        # Trim to last week with actual load — drop trailing zero/empty weeks
+        last_load_idx = g["Load_display"].last_valid_index()
+        if last_load_idx is not None:
+            g = g.loc[:last_load_idx]
+
         x = g["Week"]
 
         fig.add_bar(x=x, y=g["Load_display"], name="Load",
@@ -2025,22 +2026,23 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
                                  opacity=0.5, hovertemplate="ACWR: %{y:.2f}<extra></extra>"))
         fig.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y2", y0=0.9, y1=1.25,
                       fillcolor="rgba(56,189,248,0.12)", line_width=0, layer="below")
+
+        x_min = g["Week"].dropna().min()
+        x_max = g["Week"].dropna().max()
         fig.update_layout(title="Weekly Training Load & Balance", xaxis_title="",
-                          xaxis=_CLEAN_AXES, yaxis=dict(title="Load", **_CLEAN_AXES),
+                          xaxis=dict(range=[x_min, x_max], **_CLEAN_AXES),
+                          yaxis=dict(title="Load", **_CLEAN_AXES),
                           yaxis2=dict(title="ACWR", overlaying="y", side="right", range=[0, 2], showgrid=False),
                           legend=_LEGEND_ROW,
+                          bargap=0.3,
                           hovermode="x unified", **MOBILE_PLOT_LAYOUT)
         return fig
 
-    # Reindex to full daily range — keep NaN for rest days so EWMA decays naturally
-    # (filling with 0 causes EWMA to crash to zero then spike on return = bad ACWR)
     d = d.dropna(subset=["Date"]).set_index("Date")
     full_idx = pd.date_range(d.index.min(), d.index.max(), freq="D")
     d = d.reindex(full_idx)
     d["Load"] = pd.to_numeric(d["Load"], errors="coerce")
 
-    # Sports-science EWMA convention: alpha = 1/N (matches Google Sheets EW formulas)
-    # This gives slower, more realistic decay through rest periods
     alpha7 = 1 / 7
     alpha28 = 1 / 28
     load_vals = d["Load"].values
@@ -2050,7 +2052,7 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
 
     for i in range(n):
         v = load_vals[i]
-        load_i = 0.0 if np.isnan(v) else float(v)  # rest day contributes 0
+        load_i = 0.0 if np.isnan(v) else float(v)
         if i == 0:
             ewma7[i] = load_i
             ewma28[i] = load_i
@@ -2060,16 +2062,12 @@ def build_load_plot(df: pd.DataFrame, view_mode: str):
 
     d["EWMA7"] = ewma7
     d["EWMA28"] = ewma28
-
-    # Only show ACWR once chronic load is established (suppress first ~4 weeks)
-    # Use 50 as threshold — well below typical session loads of 300-900
     d["ACWR"] = np.where(d["EWMA28"] > 50,
                          (d["EWMA7"] / d["EWMA28"]).clip(0, 2.5),
                          np.nan)
 
-    # Bars only on training days (NaN = no bar)
     d = d.reset_index().rename(columns={"index": "Date"})
-    d["Load_display"] = d["Load"]  # NaN gaps already blank
+    d["Load_display"] = d["Load"]
     x = d["Date"]
 
     fig.add_bar(x=x, y=d["Load_display"], name="Load",
@@ -2120,6 +2118,15 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
     if view_mode == "weekly":
         d["Week"] = _week_agg_date(d["Date"])
         g = d.groupby("Week", as_index=False).mean(numeric_only=True)
+
+        # Trim to last week with actual wellness data
+        wellness_cols = ["Sleep_1_5", "Fatigue_1_5", "Soreness_1_5", "Mood_1_5"]
+        present = [c for c in wellness_cols if c in g.columns]
+        if present:
+            last_valid_idx = g[present].dropna(how="all").index.max()
+            if last_valid_idx is not None:
+                g = g.loc[:last_valid_idx]
+
         x = g["Week"]
         window = 3
 
@@ -2136,18 +2143,20 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
                                      fill="tozeroy", fillcolor=f"rgba({r},{g2},{b},0.07)",
                                      hovertemplate=f"{label}: %{{y:.1f}}<extra></extra>"))
 
+        x_min = g["Week"].dropna().min()
+        x_max = g["Week"].dropna().max()
         fig.update_layout(
             title="Weekly Wellness Trends", xaxis_title="",
             font=dict(family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=13),
             title_font=dict(family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", size=14,
                             color="#1a1a2e"),
-            xaxis=_CLEAN_AXES,
+            xaxis=dict(range=[x_min, x_max], **_CLEAN_AXES),
             yaxis=dict(title="Scale (1–5)", range=[0.8, 5.2], tickvals=[1, 2, 3, 4, 5], **_CLEAN_AXES),
             plot_bgcolor="rgba(220,232,245,0.4)",
             paper_bgcolor="rgba(255,255,255,0.0)",
             hovermode="x unified",
             legend=_LEGEND_ROW,
-            margin=dict(l=24, r=16, t=48, b=100),
+            margin=dict(l=24, r=16, t=48, b=120),
         )
         return fig
 
@@ -2179,7 +2188,7 @@ def build_wellness_plot(df: pd.DataFrame, view_mode: str):
         paper_bgcolor="rgba(255,255,255,0.0)",
         hovermode="x unified",
         legend=_LEGEND_ROW,
-        margin=dict(l=24, r=16, t=48, b=100),
+        margin=dict(l=24, r=16, t=48, b=120),
     )
     return fig
 
@@ -2221,6 +2230,7 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
         fig.update_layout(title="Daily Speed & Tempo Volumes", xaxis_title="", yaxis_title="Metres",
                           xaxis=_CLEAN_AXES, yaxis=dict(title="Metres", **_CLEAN_AXES),
                           legend=_LEGEND_ROW,
+                          bargap=0.3,
                           barmode="stack", hovermode="x unified", **MOBILE_PLOT_LAYOUT)
         return fig
 
@@ -2232,6 +2242,17 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
         Speed=("Speed_clean", lambda s: s.sum(min_count=1)),
         Tempo=("Tempo_clean", lambda s: s.sum(min_count=1)),
     )
+
+    # Replace 0 with NaN so weeks with no data are treated as empty
+    g["Speed"] = g["Speed"].replace(0, np.nan)
+    g["Tempo"] = g["Tempo"].replace(0, np.nan)
+
+    # Trim to last week that actually has speed or tempo data
+    has_data = g[["Speed", "Tempo"]].notna().any(axis=1)
+    if has_data.any():
+        last_valid_idx = has_data[has_data].index.max()
+        g = g.loc[:last_valid_idx]
+
     x = g["Week"]
 
     fig.add_bar(x=x, y=g["Speed"], name="Speed",
@@ -2248,9 +2269,14 @@ def build_speed_tempo_plot(df: pd.DataFrame, view_mode: str):
                              name="Tempo trend", mode="lines",
                              line=dict(color=_ORANGE, width=1.8, dash="dot"), line_shape="spline", line_smoothing=0.7,
                              hovertemplate="Tempo trend: %{y:,.0f} m<extra></extra>"))
+
+    x_min = g["Week"].dropna().min()
+    x_max = g["Week"].dropna().max()
     fig.update_layout(title="Weekly Speed & Tempo Volumes", xaxis_title="", yaxis_title="Metres",
-                      xaxis=_CLEAN_AXES, yaxis=dict(title="Metres", **_CLEAN_AXES),
+                      xaxis=dict(range=[x_min, x_max], **_CLEAN_AXES),
+                      yaxis=dict(title="Metres", **_CLEAN_AXES),
                       legend=_LEGEND_ROW,
+                      bargap=0.3,
                       barmode="stack", hovermode="x unified", **MOBILE_PLOT_LAYOUT)
     return fig
 
