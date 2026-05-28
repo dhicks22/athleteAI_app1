@@ -1497,11 +1497,11 @@ def _radar_fig(df, mode="curr"):
 
     dfw = df.copy()
 
-    dims = ["Sleep", "Session Quality", "Soreness", "Fatigue", "Mood"]
+    dims = ["Sleep", "Session", "Soreness", "Fatigue", "Mood"]
     dims_closed = dims + [dims[0]]
 
     column_map = {
-        "Session Quality": "Session_1_5",
+        "Session":         "Session_1_5",
         "Sleep":           "Sleep_1_5",
         "Mood":            "Mood_1_5",
         "Fatigue":         "Fatigue_1_5",
@@ -3432,7 +3432,7 @@ def update_radar_chips(athlete_id, mode):
 
         ("Sleep", "Sleep_1_5"),
 
-        ("Session Quality", "Session_1_5"),
+        ("Session", "Session_1_5"),
 
         ("Soreness", "Soreness_1_5"),
 
