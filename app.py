@@ -1598,6 +1598,7 @@ def _radar_fig(df, mode="curr"):
             borderwidth=0,
             font=dict(family="'Barlow Condensed', sans-serif", size=12, color="#555"),
         ),
+
         margin=dict(l=60, r=60, t=30, b=60),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
