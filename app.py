@@ -3095,32 +3095,27 @@ def build_main_layout(auth_data):
                         children=[
 
                             html.H2(
-
                                 "Wellness Radar",
-
                                 style={
-                                    "fontSize": "28px",
-                                    "fontWeight": "500",
+                                    "fontSize": "34px",
+                                    "fontWeight": "700",
                                     "letterSpacing": "-0.02em",
                                     "lineHeight": "1.1",
                                     "margin": "0",
-                                    "color": "#222",
-                                    "fontFamily": "'Barlow Condensed', sans-serif",
+                                    "color": "#1a1a1a",
+                                    "fontFamily": "system-ui, -apple-system, sans-serif",
                                 },
                             ),
 
                             html.Div(
-
                                 "Visualising athlete readiness, recovery and wellness trends across recent training exposure",
-
                                 style={
                                     "color": "#7f8790",
                                     "fontSize": "13px",
-                                    "fontWeight": "500",
+                                    "fontWeight": "400",
                                     "lineHeight": "1.5",
-                                    "margin": "8px 0 24px 0",
-                                    "fontFamily": "'Barlow Condensed', sans-serif",
-
+                                    "margin": "6px 0 12px 0",
+                                    "fontFamily": "system-ui, -apple-system, sans-serif",
                                 },
                             ),
                         ],
@@ -3291,9 +3286,25 @@ def build_main_layout(auth_data):
         id="squad-view",
         style={"display": "block" if is_coach else "none"},
         children=[
-            html.H4("Squad Overview", className="mt-3 mb-1"),
+            html.H2("Squad Overview",
+                    style={
+                        "fontSize": "34px",
+                        "fontWeight": "700",
+                        "letterSpacing": "-0.02em",
+                        "lineHeight": "1.1",
+                        "margin": "0",
+                        "color": "#1a1a1a",
+                        "fontFamily": "system-ui, -apple-system, sans-serif",
+                    }),
             html.P("All athletes — readiness, wellness and session status",
-                   style={"color": "#6e6e6e", "fontSize": "13px", "margin": "0 0 16px 0"}),
+                   style={
+                       "color": "#7f8790",
+                       "fontSize": "13px",
+                       "fontWeight": "400",
+                       "lineHeight": "1.5",
+                       "margin": "6px 0 16px 0",
+                       "fontFamily": "system-ui, -apple-system, sans-serif",
+                   }),
             dbc.Button(
                 [html.I(className="bi bi-arrow-clockwise me-2"), "Load squad data"],
                 id="squad-refresh-btn", color="primary", outline=True, size="sm",
