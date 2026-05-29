@@ -1598,7 +1598,7 @@ def _radar_fig(df, mode="curr"):
             borderwidth=0,
             font=dict(family="'Barlow Condensed', sans-serif", size=12, color="#555"),
         ),
-        margin=dict(l=60, r=60, t=10, b=50),
+        margin=dict(l=60, r=60, t=30, b=60),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
@@ -3186,11 +3186,11 @@ def build_main_layout(auth_data):
                     html.Div(
 
                         style={
-                            "background": "rgba(220,232,245,0.35)",
+                            "background": "rgba(255,255,255,0)",
                             "backdropFilter": "blur(14px)",
                             "borderRadius": "24px",
-                            "padding": "8px 8px 0px 8px",
-                            "border": "1px solid rgba(255,255,255,0.35)",
+                            "padding": "18px",
+                            "border": "1px solid rgba(255,255,255,0)",
                             "boxShadow": "none",
                         },
 
