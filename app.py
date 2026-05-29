@@ -3070,203 +3070,125 @@ def build_main_layout(auth_data):
     )
 
     ai_view = html.Div(
-
         id="ai-view",
-
-        style={"display": "none"},
-
+        style={
+            "display": "none",
+            "padding": "26px 28px 120px 28px",
+        },
         children=[
-
+            html.H2(
+                "Wellness Radar",
+                style={
+                    "fontSize": "28px",
+                    "fontWeight": "500",
+                    "letterSpacing": "-0.01em",
+                    "lineHeight": "1.05",
+                    "margin": "0",
+                    "color": "#222",
+                    "fontFamily": "'Barlow Condensed', sans-serif",
+                },
+            ),
+            html.P(
+                "Visualising athlete readiness, recovery and wellness trends across recent training exposure",
+                style={
+                    "color": "#7f8790",
+                    "fontSize": "13px",
+                    "fontWeight": "500",
+                    "lineHeight": "1.5",
+                    "margin": "8px 0 24px 0",
+                    "fontFamily": "'Barlow Condensed', sans-serif",
+                    "letterSpacing": "0.02em",
+                },
+            ),
             html.Div(
-
-                className="page-wrap",
-
+                className="d-flex align-items-center gap-2 mb-0",
                 children=[
-
-                    html.Div(
-
-                        className="page-header-block",
-
+                    html.Span(
+                        "Compare",
                         style={
-                            "paddingTop": "4px",
-                            "marginBottom": "0px",
+                            "fontSize": "12px",
+                            "fontWeight": "600",
+                            "color": "#888",
+                            "marginRight": "10px",
                         },
-
-                        children=[
-
-                            html.H2(
-                                "Wellness Radar",
-                                style={
-                                    "fontSize": "34px",
-                                    "fontWeight": "700",
-                                    "letterSpacing": "-0.02em",
-                                    "lineHeight": "1.1",
-                                    "margin": "0",
-                                    "color": "#1a1a1a",
-                                    "fontFamily": "system-ui, -apple-system, sans-serif",
-                                },
-                            ),
-
-                            html.Div(
-                                "Visualising athlete readiness, recovery and wellness trends across recent training exposure",
-                                style={
-                                    "color": "#7f8790",
-                                    "fontSize": "13px",
-                                    "fontWeight": "400",
-                                    "lineHeight": "1.5",
-                                    "margin": "6px 0 12px 0",
-                                    "fontFamily": "system-ui, -apple-system, sans-serif",
-                                },
-                            ),
-                        ],
                     ),
-                    html.Div(
-
-                        className="d-flex align-items-center gap-2 mb-0",
-
-                        children=[
-
-                            html.Span(
-                                "Compare",
-                                style={
-                                    "fontSize": "12px",
-                                    "fontWeight": "600",
-                                    "color": "#888",
-                                    "marginRight": "10px",
-                                },
-                            ),
-
-                            dcc.RadioItems(
-
-                                id="radar-week-mode",
-
-                                options=[
-                                    {
-                                        "label": "vs Last",
-                                        "value": "curr",
-                                    },
-                                    {
-                                        "label": "4 Weeks",
-                                        "value": "4",
-                                    },
-                                ],
-
-                                value="curr",
-
-                                inline=True,
-
-                                labelStyle={
-                                    "display": "inline-flex",
-                                    "alignItems": "center",
-                                    "justifyContent": "center",
-                                    "padding": "10px 18px",
-                                    "borderRadius": "16px",
-                                    "background": "rgba(255,255,255,0.7)",
-                                    "marginRight": "10px",
-                                    "fontWeight": "600",
-                                    "fontSize": "13px",
-                                    "cursor": "pointer",
-                                    "backdropFilter": "blur(10px)",
-                                    "border": "1px solid rgba(0,0,0,0.06)",
-                                    "fontFamily": "Inter, sans-serif",
-                                },
-
-                                inputStyle={
-                                    "marginRight": "6px",
-                                },
-                            ),
+                    dcc.RadioItems(
+                        id="radar-week-mode",
+                        options=[
+                            {"label": "vs Last", "value": "curr"},
+                            {"label": "4 Weeks", "value": "4"},
                         ],
-                    ),
-
-                    html.Div(
-
-                        style={
-                            "background": "rgba(255,255,255,0)",
-                            "backdropFilter": "blur(14px)",
-                            "borderRadius": "24px",
-                            "padding": "18px",
-                            "border": "1px solid rgba(255,255,255,0)",
-                            "boxShadow": "none",
-                        },
-
-                        children=[
-
-                            dcc.Graph(
-                                id="wellness-radar-plot",
-                                config={"displayModeBar": False},
-                                style={"height": "500px", "width": "100%", "marginTop": "-30px"},
-                            ),
-                        ],
-                    ),
-
-                    html.Div(
-
-                        id="wellness-radar-chips",
-
-                        style={
-                            "display": "flex",
-                            "flexWrap": "wrap",
+                        value="curr",
+                        inline=True,
+                        labelStyle={
+                            "display": "inline-flex",
+                            "alignItems": "center",
                             "justifyContent": "center",
-                            "marginTop": "10px",
+                            "padding": "10px 18px",
+                            "borderRadius": "16px",
+                            "background": "rgba(255,255,255,0.7)",
+                            "marginRight": "10px",
+                            "fontWeight": "600",
+                            "fontSize": "13px",
+                            "cursor": "pointer",
+                            "backdropFilter": "blur(10px)",
+                            "border": "1px solid rgba(0,0,0,0.06)",
+                            "fontFamily": "Inter, sans-serif",
                         },
-                    ),
-
-                    html.Div(
-
-                        style={
-
-                            "background": "rgba(255,255,255,0.55)",
-
-                            "backdropFilter": "blur(18px)",
-
-                            "borderRadius": "24px",
-
-                            "padding": "20px 22px",
-
-                            "border": "1px solid rgba(255,255,255,0.45)",
-
-                            "boxShadow": "0 10px 32px rgba(31,38,135,0.08)",
-
-                            "marginTop": "22px",
-
-                            "marginBottom": "100px",
-                        },
-
-                        children=[
-
-                            html.Div(
-
-                                "READINESS INSIGHT",
-
-                                style={
-                                    "fontSize": "11px",
-                                    "fontWeight": "800",
-                                    "letterSpacing": "0.08em",
-                                    "color": "#2d96c3",
-                                    "marginBottom": "12px",
-                                    "fontFamily": "Inter, sans-serif",
-                                },
-                            ),
-
-                            html.Div(
-
-                                id="wellness-ai-summary",
-
-                                style={
-                                    "fontSize": "14px",
-                                    "lineHeight": "1.8",
-                                    "color": "#4b5563",
-                                    "fontWeight": "500",
-                                    "fontFamily": "Inter, sans-serif",
-                                },
-                            ),
-                        ],
+                        inputStyle={"marginRight": "6px"},
                     ),
                 ],
-            )
+            ),
+            dcc.Graph(
+                id="wellness-radar-plot",
+                config={"displayModeBar": False},
+                style={"height": "460px", "width": "100%", "marginTop": "-20px"},
+            ),
+            html.Div(
+                id="wellness-radar-chips",
+                style={
+                    "display": "flex",
+                    "flexWrap": "wrap",
+                    "justifyContent": "center",
+                    "marginTop": "10px",
+                },
+            ),
+            html.Div(
+                style={
+                    "background": "rgba(220,232,245,0.35)",
+                    "backdropFilter": "blur(14px)",
+                    "borderRadius": "24px",
+                    "padding": "20px 22px",
+                    "border": "1px solid rgba(255,255,255,0.35)",
+                    "boxShadow": "none",
+                    "marginTop": "22px",
+                },
+                children=[
+                    html.Div(
+                        "READINESS INSIGHT",
+                        style={
+                            "fontSize": "11px",
+                            "fontWeight": "800",
+                            "letterSpacing": "0.08em",
+                            "color": "#2d96c3",
+                            "marginBottom": "12px",
+                            "fontFamily": "Inter, sans-serif",
+                        },
+                    ),
+                    html.Div(
+                        id="wellness-ai-summary",
+                        style={
+                            "fontSize": "14px",
+                            "lineHeight": "1.8",
+                            "color": "#4b5563",
+                            "fontWeight": "500",
+                            "fontFamily": "Inter, sans-serif",
+                        },
+                    ),
+                ],
+            ),
         ],
     )
-
     session_log_modal = dbc.Modal(
         [
             dbc.ModalHeader(dbc.ModalTitle(html.Div(id="popup-modal-title")), close_button=True),
@@ -3286,30 +3208,34 @@ def build_main_layout(auth_data):
         id="squad-view",
         style={"display": "block" if is_coach else "none"},
         children=[
-            html.H2("Squad Overview",
-                    style={
-                        "fontSize": "34px",
-                        "fontWeight": "700",
-                        "letterSpacing": "-0.02em",
-                        "lineHeight": "1.1",
+            html.Div(
+                style={"padding": "26px 28px 0 28px"},
+                children=[
+                    html.H2("Squad Overview", style={
+                        "fontSize": "28px",
+                        "fontWeight": "500",
+                        "letterSpacing": "-0.01em",
+                        "lineHeight": "1.05",
                         "margin": "0",
-                        "color": "#1a1a1a",
-                        "fontFamily": "system-ui, -apple-system, sans-serif",
+                        "color": "#222",
+                        "fontFamily": "'Barlow Condensed', sans-serif",
                     }),
-            html.P("All athletes — readiness, wellness and session status",
-                   style={
-                       "color": "#7f8790",
-                       "fontSize": "13px",
-                       "fontWeight": "400",
-                       "lineHeight": "1.5",
-                       "margin": "6px 0 16px 0",
-                       "fontFamily": "system-ui, -apple-system, sans-serif",
-                   }),
-            dbc.Button(
-                [html.I(className="bi bi-arrow-clockwise me-2"), "Load squad data"],
-                id="squad-refresh-btn", color="primary", outline=True, size="sm",
-                className="mb-3"
-            ) if is_coach else html.Div(id="squad-refresh-btn", style={"display": "none"}),
+                    html.P("All athletes — readiness, wellness and session status", style={
+                        "color": "#7f8790",
+                        "fontSize": "13px",
+                        "fontWeight": "500",
+                        "lineHeight": "1.5",
+                        "margin": "8px 0 16px 0",
+                        "fontFamily": "'Barlow Condensed', sans-serif",
+                        "letterSpacing": "0.02em",
+                    }),
+                    dbc.Button(
+                        [html.I(className="bi bi-arrow-clockwise me-2"), "Load squad data"],
+                        id="squad-refresh-btn", color="primary", outline=True, size="sm",
+                        className="mb-3"
+                    ) if is_coach else html.Div(id="squad-refresh-btn", style={"display": "none"}),
+                ],
+            ),
             dcc.Loading(type="circle", children=html.Div(
                 id="squad-cards-container",
                 children=html.Div("Tap 'Load squad data' to refresh.",
