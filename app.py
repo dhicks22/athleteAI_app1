@@ -3204,6 +3204,7 @@ def build_main_layout(auth_data):
     )
 
     # Squad view — coach only, but squad-cards-container always in DOM for callback stability
+
     squad_view = html.Div(
         id="squad-view",
         style={"display": "block" if is_coach else "none"},
