@@ -1598,7 +1598,7 @@ def _radar_fig(df, mode="curr"):
             borderwidth=0,
             font=dict(family="'Barlow Condensed', sans-serif", size=12, color="#555"),
         ),
-        margin=dict(l=60, r=60, t=30, b=60),
+        margin=dict(l=60, r=60, t=10, b=50),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
@@ -3089,7 +3089,7 @@ def build_main_layout(auth_data):
 
                         style={
                             "paddingTop": "4px",
-                            "marginBottom": "18px",
+                            "marginBottom": "8px",
                         },
 
                         children=[
@@ -3127,7 +3127,7 @@ def build_main_layout(auth_data):
                     ),
                     html.Div(
 
-                        className="d-flex align-items-center gap-2 mb-2",
+                        className="d-flex align-items-center gap-2 mb-1",
 
                         children=[
 
@@ -3186,11 +3186,11 @@ def build_main_layout(auth_data):
                     html.Div(
 
                         style={
-                            "background": "rgba(255,255,255,0)",
+                            "background": "rgba(220,232,245,0.35)",
                             "backdropFilter": "blur(14px)",
                             "borderRadius": "24px",
-                            "padding": "18px",
-                            "border": "1px solid rgba(255,255,255,0)",
+                            "padding": "8px 8px 0px 8px",
+                            "border": "1px solid rgba(255,255,255,0.35)",
                             "boxShadow": "none",
                         },
 
