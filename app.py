@@ -1589,8 +1589,8 @@ def _radar_fig(df, mode="curr"):
         showlegend=True,
         legend=dict(
             orientation="h",
-            yanchor="bottom",
-            y=-0.12,
+            yanchor="top",
+            y=-0.05,
             xanchor="center",
             x=0.5,
             bgcolor="rgba(0,0,0,0)",
@@ -1598,8 +1598,7 @@ def _radar_fig(df, mode="curr"):
             borderwidth=0,
             font=dict(family="'Barlow Condensed', sans-serif", size=12, color="#555"),
         ),
-
-        margin=dict(l=60, r=60, t=30, b=60),
+        margin=dict(l=80, r=80, t=20, b=50),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
@@ -3090,7 +3089,7 @@ def build_main_layout(auth_data):
 
                         style={
                             "paddingTop": "4px",
-                            "marginBottom": "8px",
+                            "marginBottom": "4px",
                         },
 
                         children=[
@@ -3198,18 +3197,10 @@ def build_main_layout(auth_data):
                         children=[
 
                             dcc.Graph(
-
                                 id="wellness-radar-plot",
-
-                                config={
-                                    "displayModeBar": False,
-                                },
-
-                                style={
-                                    "height": "520px",
-                                    "width": "100%",
-                                },
-                            )
+                                config={"displayModeBar": False},
+                                style={"height": "420px", "width": "100%"},
+                            ),
                         ],
                     ),
 
