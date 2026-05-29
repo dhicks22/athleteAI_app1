@@ -1553,19 +1553,22 @@ def _radar_fig(df, mode="curr"):
     current_closed = current_vals + [current_vals[0]]
     compare_closed = compare_vals + [compare_vals[0]]
 
-    fig.add_trace(go.Scatterpolar(
-        r=compare_closed, theta=dims_closed, mode="lines",
-        name="Previous Period",
-        line=dict(color="#f5a623", width=2),
-        fill="toself", fillcolor="rgba(245,166,35,0.16)",
-    ))
-
+    # Blue first (renders below)
     fig.add_trace(go.Scatterpolar(
         r=current_closed, theta=dims_closed, mode="lines+markers",
         name="Current Week",
         line=dict(color="#2d96c3", width=3),
-        marker=dict(size=7, color="#2d96c3"),
-        fill="toself", fillcolor="rgba(45,150,195,0.24)",
+        marker=dict(size=8, color="#2d96c3"),
+        fill="toself", fillcolor="rgba(45,150,195,0.18)",
+    ))
+
+    # Orange second (renders on top)
+    fig.add_trace(go.Scatterpolar(
+        r=compare_closed, theta=dims_closed, mode="lines+markers",
+        name="Previous Period",
+        line=dict(color="#f5a623", width=2),
+        marker=dict(size=6, color="#f5a623"),
+        fill="toself", fillcolor="rgba(245,166,35,0.15)",
     ))
 
     fig.update_layout(
@@ -1574,6 +1577,7 @@ def _radar_fig(df, mode="curr"):
             radialaxis=dict(
                 visible=True, range=[0, 5], tickvals=[1, 2, 3, 4, 5],
                 tickfont=dict(size=10, color="#888"),
+                tickangle=45,
                 gridcolor="rgba(0,0,0,0.10)", linecolor="rgba(0,0,0,0.12)",
             ),
             angularaxis=dict(
@@ -1584,11 +1588,17 @@ def _radar_fig(df, mode="curr"):
         ),
         showlegend=True,
         legend=dict(
-            orientation="h", yanchor="bottom", y=1.08, xanchor="center", x=0.5,
-            bgcolor="rgba(255,255,255,0.72)", bordercolor="rgba(0,0,0,0.06)",
-            borderwidth=1, font=dict(family="'Barlow Condensed', sans-serif", size=12, color="#555"),
+            orientation="h",
+            yanchor="bottom",
+            y=-0.12,
+            xanchor="center",
+            x=0.5,
+            bgcolor="rgba(0,0,0,0)",
+            bordercolor="rgba(0,0,0,0)",
+            borderwidth=0,
+            font=dict(family="'Barlow Condensed', sans-serif", size=12, color="#555"),
         ),
-        margin=dict(l=40, r=40, t=30, b=30),
+        margin=dict(l=60, r=60, t=30, b=60),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
