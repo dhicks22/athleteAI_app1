@@ -3199,7 +3199,7 @@ def build_main_layout(auth_data):
                             dcc.Graph(
                                 id="wellness-radar-plot",
                                 config={"displayModeBar": False},
-                                style={"height": "460px", "width": "100%", "marginTop": "-20px"},
+                                style={"height": "500px", "width": "100%", "marginTop": "-30px"},
                             ),
                         ],
                     ),
