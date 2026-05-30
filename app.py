@@ -2706,7 +2706,7 @@ def build_login_layout():
                 justify="center", className="mt-4",
             ),
         ],
-        fluid=True, className="pt-5",
+        fluid=True, className="pt-5 app-shell",
     )
 
 
