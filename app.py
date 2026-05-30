@@ -3207,36 +3207,34 @@ def build_main_layout(auth_data):
 
     squad_view = html.Div(
         id="squad-view",
-        style={"display": "block" if is_coach else "none"},
+        style={
+            "display": "block" if is_coach else "none",
+            "padding": "26px 28px 0 28px",
+        },
         children=[
-            html.Div(
-                style={"padding": "26px 28px 0 28px"},
-                children=[
-                    html.H2("Squad Overview", style={
-                        "fontSize": "28px",
-                        "fontWeight": "500",
-                        "letterSpacing": "-0.01em",
-                        "lineHeight": "1.05",
-                        "margin": "0",
-                        "color": "#222",
-                        "fontFamily": "'Barlow Condensed', sans-serif",
-                    }),
-                    html.P("All athletes — readiness, wellness and session status", style={
-                        "color": "#7f8790",
-                        "fontSize": "13px",
-                        "fontWeight": "500",
-                        "lineHeight": "1.5",
-                        "margin": "8px 0 16px 0",
-                        "fontFamily": "'Barlow Condensed', sans-serif",
-                        "letterSpacing": "0.02em",
-                    }),
-                    dbc.Button(
-                        [html.I(className="bi bi-arrow-clockwise me-2"), "Load squad data"],
-                        id="squad-refresh-btn", color="primary", outline=True, size="sm",
-                        className="mb-3"
-                    ) if is_coach else html.Div(id="squad-refresh-btn", style={"display": "none"}),
-                ],
-            ),
+            html.H2("Squad Overview", style={
+                "fontSize": "28px",
+                "fontWeight": "500",
+                "letterSpacing": "-0.01em",
+                "lineHeight": "1.05",
+                "margin": "0",
+                "color": "#222",
+                "fontFamily": "'Barlow Condensed', sans-serif",
+            }),
+            html.P("All athletes — readiness, wellness and session status", style={
+                "color": "#7f8790",
+                "fontSize": "13px",
+                "fontWeight": "500",
+                "lineHeight": "1.5",
+                "margin": "8px 0 16px 0",
+                "fontFamily": "'Barlow Condensed', sans-serif",
+                "letterSpacing": "0.02em",
+            }),
+            dbc.Button(
+                [html.I(className="bi bi-arrow-clockwise me-2"), "Load squad data"],
+                id="squad-refresh-btn", color="primary", outline=True, size="sm",
+                className="mb-3"
+            ) if is_coach else html.Div(id="squad-refresh-btn", style={"display": "none"}),
             dcc.Loading(type="circle", children=html.Div(
                 id="squad-cards-container",
                 children=html.Div("Tap 'Load squad data' to refresh.",
