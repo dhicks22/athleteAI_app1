@@ -316,9 +316,14 @@ def apple_readiness_ring(score_0_100: float | None):
     return _build_dial(f"{int(round(v))}", v, dial_class_from_score(v))
 
 
-def streak_dial(streak: int):
+def streak_cycle(streak: int) -> int:
     s = max(0, int(streak))
-    percent = min(s, 31) / 31 * 100
+    return 0 if s == 0 else ((s - 1) % 31) + 1
+
+
+def streak_dial(streak: int):
+    s = streak_cycle(streak)
+    percent = s / 31 * 100
     colour = streak_colour_from_days(s)
     display = "0" if s == 0 else str(s)
     return _build_dial(display, percent, colour)
@@ -4714,8 +4719,9 @@ def show_share_card(n, close_n, athlete_id, current_style):
     d_r = int(round(min(max(readiness_val or 0, 0), 100)))
     d_n = int(round(min(max(neuro_val or 0, 0), 100)))
     d_e = int(round(min(max(weekly_pct or 0, 0), 100)))
-    d_sp = int(round(min((streak / 31) * 100, 100)))
-    d_sn = streak
+    streak_disp = streak_cycle(streak)
+    d_sp = int(round(min((streak_disp / 31) * 100, 100)))
+    d_sn = streak_disp
     ro_r = round(circ * (1 - d_r / 100), 1)
     ro_n = round(circ * (1 - d_n / 100), 1)
     ro_e = round(circ * (1 - d_e / 100), 1)
@@ -5493,7 +5499,7 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
                                                 "textAlign": "center", "marginTop": "3px"}),
                 ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
                 html.Div([
-                    mini_ring(min(streak / 31 * 100, 100) if streak else None, "pink" if streak else "grey", display_override=str(streak) if streak else None),
+                    mini_ring((streak_cycle(streak) / 31 * 100) if streak else None, "pink" if streak else "grey", display_override=str(streak_cycle(streak)) if streak else None),
                     html.Div("Streak", style={"fontSize": "10px", "color": "#888",
                                               "textAlign": "center", "marginTop": "3px"}),
                 ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
