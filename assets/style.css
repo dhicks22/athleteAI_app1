@@ -823,3 +823,11 @@ body {
 .bottom-nav {
     touch-action: manipulation;
 }
+
+.nav-underline {
+    position: absolute;
+    bottom: 0;
+    height: 3px;
+    border-radius: 3px;
+    transition: left .25s ease, width .25s ease;
+}

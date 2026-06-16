@@ -1136,17 +1136,18 @@ def build_wellness_flags(df: pd.DataFrame, days: int = 7) -> str:
         elif avg_sor >= 3.5:
             flags.append(f"Soreness trending elevated (avg {avg_sor:.1f}/5 over {len(soreness)} sessions).")
 
+    # NOTE: Energy scale — 1 = low energy/tired, 5 = energetic. LOW values are the concern.
     if not fatigue.empty:
         avg_fat = fatigue.mean()
         days_low_fat = int((fatigue <= 2).sum())
         if days_low_fat >= 3:
             flags.append(
-                f"⚠️ Energy/fatigue LOW (≤2/5) on {days_low_fat} of last "
+                f"⚠️ Energy LOW (≤2/5) on {days_low_fat} of last "
                 f"{len(fatigue)} logged days (avg {avg_fat:.1f}/5) — "
                 "athlete reporting consistently low energy."
             )
         elif avg_fat <= 2.5:
-            flags.append(f"Fatigue/energy trending low (avg {avg_fat:.1f}/5 over {len(fatigue)} sessions).")
+            flags.append(f"Energy trending low (avg {avg_fat:.1f}/5 over {len(fatigue)} sessions).")
 
     if not sleep.empty:
         avg_slp = sleep.mean()
@@ -1653,9 +1654,12 @@ def _radar_ai_summary(df, athlete_name="", mode="curr"):
             f"7-day wellness averages (1–5 scale):\n"
             f"- Sleep: {round(float(sleep.mean()), 1) if not sleep.dropna().empty else 'n/a'}\n"
             f"- Session quality: {round(float(quality.mean()), 1) if not quality.dropna().empty else 'n/a'}\n"
-            f"- Fatigue/energy: {round(float(fatigue.mean()), 1) if not fatigue.dropna().empty else 'n/a'}\n"
+            f"- Energy: {round(float(fatigue.mean()), 1) if not fatigue.dropna().empty else 'n/a'}\n"
             f"- Mood: {round(float(mood.mean()), 1) if not mood.dropna().empty else 'n/a'}\n"
             f"- Soreness: {round(float(soreness.mean()), 1) if not soreness.dropna().empty else 'n/a'}\n\n"
+            "SCALE DIRECTION: for Sleep, Session quality, Energy and Mood, 5 = best/highest and 1 = worst/lowest. "
+            "For Soreness, 5 = worst (most sore). Energy 5 means fully energised, NOT tired — never describe a high "
+            "energy score as fatigue or stress.\n\n"
             f"Comparison window: {compare_label}\n\n"
             f"Open with '{first_name},' then give 2 sentences of specific coaching insight based on these numbers. "
             f"Reference the scores directly. Say what the pattern means for their training this week."
@@ -1709,8 +1713,6 @@ def _radar_ai_summary(df, athlete_name="", mode="curr"):
             "Weekly wellness trends appear stable. "
             "Current readiness markers are generally positive."
         )
-
-
 
 # ============================================================
 #  Email webhook
@@ -4439,8 +4441,20 @@ app.clientside_callback(
                 setTimeout(() => icon.classList.add("wobble"), 120);
             }
             const underline = document.getElementById("nav-underline");
-            const index = tabs.indexOf(activeTab);
-            if(underline){ underline.style.transform = `translateX(${index * 100}%)`; }
+            const navBar = document.querySelector(".bottom-nav");
+            if(underline && icon && navBar){
+                const place = () => {
+                    const ir = icon.getBoundingClientRect();
+                    const nr = navBar.getBoundingClientRect();
+                    const w = 28;                                   // underline width in px
+                    const centre = ir.left + ir.width / 2 - nr.left;
+                    underline.style.width = w + "px";
+                    underline.style.left = (centre - w / 2) + "px";
+                    underline.style.transform = "none";
+                };
+                place();
+                setTimeout(place, 60);
+            }
         }
         return window.dash_clientside.no_update;
     }
