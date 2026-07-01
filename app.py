@@ -1056,11 +1056,14 @@ def build_text_history(df: pd.DataFrame, max_rows: int = 7) -> str:
                 flags.append(f"HIGH soreness ({int(soreness)}/5)")
             elif soreness >= 3:
                 flags.append(f"moderate soreness ({int(soreness)}/5)")
+        # Energy scale — 1 = low energy/tired, 5 = energetic. LOW is the concern, HIGH is good.
         if pd.notna(fatigue):
             if fatigue <= 2:
-                flags.append(f"LOW energy/fatigue ({int(fatigue)}/5)")
-            elif fatigue <= 3:
-                flags.append(f"moderate fatigue ({int(fatigue)}/5)")
+                flags.append(f"LOW energy ({int(fatigue)}/5)")
+            elif fatigue >= 4:
+                flags.append(f"HIGH energy ({int(fatigue)}/5)")
+            else:
+                flags.append(f"moderate energy ({int(fatigue)}/5)")
         if pd.notna(sleep):
             if sleep <= 2:
                 flags.append(f"POOR sleep ({int(sleep)}/5)")
@@ -1349,6 +1352,17 @@ def make_ai_suggestions(
     sets_reps_load = (sets_reps_load or "").strip() or "none provided"
     track_reps_times = (track_reps_times or "").strip() or "none provided"
 
+    try:
+        _e = int(round(float(fatigue)))
+    except Exception:
+        _e = None
+    _energy_word = {1: "very low energy / very tired", 2: "low energy",
+                    3: "moderate energy", 4: "high energy",
+                    5: "very high energy / fully energised"}.get(_e, "")
+    energy_line = (f"Energy level: {fatigue}/5"
+                   + (f" — {_energy_word}" if _energy_word else "")
+                   + "  [IMPORTANT: this is ENERGY, not tiredness — 5 = most energetic (good), 1 = most tired (bad)]")
+
     session_block = (
         f"SESSION — {selected_date_dt}\n"
         f"Workout: {workout}\n"
@@ -1357,7 +1371,7 @@ def make_ai_suggestions(
         f"Post-session RPE (1–5): {session_rpe}\n"
         f"Session quality / execution (1–5): {session_quality}\n"
         f"Sleep last night (1–5): {sleep}\n"
-        f"Fatigue (1–5, higher = more energetic): {fatigue}\n"
+        f"{energy_line}\n"
         f"Mood (1–5): {mood}\n"
         f"Soreness (1–5): {soreness}\n"
         f"Athlete notes: {notes}\n"
@@ -4173,12 +4187,12 @@ def populate_session_context(selected_date, athlete_name):
      State("unplanned-key-distance", "value"),
      State("unplanned-duration", "value"),
      State("unplanned-srpe", "value"),
-     Input("slider-session-rpe", "value"),
-     Input("slider-session-quality", "value"),
-     Input("slider-sleep", "value"),
-     Input("slider-fatigue", "value"),
-     Input("slider-mood", "value"),
-     Input("slider-soreness", "value"),
+     State("slider-session-rpe", "value"),
+     State("slider-session-quality", "value"),
+     State("slider-sleep", "value"),
+     State("slider-fatigue", "value"),
+     State("slider-mood", "value"),
+     State("slider-soreness", "value"),
      State("refresh-btn", "n_clicks")],
     prevent_initial_call=True,
 )
