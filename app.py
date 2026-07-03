@@ -5186,7 +5186,7 @@ def update_garmin_badge(athlete_id, _today):
         ], style={"textAlign": "center", "marginTop": "4px"})
     else:
         badge = html.Div([
-            html.A("⌚ Connect Garmin", href=f"/garmin/connect?athlete={athlete_id}", target="_blank",
+            html.A("ADAPTIV Connect", href=f"/garmin/connect?athlete={athlete_id}", target="_blank",
                    style={"fontSize": "11px", "color": "#1565C0", "textDecoration": "none",
                           "background": "#e3f2fd", "padding": "3px 10px", "borderRadius": "20px",
                           "border": "1px solid #90caf9", "fontWeight": "500"}),
