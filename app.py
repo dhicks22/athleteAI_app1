@@ -4833,7 +4833,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       <div class="topbar">
         <span class="brand">
           {"<img src='data:image/png;base64," + logo_b64 + "' alt='ACI' style='width:18px;height:18px;object-fit:contain;filter:brightness(0) invert(1);opacity:0.85'/>" if logo_b64 else ""}
-          ACI &middot; ADAPTIV
+          ADAPTIV
         </span>
       </div>
       <div class="dials">
@@ -5084,15 +5084,15 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       octx.globalCompositeOperation='source-in';
       octx.fillStyle='rgba(255,255,255,0.90)';octx.fillRect(0,0,LOGO_SIZE,LOGO_SIZE);
       ctx.font='500 26px system-ui';
-      const tw=ctx.measureText('ACI \u00b7 ADAPTIV').width;
+      const tw=ctx.measureText('ADAPTIV').width;
       const bx=CX-(LOGO_SIZE+12+tw)/2;
       ctx.drawImage(oc,bx,BRAND_Y,LOGO_SIZE,LOGO_SIZE);
       ctx.fillStyle='rgba(255,255,255,0.70)';ctx.textAlign='left';ctx.textBaseline='middle';
-      ctx.fillText('ACI \u00b7 ADAPTIV',bx+LOGO_SIZE+12,BRAND_Y+LOGO_SIZE/2);
+      ctx.fillText('ADAPTIV',bx+LOGO_SIZE+12,BRAND_Y+LOGO_SIZE/2);
     }}else{{
       ctx.font='500 26px system-ui';ctx.fillStyle='rgba(255,255,255,0.70)';
       ctx.textAlign='center';ctx.textBaseline='middle';
-      ctx.fillText('ACI \u00b7 ADAPTIV',CX,BRAND_Y+LOGO_SIZE/2);
+      ctx.fillText('ADAPTIV',CX,BRAND_Y+LOGO_SIZE/2);
     }}
 
     // ── 4 equal rings ────────────────────────────────────────────────────────
