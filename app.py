@@ -101,7 +101,7 @@ if RAW_USER_LOGINS:
                 # Replace single quotes with double quotes
                 fixed = fixed.replace("'", '"')
                 # Remove trailing commas before } or ]
-                fixed = _re.sub(r',\s*([}\]])', r'', fixed)
+                fixed = _re.sub(r',\s*([}\]])', r'', fixed)
                 USER_LOGINS = json.loads(fixed)
             except Exception as _e3:
                 print(f"⚠️ USER_LOGINS repair parse failed: {_e3}")
@@ -582,13 +582,6 @@ def load_tab(tab_name: str) -> pd.DataFrame:
         formatted_values = ws.get_all_values(value_render_option="FORMATTED_VALUE")
     except Exception:
         formatted_values = all_values
-
-    # Fetch unformatted values specifically for Date — gives raw serial numbers
-    # which we can convert reliably regardless of sheet locale/format settings
-    #try:
-     #   unformatted_values = ws.get_all_values(value_render_option="UNFORMATTED_VALUE")
-    #except Exception:
-    #    unformatted_values = None
 
     if not all_values:
         return pd.DataFrame()
@@ -1287,7 +1280,7 @@ def persona_prompt(mode: str) -> str:
     return PERSONA_PROMPTS.get(mode, PERSONA_PROMPTS["General"])
 
 
-def call_openai_chat(messages: list, max_tokens: int = 700) -> str:
+def call_openai_chat(messages: list, max_tokens: int = 700, model: str = "gpt-4.1-nano") -> str:
     if not OPENAI_API_KEY:
         return "AI suggestion unavailable (missing API key)."
     try:
@@ -1295,7 +1288,7 @@ def call_openai_chat(messages: list, max_tokens: int = 700) -> str:
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
             json={
-                "model": "gpt-4.1-nano",
+                "model": model,
                 "messages": messages,
                 "temperature": 0.6,
                 "max_tokens": max_tokens,
@@ -1430,8 +1423,13 @@ def make_ai_suggestions(
         "Focus on what the primary coach will NOT cover. "
         f"Always open with '{first_name},' — this is mandatory."
     )
+    # FIX #2: give the secondary coach the same trend/history context as the
+    # primary coach — previously it only saw the 7-day summary, which made
+    # its feedback feel generic compared to the primary insight.
     user_2 = (
         f"7-day summary: {summary}\n\n"
+        f"Trend context (14 days):\n{trend_context}\n\n"
+        f"Recent session notes:\n{history_text}\n\n"
         f"{session_block}\n\n"
         f"Wellness pattern scan (last 7 days):\n{wellness_scan}\n\n"
         "TASK — SECONDARY COACH:\n"
@@ -1447,17 +1445,25 @@ def make_ai_suggestions(
         "3-4 sentences maximum. Be direct."
     )
 
+    # FIX #3: use a stronger model for the two coaching insights, which need
+    # to reliably follow multi-part instructions (don't repeat other coach,
+    # only reference logged data, exact formatting). Nano is kept for the
+    # cheap, low-stakes text elsewhere (share card quote, welcome banner).
+    INSIGHT_MODEL = "gpt-4o-mini"
+
     # ── Run both calls in parallel — cuts total wait time roughly in half ──
     with ThreadPoolExecutor(max_workers=2) as executor:
         future_1 = executor.submit(
             call_openai_chat,
             [{"role": "system", "content": system_1}, {"role": "user", "content": user_1}],
             250,
+            INSIGHT_MODEL,
         )
         future_2 = executor.submit(
             call_openai_chat,
             [{"role": "system", "content": system_2}, {"role": "user", "content": user_2}],
             250,
+            INSIGHT_MODEL,
         )
         ai1 = future_1.result()
         ai2 = future_2.result()
@@ -4316,8 +4322,13 @@ def save_and_ai(
         "AI_Suggestion_2": f"[{ai_mode_2}] {ai2}",
         "Last_Updated": dt.datetime.now().isoformat(timespec="seconds"),
     }
-    # Write scaled RPE into sRPE so the Load formula recalculates
-    payload["sRPE"] = actual_rpe_10
+    # FIX #1: only overwrite sRPE with the athlete's post-session actual RPE
+    # if this row did NOT just get a planned sRPE from the unplanned-session
+    # form. Previously this line ran unconditionally, silently clobbering the
+    # planned sRPE (and therefore Load = sRPE × Duration) that was written a
+    # few lines above for unplanned sessions.
+    if not (unplanned_srpe and str(unplanned_srpe).strip()):
+        payload["sRPE"] = actual_rpe_10
 
     try:
         write_row(athlete_name, row_idx, payload)
@@ -5302,8 +5313,16 @@ def garmin_status():
     prevent_initial_call=True,
 )
 def update_squad_view(nav_clicks, refresh_clicks, auth_data):
-    global _squad_cache
-    _squad_cache = {}  # bust cache so streak/readiness always reflects latest data
+    # FIX #4: only bust the cache when the explicit refresh button is pressed,
+    # not on every visit to the Squad tab. Previously this ran on nav-squad
+    # too, which forced a full re-fetch of every athlete's sheet just from
+    # opening the tab, making it the slowest screen in the app.
+    ctx = callback_context
+    triggered = ctx.triggered[0]["prop_id"].split(".")[0] if ctx.triggered else ""
+    if triggered == "squad-refresh-btn":
+        global _squad_cache
+        _squad_cache = {}
+
     print(f"🏟️ Squad callback fired — nav={nav_clicks} refresh={refresh_clicks} auth={auth_data}")
     if not auth_data:
         print("⚠️ No auth_data")
