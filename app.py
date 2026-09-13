@@ -1280,6 +1280,114 @@ def persona_prompt(mode: str) -> str:
     return PERSONA_PROMPTS.get(mode, PERSONA_PROMPTS["General"])
 
 
+# ============================================================
+#  AGENTIC STEP 1 — keyword-based persona pre-selection
+#  Used only when a coach hasn't manually picked one of the two
+#  ADPTV insight personas: scans the athlete's own logged text
+#  (notes, gym/track work, 7-day wellness scan) and picks the
+#  persona whose keywords match most strongly, instead of always
+#  falling back to a fixed default.
+# ============================================================
+
+PERSONA_KEYWORDS = {
+    "Acceleration & Speed Coach": [
+        "acceleration", "speed", "max velocity", "explosive", "contact time",
+        "fast reps", "sprint", "sprints", "block start", "flying",
+    ],
+    "Tempo & Endurance Coach": [
+        "tempo", "aerobic", "endurance", "pacing", "conditioning",
+        "long run", "threshold", "steady state",
+    ],
+    "Technical Sprint Coach": [
+        "posture", "angles", "mechanics", "arm action", "technique",
+        "rhythm", "form", "drive phase", "shin angle", "hip height",
+    ],
+    "Strength & Power Coach": [
+        "strength", "gym", "sets", "reps", "bar speed", "plyometric",
+        "squat", "deadlift", "power", "jump", "bench", "clean",
+    ],
+    "Recovery & Readiness Coach": [
+        "fatigue", "recovery", "sleep", "soreness", "readiness", "stress",
+        "tired", "sore", "niggle", "tight", "rest day",
+    ],
+}
+
+
+def auto_suggest_persona(notes: str, sets_reps_load: str, track_reps_times: str,
+                          wellness_flags_text: str = "", exclude: str | None = None) -> str:
+    """
+    Score each persona by keyword hits against the athlete's own logged
+    text and the 7-day wellness scan, and return the best match. This is
+    a real (if simple) decision step that runs before generation, rather
+    than a fixed default — it lets the coach leave a persona unselected
+    and have the system infer a sensible one from what was actually
+    logged. `exclude` lets the secondary insight avoid picking the same
+    persona already used for the primary insight.
+    """
+    text = " ".join([
+        str(notes or ""), str(sets_reps_load or ""),
+        str(track_reps_times or ""), str(wellness_flags_text or ""),
+    ]).lower()
+
+    scores = {}
+    for persona, keywords in PERSONA_KEYWORDS.items():
+        if persona == exclude:
+            continue
+        hits = sum(1 for kw in keywords if kw in text)
+        if hits:
+            scores[persona] = hits
+
+    if not scores:
+        return "Recovery & Readiness Coach" if exclude else "General"
+
+    return max(scores, key=scores.get)
+
+
+# ============================================================
+#  AGENTIC STEP 2 — verify-and-revise pass
+#  A second, narrow model call that checks a generated insight
+#  only references facts present in the session data, and rewrites
+#  it if it invents or misstates a detail. This turns generation
+#  from one-shot into a minimal critique/revise loop.
+# ============================================================
+
+def verify_and_revise_insight(insight: str, session_block: str, coach_label: str) -> str:
+    if not insight or "unavailable" in insight.lower():
+        return insight
+
+    check_system = (
+        "You are a strict fact-checker for athlete coaching feedback. "
+        "You are given SESSION DATA (the only facts allowed) and a DRAFT coaching message. "
+        "Check whether the DRAFT references any specific detail — exercise name, distance, "
+        "time, load number, wellness score, or event — that does NOT appear in the SESSION DATA. "
+        "Respond with exactly one line:\n"
+        "OK — if every specific detail in the draft is grounded in the session data.\n"
+        "REVISE: <corrected version> — if the draft invents or misstates a detail. "
+        "The corrected version must keep the same coach voice, tone and length, remove or fix "
+        "only the unsupported detail(s), and still open with the athlete's first name."
+    )
+    check_user = f"SESSION DATA:\n{session_block}\n\nDRAFT ({coach_label}):\n{insight}"
+
+    result = call_openai_chat(
+        [{"role": "system", "content": check_system}, {"role": "user", "content": check_user}],
+        max_tokens=300,
+        model="gpt-4.1-nano",
+    )
+
+    if not result or "unavailable" in result.lower():
+        # Verification call itself failed — fall back to the original
+        # draft rather than blocking the athlete from getting feedback.
+        return insight
+
+    result = result.strip()
+    if result.upper().startswith("OK"):
+        return insight
+    if result.upper().startswith("REVISE"):
+        revised = result.split(":", 1)[1].strip() if ":" in result else ""
+        return revised or insight
+    return insight
+
+
 def call_openai_chat(messages: list, max_tokens: int = 700, model: str = "gpt-4.1-nano") -> str:
     if not OPENAI_API_KEY:
         return "AI suggestion unavailable (missing API key)."
@@ -1313,15 +1421,15 @@ def make_ai_suggestions(
     df = load_tab(athlete_name)
 
     if df is None or df.empty:
-        return "No athlete data available yet.", ""
+        return "No athlete data available yet.", "", ai_mode_1, ai_mode_2
 
     try:
         selected_date_dt = pd.to_datetime(selected_date).date()
     except Exception:
-        return "Invalid selected date.", ""
+        return "Invalid selected date.", "", ai_mode_1, ai_mode_2
 
     if "Date" not in df.columns:
-        return "Sheet is missing a 'Date' column.", ""
+        return "Sheet is missing a 'Date' column.", "", ai_mode_1, ai_mode_2
 
     df = df.copy()
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
@@ -1372,6 +1480,16 @@ def make_ai_suggestions(
         f"Track reps & times: {track_reps_times}\n"
         f"\nUpcoming sessions:\n{upcoming}"
     )
+
+    # ── AGENTIC STEP 1: auto-select any persona the coach left unset ──
+    # If a mode wasn't manually picked in the UI, infer one from the
+    # athlete's own logged text and wellness scan rather than defaulting
+    # blindly. This is a real decision step that runs before generation.
+    if not ai_mode_1:
+        ai_mode_1 = auto_suggest_persona(notes, sets_reps_load, track_reps_times, wellness_scan)
+    if not ai_mode_2:
+        ai_mode_2 = auto_suggest_persona(notes, sets_reps_load, track_reps_times, wellness_scan,
+                                         exclude=ai_mode_1)
 
     if ai_mode_1 == ai_mode_2:
         ai_mode_2 = "Recovery & Readiness Coach"
@@ -1468,7 +1586,21 @@ def make_ai_suggestions(
         ai1 = future_1.result()
         ai2 = future_2.result()
 
-    return (ai1 or "").strip(), (ai2 or "").strip()
+    ai1 = (ai1 or "").strip()
+    ai2 = (ai2 or "").strip()
+
+    # ── AGENTIC STEP 2: verify-and-revise pass ──
+    # Run both drafts through a narrow fact-check call against the actual
+    # session data, in parallel, and use the corrected version if either
+    # draft invented or misstated a detail. Turns generation from one-shot
+    # into a minimal critique/revise loop.
+    with ThreadPoolExecutor(max_workers=2) as verify_executor:
+        v_future_1 = verify_executor.submit(verify_and_revise_insight, ai1, session_block, ai_mode_1)
+        v_future_2 = verify_executor.submit(verify_and_revise_insight, ai2, session_block, ai_mode_2)
+        ai1 = (v_future_1.result() or ai1).strip()
+        ai2 = (v_future_2.result() or ai2).strip()
+
+    return ai1, ai2, ai_mode_1, ai_mode_2
 
 
 _RADAR_PALETTE = [
@@ -4217,8 +4349,11 @@ def save_and_ai(
 ):
     if not n_clicks:          raise PreventUpdate
     if not athlete_name:      return no_update, no_update, "⚠️ Please select an athlete first.", no_update
-    if not ai_mode_1 or not ai_mode_2:
-        return no_update, no_update, "⚠️ Please select focus of ADPTV insight.", no_update
+    # NOTE: ai_mode_1 / ai_mode_2 are no longer mandatory here — if either
+    # is left unselected, make_ai_suggestions() auto-picks a persona based
+    # on the athlete's logged notes and wellness scan (see AGENTIC STEP 1
+    # in make_ai_suggestions). The resolved persona names are surfaced back
+    # from that call and used below for display, storage and email.
     if not selected_date:     return no_update, no_update, "⚠️ Please select a date from the calendar first.", no_update
 
     rpe = 3.0 if rpe is None else float(rpe)
@@ -4295,13 +4430,16 @@ def save_and_ai(
             except Exception as e:
                 print(f"⚠️ Could not write session details: {e}")
 
-    ai1, ai2 = make_ai_suggestions(
+    ai1, ai2, ai_mode_1, ai_mode_2 = make_ai_suggestions(
         athlete_name=athlete_name, selected_date=selected_date_dt,
         session_rpe=rpe, session_quality=session_quality,
         sleep=sleep, fatigue=fatigue, mood=mood, soreness=soreness,
         notes=notes, sets_reps_load=sets_reps_load, track_reps_times=track_reps_times,
         ai_mode_1=ai_mode_1, ai_mode_2=ai_mode_2,
     )
+    # ai_mode_1 / ai_mode_2 may have just been auto-selected inside
+    # make_ai_suggestions (AGENTIC STEP 1) — everything below that displays,
+    # stores, or emails the mode name uses these resolved values.
 
     unplanned_extras = {}
     if unplanned_workout and unplanned_workout.strip(): unplanned_extras["Workout"] = unplanned_workout.strip()
