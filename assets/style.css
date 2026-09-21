@@ -839,3 +839,171 @@ body {
     border-radius: 3px;
     transition: left .25s ease, width .25s ease;
 }
+
+/* ============================================================
+   17) THEME TOGGLE + DARK-MODE FIXES  — append to END of dashboard.css
+   Covers the gaps visible when dark mode is on: the toggle button,
+   labels that were hardcoded #222, squad cards, and a smooth fade.
+============================================================ */
+
+/* Smooth cross-fade between light and dark */
+body, .card, .login-card, .dial-circle, .compact-today, .bottom-nav,
+.premium-card, .ai-card, #session-context-wrapper {
+  transition: background-color .25s ease, color .25s ease, border-color .25s ease;
+}
+
+/* Round toggle button in the header — themed via tokens */
+#theme-toggle {
+  background: var(--card-bg) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 2px 6px var(--card-shadow) !important;
+}
+#theme-toggle:hover,
+#theme-toggle:focus { border-color: var(--accent) !important; }
+
+/* ---- Labels that were hardcoded #222 in the CSS — follow the theme ---- */
+[data-theme="dark"] .mini-label,
+[data-theme="dark"] .dial-label { color: var(--text) !important; }
+
+/* Top-row "Today" box */
+[data-theme="dark"] .compact-today {
+  border-color: var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+}
+
+/* Bottom-nav icons/labels default to #666 — lift them on dark */
+[data-theme="dark"] .nav-icon,
+[data-theme="dark"] .nav-label { color: var(--text-muted); }
+
+/* ---- Squad cards use inline background:"white" + dark text; override on dark ---- */
+[data-theme="dark"] #squad-cards-container [id*="squad-card"] {
+  background: var(--card-bg) !important;
+}
+[data-theme="dark"] #squad-cards-container [id*="squad-card"] * {
+  color: var(--text);
+}
+[data-theme="dark"] .squad-summary { background: var(--card-bg) !important; }
+
+/* ---- Session-log popup: neutral grey note/gym boxes go dark ---- */
+[data-theme="dark"] #popup-modal-body div[style*="f5f5f5"] {
+  background: rgba(255,255,255,0.05) !important;
+  color: var(--text) !important;
+}
+
+/* ---- Modal (session log popup) surface on dark ---- */
+[data-theme="dark"] .modal-content {
+  background: var(--card-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+/* ---- Borderless textareas inside input cards: blend into card, readable ---- */
+[data-theme="dark"] #session-input-container textarea {
+  background: transparent !important;
+  color: var(--text) !important;
+}
+[data-theme="dark"] #session-input-container textarea::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 0.7;
+}
+
+/* NOTE — Plotly charts (Graphs + Radar, images 4 & 5):
+   Those set plot_bgcolor / paper_bgcolor / line colours in Python, so CSS
+   cannot recolour them — that is why the axis labels look faint on dark.
+   Fully darkening the charts is the remaining piece: pass the theme into
+   the plot builders and swap the palette + axis font colours there. */
+
+/* ---- Bootstrap .text-muted is a fixed dark grey — lift it on dark so the
+        "View mode" label, squad hints, calendar "No data" etc. stay legible ---- */
+[data-theme="dark"] .text-muted { color: var(--text-muted) !important; }
+
+/* ---- Radar delta chips: the neutral "→" chips use a near-white bg with grey
+        text (fine on light, invisible border on dark). Give them a dark surface. ---- */
+[data-theme="dark"] #wellness-radar-chips > div { backdrop-filter: none; }
+
+/* ============================================================
+   18) DARK-MODE POLISH — login frosted glass, view toggle, radar
+============================================================ */
+
+/* ---- Login card: frosted glass so the background image shows through
+        as a soft wash, with a subtle highlight border to make it pop.
+        Blur keeps the text readable over a busy image. ---- */
+.login-card {
+  background: rgba(22,24,28,0.72) !important;  /* fallback */
+  background: color-mix(in srgb, var(--card-bg) 72%, transparent) !important;
+  backdrop-filter: blur(16px) saturate(1.1);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1);
+  border: 1px solid rgba(255,255,255,0.14) !important;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.45),
+              inset 0 1px 0 rgba(255,255,255,0.08) !important;
+}
+[data-theme="dark"] .login-card {
+  border-color: rgba(255,255,255,0.10) !important;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6),
+              inset 0 1px 0 rgba(255,255,255,0.06) !important;
+}
+/* Login inputs slightly translucent to match the frosted card */
+.login-card input {
+  background: rgba(22,24,28,0.55) !important;  /* fallback */
+  background: color-mix(in srgb, var(--card-bg) 55%, transparent) !important;
+}
+
+/* ---- Graphs "Weekly / Daily" view toggle: the light pill background is
+        invisible on dark — make it token-based. ---- */
+[data-theme="dark"] .view-toggle {
+  background: var(--card-bg);
+  border-color: var(--border);
+}
+[data-theme="dark"] .view-toggle-label { color: var(--text-muted); }
+[data-theme="dark"] .view-toggle-input:checked + .view-toggle-label {
+  background: var(--accent);
+  color: #05070a;
+  box-shadow: none;
+}
+
+/* ---- Radar delta chips: neutral "→" chips get a faint dark surface ---- */
+[data-theme="dark"] #wellness-radar-chips > div { backdrop-filter: none; }
+
+/* ============================================================
+   19) BUTTONS ON DARK
+============================================================ */
+
+/* Refresh button (color="light") renders solid white — make it match the
+   toggle beside it using theme tokens. */
+.refresh-btn.btn-light,
+.refresh-btn {
+  background: var(--card-bg) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+.refresh-btn:hover,
+.refresh-btn:focus {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+  background: var(--card-bg) !important;
+}
+
+/* Outline secondary buttons (Close, calendar ◀ ▶, popup Close) read muddy on
+   dark — give them clear token-based text/border. */
+[data-theme="dark"] .btn-outline-secondary {
+  color: var(--text-muted) !important;
+  border-color: var(--border) !important;
+}
+[data-theme="dark"] .btn-outline-secondary:hover {
+  background: rgba(255,255,255,0.06) !important;
+  color: var(--text) !important;
+  border-color: var(--accent) !important;
+}
+
+/* Reset (outline warning) keeps its amber, just ensure it's visible on dark */
+[data-theme="dark"] .btn-outline-warning {
+  color: #ffca28 !important;
+  border-color: #ffca28 !important;
+}
+[data-theme="dark"] .btn-outline-warning:hover {
+  background: rgba(255,202,40,0.12) !important;
+  color: #ffca28 !important;
+}
