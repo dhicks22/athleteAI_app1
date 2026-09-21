@@ -5938,6 +5938,325 @@ def streak_at_risk():
     return jsonify({"at_risk": at_risk, "emailed": do_email})
 
 
+@app.callback(
+    Output("squad-cards-container", "children"),
+    Input("nav-squad", "n_clicks"),
+    Input("squad-refresh-btn", "n_clicks"),
+    State("auth-store", "data"),
+    prevent_initial_call=True,
+)
+def update_squad_view(nav_clicks, refresh_clicks, auth_data):
+    # FIX #4: only bust the cache when the explicit refresh button is pressed,
+    # not on every visit to the Squad tab. Previously this ran on nav-squad
+    # too, which forced a full re-fetch of every athlete's sheet just from
+    # opening the tab, making it the slowest screen in the app.
+    ctx = callback_context
+    triggered = ctx.triggered[0]["prop_id"].split(".")[0] if ctx.triggered else ""
+    if triggered == "squad-refresh-btn":
+        global _squad_cache
+        _squad_cache = {}
+
+    print(f"🏟️ Squad callback fired — nav={nav_clicks} refresh={refresh_clicks} auth={auth_data}")
+    if not auth_data:
+        print("⚠️ No auth_data")
+        return html.Div("Not logged in.", className="text-muted")
+    if not auth_data.get("is_coach"):
+        print(f"⚠️ Not a coach — is_coach={auth_data.get('is_coach')}, keys={list(auth_data.keys())}")
+        return html.Div("Coach access only.", className="text-muted")
+
+    today = today_adl()
+    print(f"✅ Squad loading for coach {auth_data.get('username')} — {len(USER_LOGINS)} users in config")
+
+    # All sheets except "Default" template
+    EXCLUDE = {"Default", "default"}
+    all_sheets = sorted([
+        info.get("sheet", "")
+        for _, info in USER_LOGINS.items()
+        if info.get("sheet", "") and info.get("sheet", "") not in EXCLUDE
+           and info.get("role", "athlete") == "athlete"
+    ])
+
+    TRAFFIC = {
+        "blue": {"border": "#1E88E5"},
+        "green": {"border": "#43A047"},
+        "amber": {"border": "#F9A825"},
+        "red": {"border": "#E53935"},
+        "grey": {"border": "#bdbdbd"},
+    }
+
+    def score_colour(val):
+        if val is None: return "grey"
+        if val >= 80: return "blue"
+        if val >= 60: return "green"
+        if val >= 40: return "amber"
+        return "red"
+
+    def mini_ring(value, color, size=52, display_override=None):
+        colour_map = {
+            "blue": "#1E88E5",  # matches dial-blue in dashboard.css
+            "green": "#43A047",  # matches dial-green
+            "amber": "#F9A825",  # matches dial-amber
+            "red": "#E53935",  # matches dial-red
+            "grey": "#e0e0e0",
+            "pink": "#E91E8C",  # matches dial-pink (streak)
+        }
+        # Honour explicit colour arg (e.g. "pink" for streak) — otherwise derive from value
+        if color in colour_map:
+            c = colour_map[color]
+        else:
+            c = colour_map.get(score_colour(value), "#e0e0e0")
+
+        txt = display_override if display_override is not None else ("—" if value is None else str(int(round(value))))
+        pct = 0 if value is None else min(max(float(value), 0), 100)
+
+        import math
+        if pct >= 100:
+            arc_d = "M 26 6 A 20 20 0 1 1 25.999 6 Z"
+        elif pct <= 0:
+            arc_d = ""
+        else:
+            angle = (pct / 100) * 360
+            start_rad = math.radians(-90)
+            end_rad = math.radians(-90 + angle)
+            x1 = 26 + 20 * math.cos(start_rad)
+            y1 = 26 + 20 * math.sin(start_rad)
+            x2 = 26 + 20 * math.cos(end_rad)
+            y2 = 26 + 20 * math.sin(end_rad)
+            large = 1 if angle > 180 else 0
+            arc_d = f"M {x1:.2f} {y1:.2f} A 20 20 0 {large} 1 {x2:.2f} {y2:.2f}"
+
+        svg_parts = [
+            f'<svg viewBox="0 0 52 52" width="{size}" height="{size}" xmlns="http://www.w3.org/2000/svg">',
+            f'<circle cx="26" cy="26" r="20" fill="none" stroke="#f0f0f0" stroke-width="6"/>',
+        ]
+        if arc_d:
+            svg_parts.append(
+                f'<path d="{arc_d}" fill="none" stroke="{c}" stroke-width="6" '
+                f'stroke-linecap="round"/>'
+            )
+        svg_parts.append(
+            f'<text x="26" y="31" text-anchor="middle" font-size="13" '
+            f'font-weight="700" fill="#333" font-family="system-ui">{txt}</text>'
+        )
+        svg_parts.append('</svg>')
+        svg_str = "".join(svg_parts)
+
+        import base64
+        svg_b64 = base64.b64encode(svg_str.encode()).decode()
+        data_uri = f"data:image/svg+xml;base64,{svg_b64}"
+
+        return html.Div(
+            html.Img(src=data_uri, style={"width": f"{size}px", "height": f"{size}px"}),
+            style={"width": f"{size}px", "height": f"{size}px"},
+        )
+
+    cards = []
+
+    # NEW — parallel, fast
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _load_safe(name):
+        try:
+            return name, load_tab_cached(name)
+        except Exception:
+            return name, pd.DataFrame()
+
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        results = dict(executor.map(_load_safe, sorted(all_sheets)))
+
+    for sheet_name in sorted(all_sheets):
+        df = results.get(sheet_name, pd.DataFrame())
+
+        readiness_val = None
+        neuro_val = None
+        streak = 0
+        last_logged = None
+        days_ago = None
+        weekly_pct = None
+        session_note = ""
+        session_rpe = None
+
+        if not df.empty:
+            try:
+                streak, _ = compute_streaks(df)
+
+                dow = today.weekday()
+                ws = today - dt.timedelta(days=(dow - 5) % 7)
+                we = ws + dt.timedelta(days=6)
+                planned = count_planned_sessions_in_week(df, ws, we)
+                logged_n = count_logged_sessions_in_week(df, ws, we)
+                weekly_pct = int(round(logged_n / planned * 100)) if planned > 0 else 0
+
+                dft = df.copy()
+                dft["Date"] = pd.to_datetime(dft["Date"], errors="coerce")
+                dft = dft.sort_values("Date")
+                dft = dft[~dft["Date"].duplicated(keep="last")].set_index("Date")
+                dft = dft.reindex(pd.date_range(dft.index.min(), today, freq="D"))
+
+                load_s = pd.to_numeric(dft.get("Load"), errors="coerce")
+                rpe_post = pd.to_numeric(
+                    dft["RPE_Post_Session"] if "RPE_Post_Session" in dft.columns else pd.Series(dtype=float),
+                    errors="coerce")
+                rpe_plan = pd.to_numeric(dft["RPE"] if "RPE" in dft.columns else pd.Series(dtype=float),
+                                         errors="coerce")
+                if rpe_post.notna().sum() > 0:
+                    rpe_s = rpe_post
+                elif rpe_plan.notna().sum() > 0:
+                    vals_p = rpe_plan.dropna()
+                    rpe_s = rpe_plan / 2.0 if (not vals_p.empty and vals_p.max() > 5) else rpe_plan
+                else:
+                    rpe_s = pd.Series(dtype=float, index=dft.index)
+                qual_s = pd.to_numeric(dft.get("Session_1_5"), errors="coerce")
+                readiness_val = calc_daily_readiness(load_s, rpe_s, qual_s)
+                neuro_val = compute_neuro_for_athlete(df, today)
+
+                df2 = df.copy()
+                df2["Date"] = pd.to_datetime(df2["Date"], errors="coerce").dt.date
+                df2 = df2.sort_values("Date")
+                logged_days = [d for d in df2["Date"].dropna().unique()
+                               if get_day_status(df2, d).get("logged", False)]
+                if logged_days:
+                    last_logged = max(logged_days)
+                    days_ago = (today - last_logged).days
+
+                today_rows = df2[df2["Date"] == today]
+                if not today_rows.empty:
+                    row = today_rows.iloc[-1]
+                    session_note = str(row.get("Athlete_Notes", "") or "").strip()
+                    if session_note.lower() in ("", "nan", "none", "nil", "example", "test", "n/a", "-", "—"):
+                        session_note = ""
+                    rpe_raw = pd.to_numeric(row.get("RPE_Post_Session", np.nan), errors="coerce")
+                    session_rpe = int(rpe_raw) if pd.notna(rpe_raw) and rpe_raw > 0 else None
+
+            except Exception as ex:
+                print(f"Squad card error for {sheet_name}: {ex}")
+
+        if days_ago is None:
+            status_label = "No data";
+            status_bg = "#f5f5f5";
+            status_color = "#999"
+        elif days_ago == 0:
+            status_label = "Logged today ✓";
+            status_bg = "#e8f5e9";
+            status_color = "#2E7D32"
+        elif days_ago == 1:
+            status_label = "Yesterday";
+            status_bg = "#fff8e1";
+            status_color = "#F9A825"
+        elif days_ago <= 3:
+            status_label = f"{days_ago}d ago";
+            status_bg = "#fff3e0";
+            status_color = "#E65100"
+        else:
+            status_label = f"{days_ago}d ago ⚠";
+            status_bg = "#ffebee";
+            status_color = "#C62828"
+
+        r_col = score_colour(readiness_val)
+        n_col = score_colour(neuro_val)
+        card_border = TRAFFIC[r_col]["border"]
+
+        card = html.Div([
+            html.Div([
+                html.Div(sheet_name, style={"fontWeight": "700", "fontSize": "15px", "color": "#1a1a1a"}),
+                html.Div(status_label, style={
+                    "fontSize": "11px", "fontWeight": "600", "padding": "2px 10px",
+                    "borderRadius": "999px", "background": status_bg, "color": status_color,
+                }),
+            ], style={"display": "flex", "justifyContent": "space-between",
+                      "alignItems": "center", "marginBottom": "12px"}),
+
+            html.Div([
+                html.Div([
+                    mini_ring(readiness_val, r_col),
+                    html.Div("Readiness", style={"fontSize": "10px", "color": "#888",
+                                                 "textAlign": "center", "marginTop": "3px"}),
+                ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
+                html.Div([
+                    mini_ring(neuro_val, n_col),
+                    html.Div("Neuro", style={"fontSize": "10px", "color": "#888",
+                                             "textAlign": "center", "marginTop": "3px"}),
+                ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
+                html.Div([
+                    mini_ring(weekly_pct, score_colour(weekly_pct)),
+                    html.Div("Exposure", style={"fontSize": "10px", "color": "#888",
+                                                "textAlign": "center", "marginTop": "3px"}),
+                ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
+                html.Div([
+                    mini_ring((streak_cycle(streak) / 31 * 100) if streak else None, "pink" if streak else "grey", display_override=str(streak_cycle(streak)) if streak else None),
+                    html.Div("Streak", style={"fontSize": "10px", "color": "#888",
+                                              "textAlign": "center", "marginTop": "3px"}),
+                ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
+            ], style={"display": "flex", "justifyContent": "space-around",
+                      "marginBottom": "10px" if (session_note or session_rpe) else "0"}),
+
+            html.Div([
+                html.Div([
+                    html.Span("Today: ", style={"fontSize": "11px", "color": "#888", "fontWeight": "600"}),
+                    html.Span(f"RPE {session_rpe}/5  ", style={"fontSize": "12px", "color": "#444"})
+                    if session_rpe else None,
+                    html.Span(session_note[:80] + ("…" if len(session_note) > 80 else ""),
+                              style={"fontSize": "12px", "color": "#555", "fontStyle": "italic"})
+                    if session_note else None,
+                ]) if (session_note or session_rpe) else None,
+            ]),
+
+        ], id={"type": "squad-card", "sheet": sheet_name},
+            n_clicks=0,
+            style={
+                "background": "white",
+                "borderRadius": "14px",
+                "padding": "14px 16px",
+                "boxShadow": "0 2px 8px rgba(0,0,0,0.08)",
+                "borderLeft": f"4px solid {card_border}",
+                "marginBottom": "12px",
+                "cursor": "pointer",
+            })
+
+        cards.append(card)
+
+    if not cards:
+        return html.Div("No athletes found.", className="text-muted mt-3")
+
+    total = len(all_sheets)
+    summary = html.Div([
+        html.Div([
+            html.Div(str(total), style={"fontSize": "28px", "fontWeight": "800", "color": "#1565C0"}),
+            html.Div("Athletes", style={"fontSize": "11px", "color": "#888"}),
+        ], style={"textAlign": "center", "flex": "1"}),
+        html.Div([
+            html.Div(today.strftime("%a"), style={"fontSize": "22px", "fontWeight": "700", "color": "#333"}),
+            html.Div(today.strftime("%d %b %Y"), style={"fontSize": "11px", "color": "#888"}),
+        ], style={"textAlign": "center", "flex": "1"}),
+    ], style={"display": "flex", "background": "#f8f9fa", "borderRadius": "12px",
+              "padding": "12px", "marginBottom": "16px"})
+
+    return [summary] + cards
+
+@app.callback(
+    Output("athlete-dropdown", "value", allow_duplicate=True),
+    Output("bottom-nav-click", "data", allow_duplicate=True),
+    Input({"type": "squad-card", "sheet": ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def squad_card_click(n_clicks_list):
+    ctx = callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    if not n_clicks_list or all((n or 0) == 0 for n in n_clicks_list):
+        raise PreventUpdate
+
+    try:
+        triggered = json.loads(ctx.triggered[0]["prop_id"].split(".")[0])
+        sheet_name = triggered.get("sheet")
+        if not sheet_name:
+            raise PreventUpdate
+        return sheet_name, "home"
+    except Exception:
+        raise PreventUpdate
+
+
+
 @server.route("/debug/dates/<tab_name>")
 def debug_dates(tab_name):
     if sh is None:
