@@ -5943,9 +5943,18 @@ def streak_at_risk():
     Input("nav-squad", "n_clicks"),
     Input("squad-refresh-btn", "n_clicks"),
     State("auth-store", "data"),
+    State("theme-store", "data"),
     prevent_initial_call=True,
 )
-def update_squad_view(nav_clicks, refresh_clicks, auth_data):
+def update_squad_view(nav_clicks, refresh_clicks, auth_data, theme):
+    _dark = theme == "dark"
+    _card_bg = "#161b22" if _dark else "white"
+    _name_col = "#f2f2f2" if _dark else "#1a1a1a"
+    _muted_col = "#9ca3af" if _dark else "#888"
+    _ring_txt = "#f2f2f2" if _dark else "#333"
+    _ring_track = "#2a2e33" if _dark else "#f0f0f0"
+    _summary_bg = "#161b22" if _dark else "#f8f9fa"
+    _summary_day = "#e6ebf1" if _dark else "#333"
     # FIX #4: only bust the cache when the explicit refresh button is pressed,
     # not on every visit to the Squad tab. Previously this ran on nav-squad
     # too, which forced a full re-fetch of every athlete's sheet just from
@@ -5997,7 +6006,7 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
             "green": "#43A047",  # matches dial-green
             "amber": "#F9A825",  # matches dial-amber
             "red": "#E53935",  # matches dial-red
-            "grey": "#e0e0e0",
+            "grey": "#4a525c" if _dark else "#e0e0e0",
             "pink": "#E91E8C",  # matches dial-pink (streak)
         }
         # Honour explicit colour arg (e.g. "pink" for streak) — otherwise derive from value
@@ -6027,7 +6036,7 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
 
         svg_parts = [
             f'<svg viewBox="0 0 52 52" width="{size}" height="{size}" xmlns="http://www.w3.org/2000/svg">',
-            f'<circle cx="26" cy="26" r="20" fill="none" stroke="#f0f0f0" stroke-width="6"/>',
+            f'<circle cx="26" cy="26" r="20" fill="none" stroke="{_ring_track}" stroke-width="6"/>',
         ]
         if arc_d:
             svg_parts.append(
@@ -6036,7 +6045,7 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
             )
         svg_parts.append(
             f'<text x="26" y="31" text-anchor="middle" font-size="13" '
-            f'font-weight="700" fill="#333" font-family="system-ui">{txt}</text>'
+            f'font-weight="700" fill="{_ring_txt}" font-family="system-ui">{txt}</text>'
         )
         svg_parts.append('</svg>')
         svg_str = "".join(svg_parts)
@@ -6158,7 +6167,7 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
 
         card = html.Div([
             html.Div([
-                html.Div(sheet_name, style={"fontWeight": "700", "fontSize": "15px", "color": "#1a1a1a"}),
+                html.Div(sheet_name, style={"fontWeight": "700", "fontSize": "15px", "color": _name_col}),
                 html.Div(status_label, style={
                     "fontSize": "11px", "fontWeight": "600", "padding": "2px 10px",
                     "borderRadius": "999px", "background": status_bg, "color": status_color,
@@ -6169,22 +6178,22 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
             html.Div([
                 html.Div([
                     mini_ring(readiness_val, r_col),
-                    html.Div("Readiness", style={"fontSize": "10px", "color": "#888",
+                    html.Div("Readiness", style={"fontSize": "10px", "color": _muted_col,
                                                  "textAlign": "center", "marginTop": "3px"}),
                 ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
                 html.Div([
                     mini_ring(neuro_val, n_col),
-                    html.Div("Neuro", style={"fontSize": "10px", "color": "#888",
+                    html.Div("Neuro", style={"fontSize": "10px", "color": _muted_col,
                                              "textAlign": "center", "marginTop": "3px"}),
                 ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
                 html.Div([
                     mini_ring(weekly_pct, score_colour(weekly_pct)),
-                    html.Div("Exposure", style={"fontSize": "10px", "color": "#888",
+                    html.Div("Exposure", style={"fontSize": "10px", "color": _muted_col,
                                                 "textAlign": "center", "marginTop": "3px"}),
                 ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
                 html.Div([
                     mini_ring((streak_cycle(streak) / 31 * 100) if streak else None, "pink" if streak else "grey", display_override=str(streak_cycle(streak)) if streak else None),
-                    html.Div("Streak", style={"fontSize": "10px", "color": "#888",
+                    html.Div("Streak", style={"fontSize": "10px", "color": _muted_col,
                                               "textAlign": "center", "marginTop": "3px"}),
                 ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
             ], style={"display": "flex", "justifyContent": "space-around",
@@ -6192,11 +6201,11 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
 
             html.Div([
                 html.Div([
-                    html.Span("Today: ", style={"fontSize": "11px", "color": "#888", "fontWeight": "600"}),
+                    html.Span("Today: ", style={"fontSize": "11px", "color": _muted_col, "fontWeight": "600"}),
                     html.Span(f"RPE {session_rpe}/5  ", style={"fontSize": "12px", "color": "#444"})
                     if session_rpe else None,
                     html.Span(session_note[:80] + ("…" if len(session_note) > 80 else ""),
-                              style={"fontSize": "12px", "color": "#555", "fontStyle": "italic"})
+                              style={"fontSize": "12px", "color": _muted_col, "fontStyle": "italic"})
                     if session_note else None,
                 ]) if (session_note or session_rpe) else None,
             ]),
@@ -6204,7 +6213,7 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
         ], id={"type": "squad-card", "sheet": sheet_name},
             n_clicks=0,
             style={
-                "background": "white",
+                "background": _card_bg,
                 "borderRadius": "14px",
                 "padding": "14px 16px",
                 "boxShadow": "0 2px 8px rgba(0,0,0,0.08)",
@@ -6222,13 +6231,13 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data):
     summary = html.Div([
         html.Div([
             html.Div(str(total), style={"fontSize": "28px", "fontWeight": "800", "color": "#1565C0"}),
-            html.Div("Athletes", style={"fontSize": "11px", "color": "#888"}),
+            html.Div("Athletes", style={"fontSize": "11px", "color": _muted_col}),
         ], style={"textAlign": "center", "flex": "1"}),
         html.Div([
-            html.Div(today.strftime("%a"), style={"fontSize": "22px", "fontWeight": "700", "color": "#333"}),
-            html.Div(today.strftime("%d %b %Y"), style={"fontSize": "11px", "color": "#888"}),
+            html.Div(today.strftime("%a"), style={"fontSize": "22px", "fontWeight": "700", "color": _summary_day}),
+            html.Div(today.strftime("%d %b %Y"), style={"fontSize": "11px", "color": _muted_col}),
         ], style={"textAlign": "center", "flex": "1"}),
-    ], style={"display": "flex", "background": "#f8f9fa", "borderRadius": "12px",
+    ], style={"display": "flex", "background": _summary_bg, "borderRadius": "12px",
               "padding": "12px", "marginBottom": "16px"})
 
     return [summary] + cards

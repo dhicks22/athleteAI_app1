@@ -840,6 +840,7 @@ body {
     transition: left .25s ease, width .25s ease;
 }
 
+
 /* ============================================================
    17) THEME TOGGLE + DARK-MODE FIXES  — append to END of dashboard.css
    Covers the gaps visible when dark mode is on: the toggle button,
