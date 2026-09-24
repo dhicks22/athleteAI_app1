@@ -1050,3 +1050,379 @@ body, .card, .login-card, .dial-circle, .compact-today, .bottom-nav,
   background: var(--accent-soft, rgba(30,136,229,0.15)) !important;
   color: var(--text) !important;
 }
+
+/* ============================================================
+   21) MORNING CHECK-IN + STALE SCORES
+   Token-based, so it works in light and dark.
+============================================================ */
+
+/* Readiness / Neuro dials grey out when the data behind them is old */
+.dial-stale .dial-circle {
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+
+.checkin-card {
+  max-width: 560px;
+  margin: 0 auto;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 18px 16px;
+  box-shadow: 0 3px 8px var(--card-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ci-title { font-size: 20px; font-weight: 700; color: var(--text); line-height: 1.1; }
+.ci-sub { font-size: 13px; color: var(--text-muted); }
+.ci-sub-stale { color: #b7791f; font-weight: 600; }
+[data-theme="dark"] .ci-sub-stale { color: #ffd166; }
+
+.ci-questions { display: flex; flex-direction: column; gap: 16px; margin-top: 4px; }
+.ci-q { display: flex; flex-direction: column; gap: 6px; }
+.ci-label { font-size: 15px; font-weight: 600; color: var(--text); }
+.ci-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.ci-ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); }
+
+.ci-btn {
+  height: 46px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.ci-btn:hover { border-color: var(--accent); }
+.ci-btn.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+[data-theme="dark"] .ci-btn.selected { color: #07121f; }
+
+.ci-save {
+  margin-top: 6px;
+  min-height: 50px;
+  border: none;
+  border-radius: 14px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+[data-theme="dark"] .ci-save { color: #07121f; }
+.ci-save:hover { filter: brightness(1.05); }
+.ci-status { font-size: 13px; color: #e53935; min-height: 0; }
+[data-theme="dark"] .ci-status { color: #ff8a80; }
+
+/* Compact "checked in" state */
+.checkin-done {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+.ci-done-icon { font-size: 22px; color: #2fb344; flex-shrink: 0; }
+.ci-done-text { flex-grow: 1; display: flex; flex-direction: column; gap: 2px; }
+.ci-done-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.ci-done-sub { font-size: 13px; color: var(--text-muted); }
+.ci-edit {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ============================================================
+   22) HERO SCORE, DRIVERS, TODAY'S SESSION, TAKEAWAYS, TAP LOG
+============================================================ */
+
+/* ---- Hero readiness ---- */
+.hero-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0 2px;
+}
+.hero-block .dial-hero { --dial-size: 168px; }
+@media (max-width: 600px) { .hero-block .dial-hero { --dial-size: 150px; } }
+.hero-verdict {
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+  min-height: 24px;
+}
+.drivers-toggle {
+  min-height: 40px;
+  padding: 0 14px;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+/* Secondary dials sit smaller under the hero */
+.dial-secondary .dial-center { --dial-size: 86px; }
+.dial-secondary .dial-label { font-size: 8.5px; }
+
+/* ---- Drivers panel ---- */
+.drivers-panel, .drivers-empty {
+  max-width: 560px;
+  margin: 4px auto 0;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px 16px;
+}
+.drivers-empty { font-size: 13px; color: var(--text-muted); text-align: center; }
+.drv-row { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.drv-row:last-of-type { border-bottom: none; }
+.drv-top { display: flex; justify-content: space-between; align-items: baseline; }
+.drv-name { font-size: 15px; font-weight: 600; color: var(--text); }
+.drv-status { font-size: 12.5px; font-weight: 700; }
+.drv-bar { position: relative; height: 8px; border-radius: 4px; background: var(--dial-track); overflow: visible; }
+.drv-fill { height: 8px; border-radius: 4px; }
+.drv-band { position: absolute; left: 40%; width: 25%; height: 8px; border-radius: 2px; background: rgba(47,179,68,0.28); }
+.drv-marker { position: absolute; top: -4px; width: 2px; height: 16px; background: var(--text); }
+.drv-detail { font-size: 12.5px; color: var(--text-muted); }
+.drv-key { font-size: 11.5px; color: var(--text-muted); padding-top: 8px; }
+
+/* ---- Today's session card ---- */
+.ts-card {
+  max-width: 560px;
+  margin: 0 auto;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 3px 8px var(--card-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ts-label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; color: var(--text-muted); }
+.ts-title { font-family: 'Barlow Condensed', system-ui, sans-serif; font-size: 24px; font-weight: 700; color: var(--text); line-height: 1.1; }
+.ts-meta { font-size: 13.5px; color: var(--text-muted); }
+.ts-advice { margin-top: 8px; padding: 12px; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; }
+.ts-advice-head { font-size: 15px; font-weight: 700; }
+.ts-advice-sub { font-size: 13px; line-height: 1.45; color: var(--text); opacity: 0.85; }
+.ts-log-btn {
+  margin-top: 8px; min-height: 48px; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  font-size: 15px; font-weight: 600; cursor: pointer;
+}
+.ts-log-btn:hover { border-color: var(--accent); color: var(--accent); }
+.ts-logged { margin-top: 6px; font-size: 13.5px; font-weight: 600; color: #2fb344; }
+
+/* ---- Chart takeaways ---- */
+.takeaway { max-width: 900px; margin: 0 auto 6px; padding: 2px 4px 8px; }
+.tk-head { font-family: 'Barlow Condensed', system-ui, sans-serif; font-size: 19px; font-weight: 700; line-height: 1.15; }
+.tk-sub { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+/* ---- Session log: wellness collapse ---- */
+.log-taps { margin-bottom: 4px; }
+.lw-block { margin: 8px 0 12px; }
+.lw-toggle {
+  width: 100%; min-height: 48px; padding: 0 14px;
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--card-bg); color: var(--text);
+  font-size: 15px; font-weight: 600; cursor: pointer; text-align: left;
+}
+.lw-title { flex-shrink: 0; }
+.lw-note { flex-grow: 1; font-size: 12.5px; font-weight: 500; color: var(--text-muted); }
+.lw-caret { color: var(--text-muted); }
+
+/* Squad: grey an athlete's readiness/neuro rings when their data is old */
+.squad-stale img { filter: grayscale(1); opacity: 0.55; }
+
+/* ============================================================
+   23) DESKTOP WIDTHS — keep Home readable on a wide screen
+   Everything on Home now sits in one centred column instead of
+   stretching the full browser width.
+============================================================ */
+.dial-secondary,
+#wellness-alert-banner > div,
+#badges-row > div,
+#welcome-message > div,
+.checkin-card,
+.ts-card,
+.drivers-panel,
+.drivers-empty {
+  max-width: 620px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* The three supporting dials sit as a tight group under the hero,
+   not spread across the whole window. */
+.dial-secondary { display: flex; justify-content: center; gap: 12px; }
+.dial-secondary > [class*="col"] { flex: 0 0 auto; max-width: 180px; }
+
+/* Top row (athlete + today) also capped on desktop */
+@media (min-width: 900px) {
+  #home-view > .row:first-of-type { max-width: 620px; margin-left: auto; margin-right: auto; }
+}
+
+/* Long workout strings from the sheet: cap the title at two lines so the
+   card stays scannable, full text still shows on hover/long-press. */
+.ts-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 20px;
+}
+
+/* ============================================================
+   24) DIAL SIZING + FINISH
+   Ring thickness now scales with each dial, and the glossy
+   "bubble" treatment is dropped for a flat ring.
+============================================================ */
+
+/* Hero: large ring, proportionally thick */
+.hero-block .dial-hero {
+  --dial-size: 168px;
+  --dial-thickness: 16px;
+}
+
+/* Supporting three: smaller ring, proportionally thinner */
+.dial-secondary .dial-center {
+  --dial-size: 88px;
+  --dial-thickness: 9px;
+}
+
+/* Flat finish — no gloss highlight, no puffy drop shadow */
+.hero-block .dial-circle::after,
+.dial-secondary .dial-circle::after { display: none; }
+
+.hero-block .dial-circle,
+.dial-secondary .dial-circle {
+  box-shadow: 0 0 0 1px var(--dial-stroke);
+}
+.hero-block .dial-circle::before,
+.dial-secondary .dial-circle::before {
+  box-shadow: none;
+}
+
+/* Number scales with the ring rather than looking oversized */
+.dial-secondary .dial-text { font-size: calc(var(--dial-size) * 0.30); }
+.hero-block .dial-text { font-size: calc(var(--dial-size) * 0.30); }
+
+/* Labels above the small dials: one line, evenly spaced */
+.dial-secondary .dial-label {
+  font-size: 8.5px;
+  white-space: nowrap;
+  margin-bottom: 4px;
+}
+
+/* Phone sizing */
+@media (max-width: 600px) {
+  .hero-block .dial-hero { --dial-size: 148px; --dial-thickness: 14px; }
+  .dial-secondary .dial-center { --dial-size: 76px; --dial-thickness: 8px; }
+  .dial-secondary { gap: 6px; }
+  .dial-secondary > [class*="col"] { max-width: 120px; }
+}
+
+/* Very small phones */
+@media (max-width: 360px) {
+  .hero-block .dial-hero { --dial-size: 132px; --dial-thickness: 13px; }
+  .dial-secondary .dial-center { --dial-size: 68px; --dial-thickness: 7px; }
+  .dial-secondary .dial-label { font-size: 8px; }
+}
+
+/* ============================================================
+   25) DESKTOP = the original row of four equal dials
+   Phone keeps the hero layout from section 24. Same markup,
+   different arrangement.
+============================================================ */
+@media (min-width: 768px) {
+  .dials-wrap {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 28px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .dials-wrap .hero-block { flex: 0 0 auto; padding-top: 0; }
+  .dials-wrap .dial-secondary { flex: 0 0 auto; margin: 0 !important; gap: 28px; }
+
+  /* All four dials the same size again */
+  .dials-wrap .hero-block .dial-hero,
+  .dials-wrap .dial-secondary .dial-center {
+    --dial-size: 120px;
+    --dial-thickness: 15px;
+  }
+  .dials-wrap .dial-text { font-size: calc(var(--dial-size) * 0.25); }
+
+  /* Original dial finish: gloss highlight and soft shadow */
+  .dials-wrap .dial-circle::after { display: block; }
+  .dials-wrap .dial-circle {
+    box-shadow: 0 0 12px rgba(0,0,0,0.12), 0 0 0 1px var(--dial-stroke);
+  }
+  .dials-wrap .dial-circle::before {
+    box-shadow: inset 0 8px 14px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.80);
+  }
+  [data-theme="dark"] .dials-wrap .dial-circle {
+    box-shadow: 0 12px 28px rgba(0,0,0,0.50), 0 0 0 1px var(--dial-stroke);
+  }
+  [data-theme="dark"] .dials-wrap .dial-circle::before {
+    box-shadow: inset 0 12px 20px rgba(0,0,0,0.55);
+  }
+
+  /* Labels match the other three */
+  .dials-wrap .dial-secondary .dial-label { font-size: 9px; }
+
+  /* Verdict + link sit under the first dial without stretching the row */
+  .dials-wrap .hero-verdict { font-size: 18px; max-width: 150px; text-align: center; }
+  .dials-wrap .drivers-toggle { font-size: 13px; }
+}
+
+/* --- Desktop: stop the Bootstrap row from wrapping the three dials --- */
+@media (min-width: 768px) {
+  .dials-wrap .dial-secondary {
+    flex-wrap: nowrap !important;
+    width: auto !important;
+  }
+  .dials-wrap .dial-secondary > [class*="col"] {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    max-width: none !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+  /* Belt and braces over any legacy sizing */
+  .dials-wrap .hero-block .dial-hero { --dial-size: 120px !important; --dial-thickness: 15px !important; }
+  .dials-wrap .dial-secondary .dial-center { --dial-size: 120px !important; --dial-thickness: 15px !important; }
+}
+
+/* Phone: hero stays larger than the supporting three */
+@media (max-width: 767px) {
+  .hero-block .dial-hero { --dial-size: 148px !important; --dial-thickness: 14px !important; }
+  .dial-secondary .dial-center { --dial-size: 76px !important; --dial-thickness: 8px !important; }
+}
+
+/* --- Verdict text: keep it under the Readiness dial, not drifting across --- */
+@media (min-width: 768px) {
+  .dials-wrap .hero-verdict {
+    font-size: 16px !important;
+    max-width: 130px;
+    line-height: 1.2;
+    text-align: center;
+  }
+}

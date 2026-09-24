@@ -451,40 +451,10 @@ def calc_daily_readiness(load_series, rpe_series, quality_series, span=7):
 
     base_readiness = float(np.clip(base_readiness, 0, 100))
 
-    rpe_dated = pd.to_numeric(rpe_series, errors="coerce")
-    last_pos = rpe_dated.last_valid_index()
-
-    if last_pos is not None and hasattr(last_pos, "date"):
-        days_silent = (dt.datetime.now(ADL_TZ).date() - last_pos.date()).days
-    elif last_pos is not None:
-        days_silent = len(rpe_dated) - 1 - rpe_dated.index.get_loc(last_pos)
-    else:
-        days_silent = len(df)
-
-    days_silent = max(0, int(days_silent))
-
-    DECAY_RATE = 5.0
-    MAX_PENALTY = 50.0
-
-    if days_silent > 0:
-        penalty = min(DECAY_RATE * days_silent, MAX_PENALTY)
-        readiness = float(np.clip(base_readiness - penalty, 0, 100))
-    else:
-        readiness = base_readiness
-
-    load_dated = pd.to_numeric(load_series, errors="coerce")
-    last_load_pos = load_dated.last_valid_index()
-
-    if last_load_pos is not None and hasattr(last_load_pos, "date"):
-        days_since_load = (dt.datetime.now(ADL_TZ).date() - last_load_pos.date()).days
-        if days_since_load > 21:
-            readiness = min(readiness, 35)
-        elif days_since_load > 14:
-            readiness = min(readiness, 50)
-        elif days_since_load > 7:
-            readiness = min(readiness, 68)
-
-    return float(np.clip(readiness, 0, 100))
+    # Missing data is no longer treated as fatigue: the score reflects the
+    # last real data, and the UI shows how old that data is instead
+    # (see days_since_last_data / the freshness tag on Home).
+    return base_readiness
 
 
 def calc_neuro_readiness(sleep, fatigue, soreness, mood, history_df=None, span=3):
@@ -528,15 +498,6 @@ def calc_neuro_readiness(sleep, fatigue, soreness, mood, history_df=None, span=3
     hist_scores = pd.concat([hist_scores, pd.Series([score])], ignore_index=True)
     smooth = float(hist_scores.ewm(span=span, adjust=False).mean().iloc[-1])
 
-    if "Date" in history_df.columns:
-        last_entry = pd.to_datetime(history_df["Date"], errors="coerce").max()
-        if pd.notna(last_entry):
-            days_stale = (dt.datetime.now(ADL_TZ).date() - last_entry.date()).days
-            if days_stale > 14:
-                smooth *= 0.55
-            elif days_stale > 7:
-                smooth *= 0.75
-
     return float(np.clip(smooth, 0, 100))
 
 
@@ -574,22 +535,29 @@ def input_card(children):
 _SLIDER_MARKS_1_5 = {i: str(i) for i in range(1, 6)}
 
 
-def wellness_slider(label: str, slider_id: str, value: int = 3):
-    """
-    A themed 1–5 wellness slider with its label, numeric marks, and an
-    always-visible value tooltip. Styling lives in .adptv-slider /
-    .adptv-slider-label in assets/dashboard.css.
-    """
+LOG_TAP_ROWS = [
+    ("rpe", "How hard was it?", "Very easy", "Maximal"),
+    ("quality", "How did it go?", "Poor", "Excellent"),
+]
+LOG_WELLNESS_ROWS = [
+    ("sleep", "Sleep", "Poorly", "Really well"),
+    ("energy", "Energy", "Drained", "Full of energy"),
+    ("soreness", "Soreness", "Not at all", "Very sore"),
+    ("mood", "Mood", "Low", "Great"),
+]
+
+
+def log_tap_row(key: str, label: str, low: str, high: str):
+    """A 1-5 tap row for the session log, matching the morning check-in."""
     return html.Div([
-        html.Label(label, className="adptv-slider-label"),
-        dcc.Slider(
-            id=slider_id, min=1, max=5, step=1, value=value,
-            marks=_SLIDER_MARKS_1_5,
-            included=True,
-            className="adptv-slider",
-            tooltip={"placement": "top", "always_visible": True},
-        ),
-    ])
+        html.Div(label, className="ci-label"),
+        html.Div([
+            html.Button(str(v), id={"type": "sl-btn", "q": key, "v": v}, n_clicks=0,
+                        className="ci-btn", **{"aria-label": f"{label} {v} of 5"})
+            for v in range(1, 6)
+        ], className="ci-row"),
+        html.Div([html.Span(low), html.Span(high)], className="ci-ends"),
+    ], className="ci-q")
 
 
 def list_tabs():
@@ -817,14 +785,14 @@ def safe(df: pd.DataFrame, row_idx: int, col: str, default: str = "") -> str:
 
 def get_day_status(df, date_obj):
     if df.empty or "Date" not in df.columns:
-        return {"logged": False, "rpe": None}
+        return {"logged": False, "session": False, "rpe": None}
 
     d = df.copy()
     d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
     rows = d[d["Date"] == date_obj]
 
     if rows.empty:
-        return {"logged": False, "rpe": None}
+        return {"logged": False, "session": False, "rpe": None}
 
     row = rows.iloc[-1]
 
@@ -851,9 +819,12 @@ def get_day_status(df, date_obj):
     )
 
     logged = has_notes or has_sets or has_track or has_rpe or has_wellness
+    # A morning check-in alone fills wellness but is not a training session.
+    session = has_notes or has_sets or has_track or has_rpe
 
     return {
         "logged": logged,
+        "session": session,
         "rpe": float(rpe_post) if has_rpe else None,
     }
 
@@ -887,7 +858,7 @@ def count_logged_sessions_in_week(df: pd.DataFrame, week_start: dt.date, week_en
     if not days:
         return 0
 
-    return sum(1 for day in days if get_day_status(d, day).get("logged", False))
+    return sum(1 for day in days if get_day_status(d, day).get("session", False))
 
 
 def compute_streaks(df: pd.DataFrame):
@@ -2228,50 +2199,78 @@ def garmin_enrich_df_row(df: pd.DataFrame, date: dt.date) -> dict:
 # ============================================================
 
 def compute_neuro_for_athlete(df: pd.DataFrame, today: dt.date) -> float | None:
-    """Compute neuromuscular readiness exactly as update_dashboard does."""
+    """
+    Neuromuscular readiness from the most recent wellness data. Shared by the
+    dashboard, welcome message and share card so they always agree.
+    No longer decays with days of silence — staleness is shown separately.
+    """
     NEURO_WINDOW = 14
-    NEURO_DECAY = 3.5
-    NEURO_MAX_PEN = 35.0
-
-    if df is None or df.empty:
+    if df is None or df.empty or "Date" not in df.columns:
         return None
 
-    df_neuro = df.copy()
-    df_neuro["Date"] = pd.to_datetime(df_neuro["Date"], errors="coerce").dt.date
-    df_neuro = df_neuro.sort_values("Date")
-    recent_neuro = df_neuro[df_neuro["Date"] >= today - dt.timedelta(days=NEURO_WINDOW)]
+    wellness_cols = ["Sleep_1_5", "Fatigue_1_5", "Soreness_1_5", "Mood_1_5"]
+    if not all(c in df.columns for c in wellness_cols):
+        return None
 
-    def _last_col(frame, col):
-        s = pd.to_numeric(frame.get(col, pd.Series(dtype=float)), errors="coerce").dropna()
+    d = df.copy()
+    d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
+    d = d.dropna(subset=["Date"])
+    d = d[d["Date"] <= today].sort_values("Date")
+    for c in wellness_cols:
+        d[c] = pd.to_numeric(d[c], errors="coerce")
+    d = d.dropna(subset=wellness_cols, how="all")
+    if d.empty:
+        return None
+
+    recent = d[d["Date"] >= today - dt.timedelta(days=NEURO_WINDOW)]
+    if recent.empty:
+        # Nothing in the last 2 weeks: use the most recent entries instead of
+        # blanking the dial. The Home screen flags how old this data is.
+        recent = d.tail(NEURO_WINDOW)
+
+    def _last(col):
+        s = recent[col].dropna()
         return float(s.iloc[-1]) if not s.empty else None
 
-    sleep_last = _last_col(recent_neuro, "Sleep_1_5")
-    fatigue_last = _last_col(recent_neuro, "Fatigue_1_5")
-    soreness_last = _last_col(recent_neuro, "Soreness_1_5")
-    mood_last = _last_col(recent_neuro, "Mood_1_5")
-
-    if any(v is None for v in [sleep_last, fatigue_last, soreness_last, mood_last]):
+    vals = [_last(c) for c in wellness_cols]
+    if any(v is None for v in vals):
         return None
-
+    sleep_last, fatigue_last, soreness_last, mood_last = vals
     neuro_val = calc_neuro_readiness(sleep_last, fatigue_last, soreness_last, mood_last,
-                                     history_df=recent_neuro, span=3)
+                                     history_df=recent, span=3)
+    return None if neuro_val is None else float(np.clip(neuro_val, 0, 100))
 
-    wellness_cols = ["Sleep_1_5", "Fatigue_1_5", "Mood_1_5", "Soreness_1_5"]
-    present_cols = [c for c in wellness_cols if c in df_neuro.columns]
-    if present_cols:
-        df_neuro["_hw"] = df_neuro[present_cols].apply(
-            lambda row: any(pd.to_numeric(row, errors="coerce").gt(0).dropna()), axis=1)
-        logged_dates = df_neuro[df_neuro["_hw"]]["Date"]
-        if not logged_dates.empty:
-            last_date = logged_dates.max()
-            if hasattr(last_date, "date"):
-                last_date = last_date.date()
-            days_silent = (today - last_date).days
-            if days_silent > 0:
-                neuro_val = float(np.clip(
-                    neuro_val - min(NEURO_DECAY * days_silent, NEURO_MAX_PEN), 0, 100))
 
-    return float(np.clip(neuro_val, 0, 100))
+def days_since_last_data(df: pd.DataFrame, today: dt.date) -> int | None:
+    """Days since the athlete last checked in or logged anything (None = never)."""
+    if df is None or df.empty or "Date" not in df.columns:
+        return None
+    d = df.copy()
+    d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
+    d = d.dropna(subset=["Date"])
+    d = d[d["Date"] <= today]
+    cols = [c for c in ["Sleep_1_5", "Fatigue_1_5", "Soreness_1_5", "Mood_1_5", "RPE_Post_Session"]
+            if c in d.columns]
+    if not cols or d.empty:
+        return None
+    has = d[cols].apply(lambda r: pd.to_numeric(r, errors="coerce").gt(0).any(), axis=1)
+    dates = d.loc[has, "Date"]
+    if dates.empty:
+        return None
+    return max(0, (today - dates.max()).days)
+
+
+def freshness_label(days: int | None) -> str:
+    if days is None:
+        return "No check-ins yet"
+    if days == 0:
+        return "Checked in today"
+    if days == 1:
+        return "Last check-in yesterday"
+    return f"Last check-in {days} days ago"
+
+
+STALE_DAYS = 2   # scores grey out once the latest data is this many days old
 
 
 # ============================================================
@@ -2336,6 +2335,277 @@ def get_full_exposure_week_badge(df: pd.DataFrame, week_start: dt.date, week_end
     return count_logged_sessions_in_week(df, week_start, week_end) >= planned
 
 
+
+
+# ============================================================
+#  Readiness verdict, drivers, session advice, chart takeaways
+#  All rule-based and computed from the sheet — no extra columns,
+#  no AI calls, so they are fast and always available.
+# ============================================================
+
+def readiness_verdict(readiness, neuro, stale: bool = False):
+    """(label, colour) summarising the hero score in plain language."""
+    if stale:
+        return "Scores out of date", "#8a939e"
+    if readiness is None and neuro is None:
+        return "No data yet", "#8a939e"
+    vals = [v for v in [readiness, neuro] if v is not None]
+    score = sum(vals) / len(vals)
+    if score >= 70:
+        return "Ready to train", "#2fb344"
+    if score >= 45:
+        return "Train with care", "#f5b301"
+    return "Recovery priority", "#f44336"
+
+
+def _latest_and_usual(d, col, lookback):
+    """(latest value, mean over the lookback window) for one wellness column."""
+    if col not in d.columns:
+        return None, None
+    s = pd.to_numeric(d[col], errors="coerce")
+    s = s[s > 0].dropna()
+    if s.empty:
+        return None, None
+    latest = float(s.iloc[-1])
+    window = s.tail(lookback)
+    usual = float(window.mean()) if not window.empty else None
+    return latest, usual
+
+
+def compute_drivers(df: pd.DataFrame, today: dt.date, lookback: int = 28) -> list:
+    """
+    What is pushing readiness up or down, each marker against the athlete's
+    OWN recent average rather than a fixed scale.
+    """
+    out = []
+    if df is None or df.empty or "Date" not in df.columns:
+        return out
+    d = df.copy()
+    d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
+    d = d.dropna(subset=["Date"])
+    d = d[d["Date"] <= today].sort_values("Date")
+    if d.empty:
+        return out
+
+    specs = [
+        ("Sleep", "Sleep_1_5", False),
+        ("Energy", "Fatigue_1_5", False),
+        ("Soreness", "Soreness_1_5", True),    # lower is better
+        ("Mood", "Mood_1_5", False),
+    ]
+    for label, col, invert in specs:
+        latest, usual = _latest_and_usual(d, col, lookback)
+        if latest is None or usual is None:
+            continue
+        diff = latest - usual
+        better = (diff < 0) if invert else (diff > 0)
+        if abs(diff) < 0.35:
+            status, tone = "Normal", "normal"
+        elif better:
+            status = "Lower than usual" if invert else "Better than usual"
+            tone = "good"
+        else:
+            status = "Higher than usual" if invert else "Below your usual"
+            tone = "watch"
+        out.append({
+            "label": label,
+            "detail": f"Today {latest:.0f}/5 · your usual {usual:.1f}"
+                      + (" · lower is better" if invert else ""),
+            "pct": max(0.0, min(latest / 5 * 100, 100)),
+            "usual_pct": max(0.0, min(usual / 5 * 100, 100)),
+            "status": status,
+            "tone": tone,
+            "kind": "scale",
+        })
+
+    acwr = compute_acwr_series(df, today).dropna()
+    if not acwr.empty:
+        v = float(acwr.iloc[-1])
+        if v < 0.8:
+            status, tone = "Ramping down", "normal"
+        elif v <= 1.3:
+            status, tone = "Balanced", "good"
+        elif v <= 1.5:
+            status, tone = "Climbing fast", "watch"
+        else:
+            status, tone = "Spiking", "watch"
+        out.append({
+            "label": "Training load",
+            "detail": f"ACWR {v:.2f} · safe range 0.8–1.3",
+            "pct": max(0.0, min(v / 2 * 100, 100)),
+            "usual_pct": None,
+            "status": status,
+            "tone": tone,
+            "kind": "load",
+        })
+    return out
+
+
+def todays_session(df: pd.DataFrame, today: dt.date) -> dict | None:
+    """Today's planned session from the sheet, or None if nothing is planned."""
+    if df is None or df.empty or "Date" not in df.columns:
+        return None
+    d = df.copy()
+    d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
+    rows = d[d["Date"] == today]
+    if rows.empty:
+        return None
+    row = rows.iloc[-1]
+
+    def _txt(col):
+        v = str(row.get(col, "") or "").strip()
+        return "" if v.lower() in ("", "nan", "none", "nil", "-", "—", "tbc") else v
+
+    workout = _txt("Workout")
+    if not workout or workout.lower() in ("rest", "off"):
+        return None
+    srpe = pd.to_numeric(row.get("sRPE", np.nan), errors="coerce")
+    dur = pd.to_numeric(row.get("Duration", np.nan), errors="coerce")
+    return {
+        "workout": workout,
+        "focus": _txt("Focus"),
+        "venue": _txt("Venue"),
+        "srpe": float(srpe) if pd.notna(srpe) and srpe > 0 else None,
+        "duration": int(dur) if pd.notna(dur) and dur > 0 else None,
+        "logged": get_day_status(d, today).get("session", False),
+    }
+
+
+def session_advice(readiness, session: dict, stale: bool = False):
+    """(headline, detail, tone) pairing today's plan with today's readiness."""
+    planned_hard = bool(session and session.get("srpe") and session["srpe"] >= 7)
+    if stale or readiness is None:
+        return ("Check in for a recommendation",
+                "Your scores are out of date, so there's nothing reliable to compare today's plan against.",
+                "normal")
+    if readiness >= 70:
+        return ("Go as planned",
+                "Your readiness supports a full-effort session.", "good")
+    if readiness >= 45:
+        if planned_hard:
+            return ("Hold quality, trim volume",
+                    "Readiness is moderate and this is a hard session. Keep the intensity, "
+                    "cut reps if the quality drops.", "watch")
+        return ("Proceed, watch the quality",
+                "Readiness is moderate. This effort is manageable — stop the reps "
+                "if the quality drops off.", "normal")
+    if planned_hard:
+        return ("Consider easing back",
+                "Readiness is low for a hard session. Talk to your coach about "
+                "reducing intensity or moving it.", "bad")
+    return ("Keep it light",
+            "Readiness is low. Treat this as easy movement rather than a quality session.", "bad")
+
+
+def _weekly_load(df: pd.DataFrame, today: dt.date) -> pd.Series:
+    if df is None or df.empty or "Date" not in df.columns or "Load" not in df.columns:
+        return pd.Series(dtype=float)
+    d = df.copy()
+    d["Date"] = pd.to_datetime(d["Date"], errors="coerce")
+    d = d.dropna(subset=["Date"])
+    d = d[d["Date"] <= pd.Timestamp(today)]
+    d["Load"] = pd.to_numeric(d["Load"], errors="coerce").fillna(0)
+    if d.empty:
+        return pd.Series(dtype=float)
+    d["Week"] = _week_agg_date(d["Date"])
+    return d.groupby("Week")["Load"].sum().sort_index()
+
+
+def load_takeaway(df: pd.DataFrame, today: dt.date):
+    weeks = _weekly_load(df, today)
+    weeks = weeks[weeks > 0]
+    if len(weeks) < 2:
+        return ("Not enough load history yet", "Log a few weeks of sessions to see a trend.", "normal")
+    recent = weeks.tail(4)
+    prior = weeks.iloc[:-4].tail(4) if len(weeks) > 4 else pd.Series(dtype=float)
+
+    acwr = compute_acwr_series(df, today).dropna()
+    acwr_v = float(acwr.iloc[-1]) if not acwr.empty else None
+    if acwr_v is not None and acwr_v > 1.5:
+        tone, band = "bad", "above your safe range"
+    elif acwr_v is not None and acwr_v > 1.3:
+        tone, band = "watch", "climbing faster than usual"
+    else:
+        tone, band = "good", "in your safe range"
+
+    if prior.empty or prior.mean() == 0:
+        return (f"Load is {band}",
+                f"Averaging about {recent.mean():,.0f} a week over the last {len(recent)} weeks.",
+                tone)
+    change = (recent.mean() - prior.mean()) / prior.mean() * 100
+    if abs(change) < 8:
+        head = f"Load is steady and {band}"
+        sub = f"About {recent.mean():,.0f} a week, much the same as the previous month."
+    else:
+        direction = "up" if change > 0 else "down"
+        head = f"Load is {direction} {abs(change):.0f}% on the previous month"
+        sub = f"About {recent.mean():,.0f} a week now, versus {prior.mean():,.0f} before — {band}."
+    return (head, sub, tone)
+
+
+def wellness_takeaway(df: pd.DataFrame, today: dt.date, days: int = 28):
+    if df is None or df.empty or "Date" not in df.columns:
+        return ("No wellness data yet", "Check in daily to build a trend.", "normal")
+    d = df.copy()
+    d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
+    d = d.dropna(subset=["Date"])
+    d = d[(d["Date"] <= today) & (d["Date"] >= today - dt.timedelta(days=days))].sort_values("Date")
+    specs = [("Sleep", "Sleep_1_5", False), ("Energy", "Fatigue_1_5", False),
+             ("Mood", "Mood_1_5", False), ("Soreness", "Soreness_1_5", True)]
+    biggest = None
+    for label, col, invert in specs:
+        if col not in d.columns:
+            continue
+        s = pd.to_numeric(d[col], errors="coerce")
+        s = s[s > 0].dropna()
+        if len(s) < 6:
+            continue
+        half = len(s) // 2
+        first, second = s.iloc[:half].mean(), s.iloc[half:].mean()
+        diff = second - first
+        if biggest is None or abs(diff) > abs(biggest[3]):
+            biggest = (label, first, second, diff, invert)
+    if biggest is None:
+        return ("Not enough wellness data yet", "Check in daily to build a trend.", "normal")
+    label, first, second, diff, invert = biggest
+    if abs(diff) < 0.5:
+        return ("Wellness is holding steady",
+                f"No marker has moved much over the last {days} days.", "good")
+    worse = (diff > 0) if invert else (diff < 0)
+    direction = "risen" if diff > 0 else "fallen"
+    head = f"{label} has {direction} over the last month"
+    sub = f"From about {first:.1f}/5 to {second:.1f}/5."
+    return (head, sub, "watch" if worse else "good")
+
+
+def speed_takeaway(df: pd.DataFrame, today: dt.date):
+    if df is None or df.empty or "Date" not in df.columns:
+        return ("No speed or tempo data yet", "Distances logged in the sheet appear here.", "normal")
+    d = df.copy()
+    d["Date"] = pd.to_datetime(d["Date"], errors="coerce")
+    d = d.dropna(subset=["Date"])
+    d = d[d["Date"] <= pd.Timestamp(today)]
+    if d.empty or "SPEED (m)" not in d.columns:
+        return ("No speed or tempo data yet", "Distances logged in the sheet appear here.", "normal")
+    d["Week"] = _week_agg_date(d["Date"])
+    spd = pd.to_numeric(d["SPEED (m)"], errors="coerce").fillna(0)
+    weekly = spd.groupby(d["Week"]).sum().sort_index()
+    weekly = weekly[weekly > 0]
+    if len(weekly) < 2:
+        return ("Not enough speed work logged yet", "Two or more weeks are needed for a trend.", "normal")
+    recent = weekly.tail(4)
+    prior = weekly.iloc[:-4].tail(4) if len(weekly) > 4 else pd.Series(dtype=float)
+    if prior.empty or prior.mean() == 0:
+        return ("Speed volume is building",
+                f"About {recent.mean():,.0f} m a week over the last {len(recent)} weeks.", "normal")
+    change = (recent.mean() - prior.mean()) / prior.mean() * 100
+    if abs(change) < 10:
+        return ("Speed volume is steady",
+                f"About {recent.mean():,.0f} m a week, in line with the previous month.", "good")
+    direction = "up" if change > 0 else "down"
+    return (f"Speed volume is {direction} {abs(change):.0f}% on the previous month",
+            f"About {recent.mean():,.0f} m a week now, versus {prior.mean():,.0f} before.",
+            "normal")
 
 
 # ============================================================
@@ -2722,7 +2992,7 @@ def build_month_calendar(df: pd.DataFrame, month_date: dt.date, selected_date_st
             pill_color = "#F44336"
 
         status = get_day_status(ddf, day)
-        logged_session = status.get("logged", False)
+        logged_session = status.get("session", False)
 
         classes = ["calendar-day"]
         if day == today:                          classes.append("today")
@@ -2906,9 +3176,9 @@ app.index_string = """
             .dial-secondary-item .dial-center { --dial-size: 120px !important; }
             .dial-secondary-label { display: none; }
           }
-          /* Hero + small dial sizing */
-          .dial-hero  { --dial-size: 160px !important; }
-          .dial-small { --dial-size: 96px !important; }
+          /* Hero + small dial sizing is handled in assets/dashboard.css
+             (sections 24-25) so it can differ between phone and desktop.
+             The old !important rules here overrode that and are removed. */
           @media (min-width: 768px) {
             .dial-layout-wrap {
               flex-direction: row !important;
@@ -3142,31 +3412,43 @@ def build_main_layout(auth_data):
                     ], lg=6, md=6, width=12),
                 ],
             ),
-            dbc.Row(
-                className="g-2 align-items-stretch mt-1 dial-row",
+            # Phone: hero + three supporting dials. Desktop: CSS lays the
+            # same markup out as one row of four equal dials (see .dials-wrap).
+            html.Div(className="dials-wrap", children=[
+            html.Div(
+                className="hero-block",
                 children=[
-                    dbc.Col(html.Div([html.Div("Daily Readiness", className="dial-label"),
-                                      html.Div(id="readiness-dial-container", className="dial-center")],
-                                     className="dial-block"),
-                            lg=3, md=3, sm=6, xs=6, width=6),
-                    dbc.Col(html.Div([html.Div("Neuromuscular Readiness", className="dial-label"),
+                    html.Div("Daily Readiness", className="dial-label"),
+                    html.Div(id="readiness-dial-container", className="dial-center dial-hero"),
+                    html.Div(id="readiness-verdict", className="hero-verdict"),
+                    html.Button("See what's driving it", id="drivers-toggle", n_clicks=0,
+                                className="drivers-toggle"),
+                ],
+            ),
+            html.Div(id="drivers-panel"),
+            dbc.Row(
+                className="g-2 align-items-stretch mt-1 dial-row dial-secondary",
+                children=[
+                    dbc.Col(html.Div([html.Div("Neuromuscular", className="dial-label"),
                                       html.Div(id="neuromuscular-dial-container", className="dial-center")],
                                      className="dial-block"),
-                            lg=3, md=3, sm=6, xs=6, width=6),
+                            lg=4, md=4, sm=4, xs=4, width=4),
                     dbc.Col(html.Div([html.Div("Training Exposure", className="dial-label"),
                                       html.Div(id="weekly-dial-container", className="dial-center")],
                                      className="dial-block"),
-                            lg=3, md=3, sm=6, xs=6, width=6),
+                            lg=4, md=4, sm=4, xs=4, width=4),
                     dbc.Col(html.Div([html.Div("Training Streak", className="dial-label"),
                                       html.Div(id="streak-dial-container", className="dial-center")],
                                      className="dial-block"),
-                            lg=3, md=3, sm=6, xs=6, width=6),
+                            lg=4, md=4, sm=4, xs=4, width=4),
                 ],
             ),
+            ]),
             html.Div(id="welcome-message", className="mt-3"),
-            html.Div(id="motivational-message", style={"display": "none"}),
-            html.Div(id="wellness-alert-banner", className="mt-2"),
             html.Div(id="badges-row", className="mt-2"),
+            html.Div(id="checkin-card", className="mt-3"),
+            html.Div(id="today-session-card", className="mt-3"),
+            html.Div(id="motivational-message", style={"display": "none"}),
             html.Div(id="garmin-status-badge", className="mt-2"),
             html.Div(
                 dbc.Button(
@@ -3340,12 +3622,18 @@ def build_main_layout(auth_data):
                                     ]),
                                 ],
                             ),
-                            wellness_slider("Session RPE (1 = very easy, 5 = maximal)", "slider-session-rpe"),
-                            wellness_slider("Session Quality (1 = poor, 5 = excellent)", "slider-session-quality"),
-                            wellness_slider("Sleep (1 = tired, 5 = well-rested)", "slider-sleep"),
-                            wellness_slider("Mood (1 = sad, 5 = upbeat)", "slider-mood"),
-                            wellness_slider("Fatigue (1 = low energy, 5 = energetic)", "slider-fatigue"),
-                            wellness_slider("Soreness (1 = low, 5 = high)", "slider-soreness"),
+                            html.Div([log_tap_row(*r) for r in LOG_TAP_ROWS],
+                                     className="ci-questions log-taps"),
+                            html.Div([
+                                html.Button([
+                                    html.Span("Wellness", className="lw-title"),
+                                    html.Span(id="log-wellness-note", className="lw-note"),
+                                    html.Span("▾", className="lw-caret"),
+                                ], id="log-wellness-toggle", n_clicks=0, className="lw-toggle"),
+                                html.Div([log_tap_row(*r) for r in LOG_WELLNESS_ROWS],
+                                         id="log-wellness-wrap", className="ci-questions",
+                                         style={"display": "none"}),
+                            ], className="lw-block"),
                         ], md=6),
                         dbc.Col([
                             html.Div([
@@ -3445,10 +3733,13 @@ def build_main_layout(auth_data):
                     width="auto", className="d-flex align-items-end",
                 ),
             ], className="g-3 align-items-end mb-4"),
+            html.Div(id="load-takeaway"),
             html.Div(dcc.Graph(id="load-plot", config={"displayModeBar": False}),
                      className="plot-card"),
+            html.Div(id="wellness-takeaway"),
             html.Div(dcc.Graph(id="wellness-plot", config={"displayModeBar": False}),
                      className="plot-card"),
+            html.Div(id="speed-takeaway"),
             html.Div(dcc.Graph(id="speedtempo-plot", config={"displayModeBar": False}),
                      className="plot-card"),
         ],
@@ -3665,6 +3956,9 @@ def build_main_layout(auth_data):
         [
             app_header(center=False),
             dcc.Store(id="selected-date-store"),
+            dcc.Store(id="checkin-store", data={}),
+            dcc.Store(id="session-inputs", data={}),
+            dcc.Store(id="checkin-saved"),
             dcc.Store(id="calendar-window-start"),
             dcc.Store(id="bottom-nav-click", data="squad" if is_coach else "home"),
             home_view,
@@ -4052,6 +4346,7 @@ def update_calendar(athlete_tab, window_start, selected_date):
     Output("streak-dial-container", "children"),
     Output("neuromuscular-dial-container", "children"),
     Output("readiness-dial-container", "children"),
+    Output("readiness-verdict", "children"),
     Output("load-plot", "figure"),
     Output("wellness-plot", "figure"),
     Output("speedtempo-plot", "figure"),
@@ -4069,6 +4364,7 @@ def update_dashboard(athlete_id, view_mode, n_clicks, theme):
                 dial_flip(streak_dial(0), "Training Streak", "—"),
                 dial_flip(apple_neuromuscular_ring(None), "Neuromuscular State", "—"),
                 dial_flip(apple_readiness_ring(None), "Training Readiness Index", "—"),
+                "",
                 go.Figure(), go.Figure(), go.Figure())
 
     today = today_adl()
@@ -4088,7 +4384,8 @@ def update_dashboard(athlete_id, view_mode, n_clicks, theme):
         empty_fig = go.Figure()
         empty_fig.update_layout(**MOBILE_PLOT_LAYOUT)
         empty_fig = apply_fig_theme(empty_fig, theme)
-        return today_date_str, weekly_ui, streak_ui, neuro_ui, readiness_ui, empty_fig, empty_fig, empty_fig
+        return (today_date_str, weekly_ui, streak_ui, neuro_ui, readiness_ui,
+                "", empty_fig, empty_fig, empty_fig)
 
     try:
         load_fig = build_load_plot(df, view_mode, theme)
@@ -4184,16 +4481,29 @@ def update_dashboard(athlete_id, view_mode, n_clicks, theme):
         f"Current streak = {streak} consecutive days logged.\n"
         "Keep low-cost work going to protect the streak."
     )
+    # How old is the data behind the scores? Old data greys the two
+    # wellness/load-based dials instead of dragging their numbers down.
+    stale_days = days_since_last_data(df, today)
+    is_stale = stale_days is None or stale_days >= STALE_DAYS
+    _age = "" if not is_stale else f"\n{freshness_label(stale_days)} — check in to update."
+
     neuro_ui = dial_flip(
         apple_neuromuscular_ring(neuro_val), " ",
-        f"Neuromuscular Readiness reflects nervous system state using fatigue, mood, sleep, soreness.{_src}"
+        f"Neuromuscular Readiness reflects nervous system state using fatigue, mood, sleep, soreness.{_src}{_age}"
     )
     readiness_ui = dial_flip(
         apple_readiness_ring(readiness_val), " ",
-        f"Daily Readiness reflects load-to-recovery balance vs your recent baseline.{_src}"
+        f"Daily Readiness reflects load-to-recovery balance vs your recent baseline.{_src}{_age}"
     )
+    if is_stale:
+        neuro_ui = html.Div(neuro_ui, className="dial-stale")
+        readiness_ui = html.Div(readiness_ui, className="dial-stale")
 
-    return today_date_str, weekly_ui, streak_ui, neuro_ui, readiness_ui, load_fig, wellness_fig, speed_fig
+    verdict_txt, verdict_col = readiness_verdict(readiness_val, neuro_val, is_stale)
+    verdict = html.Span(verdict_txt, style={"color": verdict_col})
+
+    return (today_date_str, weekly_ui, streak_ui, neuro_ui, readiness_ui,
+            verdict, load_fig, wellness_fig, speed_fig)
 
 
 @app.callback(
@@ -4247,7 +4557,7 @@ def on_day_click(n_clicks_list, close_n, edit_n, athlete_name):
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
     status = get_day_status(df, clicked_date)
 
-    if not status.get("logged", False):
+    if not status.get("session", False):
         return False, no_update, no_update, {"display": "block"}, clicked_date_str, header
 
     match = df[df["Date"] == clicked_date]
@@ -4570,12 +4880,7 @@ def populate_session_context(selected_date, athlete_name):
      State("unplanned-key-distance", "value"),
      State("unplanned-duration", "value"),
      State("unplanned-srpe", "value"),
-     State("slider-session-rpe", "value"),
-     State("slider-session-quality", "value"),
-     State("slider-sleep", "value"),
-     State("slider-fatigue", "value"),
-     State("slider-mood", "value"),
-     State("slider-soreness", "value"),
+     State("session-inputs", "data"),
      State("refresh-btn", "n_clicks")],
     prevent_initial_call=True,
 )
@@ -4585,9 +4890,17 @@ def save_and_ai(
         notes, sets_reps_load, track_reps_times,
         unplanned_workout, unplanned_focus, unplanned_venue,
         unplanned_key_distance, unplanned_duration, unplanned_srpe,
-        rpe, session_quality, sleep, fatigue, mood, soreness,
+        session_inputs,
         refresh_n,
 ):
+    # Effort, quality and wellness now come from the tap rows (one store).
+    si = session_inputs or {}
+    rpe = si.get("rpe")
+    session_quality = si.get("quality")
+    sleep = si.get("sleep")
+    fatigue = si.get("energy")
+    mood = si.get("mood")
+    soreness = si.get("soreness")
     if not n_clicks:          raise PreventUpdate
     if not athlete_name:      return no_update, no_update, "⚠️ Please select an athlete first.", no_update
     # NOTE: ai_mode_1 / ai_mode_2 are no longer mandatory here — if either
@@ -4772,13 +5085,7 @@ def save_and_ai(
 
 
 @app.callback(
-    [Output("athlete-dropdown", "value"),
-     Output("slider-session-rpe", "value"),
-     Output("slider-session-quality", "value"),
-     Output("slider-sleep", "value"),
-     Output("slider-fatigue", "value"),
-     Output("slider-mood", "value"),
-     Output("slider-soreness", "value"),
+    [Output("session-inputs", "data", allow_duplicate=True),
      Output("athlete-notes", "value"),
      Output("sets-reps-load", "value"),
      Output("track-reps-times", "value")],
@@ -4787,7 +5094,7 @@ def save_and_ai(
 )
 def reset_inputs(n):
     if not n: raise PreventUpdate
-    return no_update, 3, 3, 3, 3, 3, 3, "", "", ""
+    return {}, "", "", ""
 
 
 app.clientside_callback(
@@ -4980,6 +5287,14 @@ def update_welcome(athlete_id, _today):
     except Exception:
         streak = 0
 
+    # Same neuro value as the dashboard dial, and how old the data is.
+    stale_days = None
+    try:
+        neuro_val = compute_neuro_for_athlete(df, today)
+        stale_days = days_since_last_data(df, today)
+    except Exception:
+        pass
+
     r = readiness_val if readiness_val is not None else 0
     n = neuro_val if neuro_val is not None else 0
 
@@ -5004,61 +5319,64 @@ def update_welcome(athlete_id, _today):
         icon = "⚠";
         band = "low"
 
+    if band != "no_data" and stale_days is not None and stale_days >= STALE_DAYS:
+        color = "#8a939e"
+        icon = "•"
+        band = "stale"
+
     streak_txt = f" • {streak}-day streak 🔥" if streak >= 3 else ""
 
     try:
+        if band == "stale":
+            raise ValueError("stale data — use the fixed message")
         df_safe = df if not df.empty else pd.DataFrame()
         summary = build_context_summary(df_safe, days=7) if not df_safe.empty else "No data."
         wellness = build_wellness_flags(df_safe, days=7) if not df_safe.empty else ""
         sys_msg = (
             "You are a high-performance sprint and strength coach who knows this athlete well. "
-            "You open every session with a brief, direct check-in — like a coach walking up before training. "
-            "Write exactly TWO lines separated by a pipe character |:\n"
-            "Line 1 (headline): Talk directly to the athlete. Reference their readiness score as a whole number. "
-            "Sound like a coach who has looked at the data and has a read on where they are today — sharp, honest, no fluff.\n"
-            "Line 2 (sub): One sentence of specific coaching context — what does the data mean for today? "
-            "Reference a wellness score (rated X/5), load trend, streak, or a flag. Tell them what to do with it.\n"
-            "CRITICAL: Sleep/fatigue/mood/soreness are 1-5 SCALE scores, not hours or minutes. Say rated X/5 not X hours. "
-            "BANNED words: greatness, dedication, potential, journey, warrior, champion, champions, amazing, incredible, outstanding, path, destiny, mindset, process. "
-            "Tone: like a trusted coach — direct, warm, grounded in numbers. No hype, no corporate wellness speak. "
-            "No hashtags, no exclamation marks, no emoji. Format strictly: headline | sub"
+            "Write ONE sentence of practical guidance for today — what the data means for "
+            "this session, and what to do about it.\n"
+            "The athlete can already see their readiness score and a verdict on screen, so do "
+            "NOT restate the score, and do not open with a greeting or their name.\n"
+            "Ground it in one specific marker: a wellness score (rated X/5), a load trend, "
+            "a streak, or a flag. If a wellness flag is present, address that flag.\n"
+            "CRITICAL: sleep/fatigue/mood/soreness are 1-5 SCALE scores, not hours. "
+            "Say rated X/5, never X hours. "
+            "Max 22 words. No greeting, no score, no hype, no hashtags, no exclamation marks, no emoji. "
+            "BANNED words: greatness, dedication, potential, journey, warrior, champion, champions, "
+            "amazing, incredible, outstanding, path, destiny, mindset, process."
         )
         usr_msg = (
-            f"Athlete: {first_name}. Greeting: {greeting}. "
-            f"Readiness: {int(round(r))}/100. Neuro: {int(round(n))}/100. "
+            f"Athlete: {first_name}. Readiness: {int(round(r))}/100. Neuro: {int(round(n))}/100. "
             f"Band: {band}. Streak: {streak} days. "
             f"7-day summary: {summary} Wellness: {wellness}"
         )
         raw = call_openai_chat([{"role": "system", "content": sys_msg}, {"role": "user", "content": usr_msg}],
-                               max_tokens=100)
-        if raw and "unavailable" not in raw.lower() and "|" in raw:
-            headline, sub_line = [p.strip() for p in raw.split("|", 1)]
+                               max_tokens=70)
+        if raw and "unavailable" not in raw.lower():
+            sub_line = raw.strip().split("|")[-1].strip()
         else:
             raise ValueError("bad response")
     except Exception:
         fallback = {
-            "no_data": (f"{greeting}, {first_name}. Log your first session to activate your dials.",
-                        "Readiness, neuro, exposure and streak will update automatically."),
-            "high": (f"{greeting}, {first_name}. Readiness {int(r)} — both markers are primed.",
-                     "Load and recovery are balanced. Good conditions to push quality today."),
-            "good": (f"{greeting}, {first_name}. Readiness {int(r)} — solid platform for today.",
-                     "Numbers are steady. Execute your plan and stay sharp."),
-            "moderate": (f"{greeting}, {first_name}. Readiness {int(r)} — some fatigue in the data.",
-                         "Focus on quality over quantity and monitor how the session feels."),
-            "low": (f"{greeting}, {first_name}. Readiness {int(r)} — recovery is the priority.",
-                    "Both markers are suppressed. Prioritise sleep and light movement today."),
+            "stale": f"Your scores are from {freshness_label(stale_days).lower()} — check in below to update them.",
+            "no_data": "Log your first session to activate your dials.",
+            "high": "Load and recovery are balanced. Good conditions to push quality today.",
+            "good": "Numbers are steady. Execute your plan and stay sharp.",
+            "moderate": "Focus on quality over quantity and monitor how the session feels.",
+            "low": "Both markers are suppressed. Prioritise sleep and light movement today.",
         }
-        headline, sub_line = fallback.get(band, fallback["no_data"])
+        sub_line = fallback.get(band, fallback["no_data"])
 
     return html.Div([
         html.Div([
-            html.Span(f"{icon} ", style={"fontSize": "18px", "fontWeight": 900, "color": color, "marginRight": "4px"}),
-            html.Span(headline, style={"fontWeight": 800, "fontSize": "15px", "color": color}),
-            html.Span(streak_txt, style={"fontSize": "13px", "color": "#E65100", "marginLeft": "6px"}),
-        ], style={"marginBottom": "4px"}),
-        html.Div(sub_line, style={"fontSize": "13px", "color": "var(--text-muted)", "lineHeight": "1.4"}),
-    ], style={"maxWidth": "1000px", "margin": "10px auto 4px auto", "textAlign": "center",
-              "padding": "0px", "background": "transparent", "border": "none"})
+            html.Span(sub_line, style={"fontSize": "14px", "color": "var(--text)",
+                                       "lineHeight": "1.45"}),
+            html.Span(streak_txt, style={"fontSize": "13px", "color": "#E65100",
+                                         "marginLeft": "6px", "whiteSpace": "nowrap"}),
+        ]),
+    ], style={"maxWidth": "620px", "margin": "10px auto 4px auto", "textAlign": "center",
+              "padding": "0 8px", "background": "transparent", "border": "none"})
 
 
 @app.callback(
@@ -5195,6 +5513,14 @@ def show_share_card(n, close_n, athlete_id, current_style):
     c_n = "#43A047";
     c_e = "#FB8C00";
     c_sp = "#E91E8C"
+
+    # Verdict under the hero ring — same wording as the Home screen.
+    try:
+        _stale = days_since_last_data(df, today)
+        _is_stale = _stale is None or _stale >= STALE_DAYS
+    except Exception:
+        _is_stale = False
+    verdict_txt, c_verdict = readiness_verdict(readiness_val or None, neuro_val or None, _is_stale)
     dl_name = date_str.replace(" ", "-")
 
     try:
@@ -5243,6 +5569,10 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 .brand{{font-size:8px;letter-spacing:.16em;color:rgba(255,255,255,.55);text-transform:uppercase;display:flex;align-items:center;gap:5px}}
 .brand img{{width:20px;height:20px;border-radius:3px;object-fit:contain;filter:brightness(0) invert(1);opacity:0.85}}
 .dials{{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px}}
+.dials-3{{grid-template-columns:repeat(3,1fr)}}
+.hero-dial{{display:flex;flex-direction:column;align-items:center;gap:2px;margin-bottom:10px}}
+.hero-lbl{{font-size:7px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5)}}
+.hero-verdict-txt{{font-size:13px;font-weight:700;margin-top:2px}}
 .dial-item{{display:flex;flex-direction:column;align-items:center;gap:4px}}
 .dial-lbl{{font-size:7px;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.5);text-align:center}}
 .divider{{height:1px;background:rgba(255,255,255,.15);margin:0 0 12px}}
@@ -5269,30 +5599,32 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
           ADPTV
         </span>
       </div>
-      <div class="dials">
+      <div class="hero-dial">
+        <svg width="112" height="112" viewBox="0 0 52 52">
+          <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="5"/>
+          <circle cx="26" cy="26" r="21" fill="none" stroke="{c_r}" stroke-width="5" stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro_r}" transform="rotate(-90 26 26)"/>
+          <text x="26" y="30" text-anchor="middle" font-size="15" font-weight="700" fill="white" font-family="system-ui">{d_r}</text>
+        </svg>
+        <div class="hero-lbl">Readiness</div>
+        <div class="hero-verdict-txt" style="color:{c_verdict}">{verdict_txt}</div>
+      </div>
+      <div class="dials dials-3">
         <div class="dial-item">
-          <svg width="52" height="52" viewBox="0 0 52 52">
-            <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
-            <circle cx="26" cy="26" r="21" fill="none" stroke="{c_r}" stroke-width="4" stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro_r}" transform="rotate(-90 26 26)"/>
-            <text x="26" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="system-ui">{d_r}</text>
-          </svg><div class="dial-lbl">Readiness</div>
-        </div>
-        <div class="dial-item">
-          <svg width="52" height="52" viewBox="0 0 52 52">
+          <svg width="46" height="46" viewBox="0 0 52 52">
             <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
             <circle cx="26" cy="26" r="21" fill="none" stroke="{c_n}" stroke-width="4" stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro_n}" transform="rotate(-90 26 26)"/>
             <text x="26" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="system-ui">{d_n}</text>
           </svg><div class="dial-lbl">Neuro</div>
         </div>
         <div class="dial-item">
-          <svg width="52" height="52" viewBox="0 0 52 52">
+          <svg width="46" height="46" viewBox="0 0 52 52">
             <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
             <circle cx="26" cy="26" r="21" fill="none" stroke="{c_e}" stroke-width="4" stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro_e}" transform="rotate(-90 26 26)"/>
             <text x="26" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="system-ui">{d_e}</text>
           </svg><div class="dial-lbl">Exposure</div>
         </div>
         <div class="dial-item">
-          <svg width="52" height="52" viewBox="0 0 52 52">
+          <svg width="46" height="46" viewBox="0 0 52 52">
             <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
             <circle cx="26" cy="26" r="21" fill="none" stroke="{c_sp}" stroke-width="4" stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="{ro_sp}" transform="rotate(-90 26 26)"/>
             <text x="26" y="30" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="system-ui">{d_sn}</text>
@@ -5485,13 +5817,13 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 
     const PAD=80,CX=EXPORT_W/2;
 
-    // ── Layout: 4 equal rings in a row ──────────────────────────────────────
-    const RING_R=88,RING_SW=18,RING_Y=EXPORT_H*0.50;
-    const SPACING=EXPORT_W/4;
-    const R1_X=SPACING*0+SPACING/2;
-    const R2_X=SPACING*1+SPACING/2;
-    const R3_X=SPACING*2+SPACING/2;
-    const R4_X=SPACING*3+SPACING/2;
+    // ── Layout: hero readiness ring, three smaller ones beneath ─────────────
+    const HERO_R=150,HERO_SW=28,HERO_Y=EXPORT_H*0.44;
+    const RING_R=68,RING_SW=15,RING_Y=HERO_Y+HERO_R+150;
+    const SPACING=EXPORT_W/3;
+    const R2_X=SPACING*0+SPACING/2;
+    const R3_X=SPACING*1+SPACING/2;
+    const R4_X=SPACING*2+SPACING/2;
 
     // ── Reusable ring draw helper ─────────────────────────────────────────────
     function drawRing(cx,cy,r,sw,pct100,color,valTxt,label,valFont,lblFont){{
@@ -5509,7 +5841,7 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
     }}
 
     // ── Brand — centred above rings ───────────────────────────────────────────
-    const LOGO_SIZE=48,BRAND_Y=RING_Y-RING_R-90;
+    const LOGO_SIZE=48,BRAND_Y=HERO_Y-HERO_R-100;
     if(logoImg&&logoImg.naturalWidth>0){{
       const oc=document.createElement('canvas');oc.width=LOGO_SIZE;oc.height=LOGO_SIZE;
       const octx=oc.getContext('2d');
@@ -5528,14 +5860,18 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
       ctx.fillText('ADPTV',CX,BRAND_Y+LOGO_SIZE/2);
     }}
 
-    // ── 4 equal rings ────────────────────────────────────────────────────────
-    drawRing(R1_X,RING_Y,RING_R,RING_SW,{d_r},'{c_r}','{d_r}','READINESS',62,22);
-    drawRing(R2_X,RING_Y,RING_R,RING_SW,{d_n},'{c_n}','{d_n}','NEURO',62,22);
-    drawRing(R3_X,RING_Y,RING_R,RING_SW,{d_e},'{c_e}','{d_e}','EXPOSURE',62,22);
-    drawRing(R4_X,RING_Y,RING_R,RING_SW,{d_sp},'{c_sp}','{d_sn}','STREAK',62,22);
+    // ── Hero readiness, then the three supporting scores ─────────────────────
+    drawRing(CX,HERO_Y,HERO_R,HERO_SW,{d_r},'{c_r}','{d_r}','READINESS',108,26);
+    ctx.font='600 36px system-ui';ctx.fillStyle='{c_verdict}';
+    ctx.textAlign='center';ctx.textBaseline='alphabetic';
+    ctx.fillText('{verdict_txt}',CX,HERO_Y+HERO_R+96);
+
+    drawRing(R2_X,RING_Y,RING_R,RING_SW,{d_n},'{c_n}','{d_n}','NEURO',50,20);
+    drawRing(R3_X,RING_Y,RING_R,RING_SW,{d_e},'{c_e}','{d_e}','EXPOSURE',50,20);
+    drawRing(R4_X,RING_Y,RING_R,RING_SW,{d_sp},'{c_sp}','{d_sn}','STREAK',50,20);
 
     // ── Divider ───────────────────────────────────────────────────────────────
-    const divY=RING_Y+RING_R+100;
+    const divY=RING_Y+RING_R+90;
     ctx.beginPath();ctx.moveTo(PAD,divY);ctx.lineTo(EXPORT_W-PAD,divY);
     ctx.strokeStyle='rgba(255,255,255,0.18)';ctx.lineWidth=2;ctx.stroke();
 
@@ -5595,41 +5931,6 @@ body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-directi
 
 
 @app.callback(
-    Output("wellness-alert-banner", "children"),
-    Input("athlete-dropdown", "value"),
-    Input("today-date", "children"),
-    prevent_initial_call=True,
-)
-def update_wellness_banner(athlete_id, _today):
-    if not athlete_id:
-        raise PreventUpdate
-    try:
-        df = load_tab_cached(athlete_id)
-    except Exception:
-        return None
-    if df is None or df.empty:
-        return None
-    flags = get_wellness_flags_structured(df, days=7)
-    if not flags:
-        return None
-    has_high = any(f["severity"] == "high" for f in flags)
-    if has_high:
-        bg, border, color, icon = "#ffebee", "#ef9a9a", "#C62828", "⚠️"
-    else:
-        bg, border, color, icon = "#fff8e1", "#ffe082", "#E65100", "•"
-    items = []
-    for f in flags[:3]:
-        items.append(html.Div([
-            html.Span(f"{icon} " if f["severity"] == "high" else "• ", style={"fontWeight": "700"}),
-            html.Span(f["text"]),
-        ], style={"fontSize": "12.5px", "lineHeight": "1.5", "color": color}))
-    return html.Div(items, style={
-        "background": bg, "border": f"1px solid {border}", "borderRadius": "10px",
-        "padding": "10px 14px", "maxWidth": "1000px", "margin": "0 auto",
-    })
-
-
-@app.callback(
     Output("badges-row", "children"),
     Input("athlete-dropdown", "value"),
     Input("today-date", "children"),
@@ -5674,6 +5975,442 @@ def update_badges(athlete_id, _today):
         }) for icon, label in badges
     ]
     return html.Div(chips, style={"textAlign": "center", "maxWidth": "1000px", "margin": "0 auto"})
+
+
+# ============================================================
+#  Morning check-in (Home)
+#  Four taps write today's wellness into the athlete's existing row, so
+#  readiness is current before training rather than after it.
+# ============================================================
+
+CHECKIN_QUESTIONS = [
+    # key, sheet column, question, low label, high label
+    ("sleep", "Sleep_1_5", "How did you sleep?", "Poorly", "Really well"),
+    ("energy", "Fatigue_1_5", "Energy right now?", "Drained", "Full of energy"),
+    ("soreness", "Soreness_1_5", "How sore are you?", "Not at all", "Very sore"),
+    ("mood", "Mood_1_5", "Mood?", "Low", "Great"),
+]
+
+
+def _day_wellness(df, day):
+    """Wellness values already in the sheet for `day`, as {key: int}."""
+    out = {}
+    if df is None or df.empty or "Date" not in df.columns:
+        return out
+    d = df.copy()
+    d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
+    rows = d[d["Date"] == day]
+    if rows.empty:
+        return out
+    row = rows.iloc[-1]
+    for key, col, *_ in CHECKIN_QUESTIONS:
+        v = pd.to_numeric(row.get(col, np.nan), errors="coerce")
+        if pd.notna(v) and 1 <= v <= 5:
+            out[key] = int(round(v))
+    return out
+
+
+def write_cells(tab_name: str, row_idx_0: int, payload: dict):
+    """Write only the given columns of one row (leaves formulas elsewhere alone)."""
+    if sh is None:
+        return
+    ws = sh.worksheet(tab_name)
+    headers = ws.row_values(1)
+    row_number = row_idx_0 + 2
+    updates = []
+    for col_name, value in payload.items():
+        if col_name in headers:
+            a1 = gspread.utils.rowcol_to_a1(row_number, headers.index(col_name) + 1)
+            updates.append({"range": a1, "values": [["" if value is None else value]]})
+    if updates:
+        ws.batch_update(updates, value_input_option="USER_ENTERED")
+
+
+def _checkin_form(selected, stale_days, editing=False):
+    questions = []
+    for key, _col, label, low, high in CHECKIN_QUESTIONS:
+        buttons = [
+            html.Button(
+                str(v),
+                id={"type": "ci-btn", "q": key, "v": v},
+                n_clicks=0,
+                className="ci-btn selected" if selected.get(key) == v else "ci-btn",
+                **{"aria-label": f"{label} {v} of 5"},
+            )
+            for v in range(1, 6)
+        ]
+        questions.append(html.Div([
+            html.Div(label, className="ci-label"),
+            html.Div(buttons, className="ci-row"),
+            html.Div([html.Span(low), html.Span(high)], className="ci-ends"),
+        ], className="ci-q"))
+
+    if editing:
+        sub = "Update today's answers"
+    elif stale_days is None:
+        sub = "4 questions · about 20 seconds"
+    else:
+        sub = f"{freshness_label(stale_days)} · 4 questions, about 20 seconds"
+
+    return html.Div([
+        html.Div("Morning check-in", className="ci-title"),
+        html.Div(sub, className="ci-sub" + (" ci-sub-stale" if (stale_days or 0) >= STALE_DAYS and not editing else "")),
+        html.Div(questions, className="ci-questions"),
+        html.Button("Save check-in", id="checkin-save", n_clicks=0, className="ci-save"),
+        html.Div(id="checkin-status", className="ci-status"),
+    ], className="checkin-card")
+
+
+def _checkin_done(vals):
+    summary = " · ".join([
+        f"Sleep {vals.get('sleep', '–')}",
+        f"Energy {vals.get('energy', '–')}",
+        f"Soreness {vals.get('soreness', '–')}",
+        f"Mood {vals.get('mood', '–')}",
+    ])
+    return html.Div([
+        html.I(className="bi bi-check-circle-fill ci-done-icon", **{"aria-hidden": "true"}),
+        html.Div([
+            html.Div("Checked in today", className="ci-done-title"),
+            html.Div(summary, className="ci-done-sub"),
+        ], className="ci-done-text"),
+        html.Button("Edit", id={"type": "ci-edit", "i": 0}, n_clicks=0, className="ci-edit"),
+    ], className="checkin-card checkin-done")
+
+
+@app.callback(
+    Output("checkin-card", "children"),
+    Output("checkin-store", "data"),
+    Input("athlete-dropdown", "value"),
+    Input("checkin-saved", "data"),
+    State("auth-store", "data"),
+)
+def render_checkin(athlete_id, _saved, auth_data):
+    # Athletes check themselves in; coaches just see freshness on the dials.
+    if not athlete_id or (auth_data and auth_data.get("is_coach")):
+        return None, {}
+    today = today_adl()
+    try:
+        df = load_tab(athlete_id)
+    except Exception:
+        return None, {}
+    vals = _day_wellness(df, today)
+    if len(vals) == len(CHECKIN_QUESTIONS):
+        return _checkin_done(vals), vals
+    return _checkin_form(vals, days_since_last_data(df, today)), vals
+
+
+@app.callback(
+    Output("checkin-card", "children", allow_duplicate=True),
+    Output("checkin-store", "data", allow_duplicate=True),
+    Input({"type": "ci-edit", "i": ALL}, "n_clicks"),
+    State("athlete-dropdown", "value"),
+    prevent_initial_call=True,
+)
+def edit_checkin(clicks, athlete_id):
+    if not athlete_id or not clicks or not any((n or 0) > 0 for n in clicks):
+        raise PreventUpdate
+    today = today_adl()
+    df = load_tab(athlete_id)
+    vals = _day_wellness(df, today)
+    return _checkin_form(vals, days_since_last_data(df, today), editing=True), vals
+
+
+@app.callback(
+    Output("checkin-store", "data", allow_duplicate=True),
+    Output({"type": "ci-btn", "q": ALL, "v": ALL}, "className"),
+    Input({"type": "ci-btn", "q": ALL, "v": ALL}, "n_clicks"),
+    State("checkin-store", "data"),
+    prevent_initial_call=True,
+)
+def pick_checkin(_clicks, data):
+    ctx = callback_context
+    if not ctx.triggered or not ctx.triggered[0].get("value"):
+        raise PreventUpdate
+    trig = json.loads(ctx.triggered[0]["prop_id"].rsplit(".", 1)[0])
+    data = dict(data or {})
+    data[trig["q"]] = trig["v"]
+    classes = [
+        "ci-btn selected" if data.get(o["id"]["q"]) == o["id"]["v"] else "ci-btn"
+        for o in ctx.outputs_list[1]
+    ]
+    return data, classes
+
+
+@app.callback(
+    Output("checkin-status", "children"),
+    Output("checkin-saved", "data"),
+    Output("refresh-btn", "n_clicks", allow_duplicate=True),
+    Input("checkin-save", "n_clicks"),
+    State("checkin-store", "data"),
+    State("athlete-dropdown", "value"),
+    State("refresh-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def save_checkin(n, data, athlete_id, refresh_n):
+    if not n or not athlete_id:
+        raise PreventUpdate
+    data = data or {}
+    if any(key not in data for key, *_ in CHECKIN_QUESTIONS):
+        return "Answer all four questions to save.", no_update, no_update
+
+    today = today_adl()
+    payload = {col: int(data[key]) for key, col, *_ in CHECKIN_QUESTIONS}
+    try:
+        df = load_tab(athlete_id)
+        d = df.copy()
+        d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
+        matches = d.index[d["Date"] == today].tolist()
+        if matches:
+            write_cells(athlete_id, matches[0], payload)
+        else:
+            # Fallback only — every date normally already has a row.
+            append_row_for_date(athlete_id, today, payload)
+    except Exception as e:
+        return f"Couldn't save your check-in: {e}", no_update, no_update
+
+    _squad_cache.pop(athlete_id, None)   # make the dials re-read the sheet
+    return "", time.time(), (refresh_n or 0) + 1
+
+
+@app.callback(
+    Output("session-inputs", "data", allow_duplicate=True),
+    Output("log-wellness-note", "children"),
+    Input("selected-date-store", "data"),
+    State("athlete-dropdown", "value"),
+    prevent_initial_call=True,
+)
+def prefill_session_inputs(selected_date, athlete_id):
+    """Opening a day's log form pre-fills wellness from that day's check-in."""
+    if not selected_date or not athlete_id:
+        raise PreventUpdate
+    day = pd.to_datetime(selected_date, errors="coerce")
+    if pd.isna(day):
+        raise PreventUpdate
+    vals = _day_wellness(load_tab_cached(athlete_id), day.date())
+    if not vals:
+        return {}, "Not filled in yet — tap to add."
+    note = ("Filled from that day's check-in" if len(vals) == 4
+            else "Partly filled from that day's check-in")
+    return dict(vals), note
+
+
+# ============================================================
+#  Today's session card, readiness drivers, chart takeaways
+# ============================================================
+
+_TONE = {
+    "good": ("#2fb344", "rgba(47,179,68,0.12)", "rgba(47,179,68,0.35)"),
+    "watch": ("#b7791f", "rgba(245,179,1,0.12)", "rgba(245,179,1,0.40)"),
+    "bad": ("#e53935", "rgba(244,67,54,0.12)", "rgba(244,67,54,0.38)"),
+    "normal": ("var(--text-muted)", "transparent", "var(--border)"),
+}
+
+
+@app.callback(
+    Output("today-session-card", "children"),
+    Input("athlete-dropdown", "value"),
+    Input("today-date", "children"),
+    Input("checkin-saved", "data"),
+)
+def update_today_session(athlete_id, _today, _saved):
+    if not athlete_id:
+        return None
+    today = today_adl()
+    try:
+        df = load_tab_cached(athlete_id)
+    except Exception:
+        return None
+    if df is None or df.empty:
+        return None
+
+    session = todays_session(df, today)
+    if not session:
+        return None
+
+    stale_days = days_since_last_data(df, today)
+    is_stale = stale_days is None or stale_days >= STALE_DAYS
+
+    df_t = df.copy()
+    df_t["Date"] = pd.to_datetime(df_t["Date"], errors="coerce")
+    df_t = df_t.sort_values("Date")
+    df_t = df_t[~df_t["Date"].duplicated(keep="last")].set_index("Date")
+    try:
+        df_t = df_t.reindex(pd.date_range(df_t.index.min(), today, freq="D"))
+    except Exception:
+        return None
+    load_s = pd.to_numeric(df_t.get("Load"), errors="coerce")
+    rpe_s = pd.to_numeric(df_t.get("RPE_Post_Session"), errors="coerce")
+    qual_s = pd.to_numeric(df_t.get("Session_1_5"), errors="coerce")
+    readiness = calc_daily_readiness(load_s, rpe_s, qual_s)
+    neuro = compute_neuro_for_athlete(df, today)
+
+    # Use the SAME combined score as the hero verdict, so the card can never
+    # say "Go as planned" while the headline says "Train with care".
+    both = [v for v in [readiness, neuro] if v is not None]
+    combined = sum(both) / len(both) if both else None
+
+    head, detail, tone = session_advice(combined, session, is_stale)
+    col, bg, border = _TONE.get(tone, _TONE["normal"])
+
+    meta = " · ".join([x for x in [
+        session["venue"],
+        f"{session['duration']} min" if session["duration"] else "",
+        f"planned effort {session['srpe']:.0f}/10" if session["srpe"] else "",
+    ] if x])
+
+    children = [
+        html.Div("TODAY'S SESSION", className="ts-label"),
+        html.Div(session["workout"], className="ts-title"),
+    ]
+    if session["focus"]:
+        children.append(html.Div(session["focus"], className="ts-meta"))
+    if meta:
+        children.append(html.Div(meta, className="ts-meta"))
+    children.append(html.Div([
+        html.Div(head, className="ts-advice-head", style={"color": col}),
+        html.Div(detail, className="ts-advice-sub"),
+    ], className="ts-advice", style={"background": bg, "borderColor": border}))
+
+    if session["logged"]:
+        children.append(html.Div("Logged ✓", className="ts-logged"))
+    else:
+        children.append(html.Button("Log this session", id="ts-log-btn", n_clicks=0,
+                                    className="ts-log-btn"))
+    return html.Div(children, className="ts-card")
+
+
+@app.callback(
+    Output("bottom-nav-click", "data", allow_duplicate=True),
+    Output("selected-date-store", "data", allow_duplicate=True),
+    Output("session-input-container", "style", allow_duplicate=True),
+    Input("ts-log-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def open_today_log(n):
+    """'Log this session' jumps to the calendar with today's form already open."""
+    if not n:
+        raise PreventUpdate
+    return "calendar", str(today_adl()), {"display": "block"}
+
+
+@app.callback(
+    Output("drivers-panel", "children"),
+    Input("drivers-toggle", "n_clicks"),
+    Input("athlete-dropdown", "value"),
+    Input("checkin-saved", "data"),
+)
+def update_drivers_panel(n_clicks, athlete_id, _saved):
+    # Collapsed by default; each press of the button toggles it.
+    ctx = callback_context
+    trig = ctx.triggered[0]["prop_id"].split(".")[0] if ctx.triggered else ""
+    if trig != "drivers-toggle" or not n_clicks or n_clicks % 2 == 0:
+        return None
+    if not athlete_id:
+        return None
+    today = today_adl()
+    try:
+        df = load_tab_cached(athlete_id)
+    except Exception:
+        return None
+    drivers = compute_drivers(df, today)
+    if not drivers:
+        return html.Div("Not enough data yet to break the score down.",
+                        className="drivers-empty")
+
+    rows = []
+    for d in drivers:
+        col, _bg, _bd = _TONE.get(d["tone"], _TONE["normal"])
+        bar_children = [html.Div(className="drv-fill",
+                                 style={"width": f"{d['pct']:.0f}%", "background": col})]
+        if d["kind"] == "load":
+            bar_children.insert(0, html.Div(className="drv-band"))
+        if d["usual_pct"] is not None:
+            bar_children.append(html.Div(className="drv-marker",
+                                         style={"left": f"{d['usual_pct']:.0f}%"}))
+        rows.append(html.Div([
+            html.Div([
+                html.Span(d["label"], className="drv-name"),
+                html.Span(d["status"], className="drv-status", style={"color": col}),
+            ], className="drv-top"),
+            html.Div(bar_children, className="drv-bar"),
+            html.Div(d["detail"], className="drv-detail"),
+        ], className="drv-row"))
+
+    rows.append(html.Div("Marker line = your 28-day average", className="drv-key"))
+    return html.Div(rows, className="drivers-panel")
+
+
+@app.callback(
+    Output("load-takeaway", "children"),
+    Output("wellness-takeaway", "children"),
+    Output("speed-takeaway", "children"),
+    Input("athlete-dropdown", "value"),
+    Input("refresh-btn", "n_clicks"),
+)
+def update_chart_takeaways(athlete_id, _n):
+    """One plain-language line above each chart."""
+    blank = (None, None, None)
+    if not athlete_id:
+        return blank
+    today = today_adl()
+    try:
+        df = load_tab_cached(athlete_id)
+    except Exception:
+        return blank
+    if df is None or df.empty:
+        return blank
+
+    def _block(fn):
+        try:
+            head, sub, tone = fn(df, today)
+        except Exception:
+            return None
+        col, _bg, _bd = _TONE.get(tone, _TONE["normal"])
+        return html.Div([
+            html.Div(head, className="tk-head", style={"color": col}),
+            html.Div(sub, className="tk-sub"),
+        ], className="takeaway")
+
+    return _block(load_takeaway), _block(wellness_takeaway), _block(speed_takeaway)
+
+
+@app.callback(
+    Output("session-inputs", "data", allow_duplicate=True),
+    Input({"type": "sl-btn", "q": ALL, "v": ALL}, "n_clicks"),
+    State("session-inputs", "data"),
+    prevent_initial_call=True,
+)
+def pick_session_input(_clicks, data):
+    ctx = callback_context
+    if not ctx.triggered or not ctx.triggered[0].get("value"):
+        raise PreventUpdate
+    trig = json.loads(ctx.triggered[0]["prop_id"].rsplit(".", 1)[0])
+    data = dict(data or {})
+    data[trig["q"]] = trig["v"]
+    return data
+
+
+@app.callback(
+    Output({"type": "sl-btn", "q": ALL, "v": ALL}, "className"),
+    Input("session-inputs", "data"),
+)
+def sync_session_input_pills(data):
+    ctx = callback_context
+    data = data or {}
+    return ["ci-btn selected" if data.get(o["id"]["q"]) == o["id"]["v"] else "ci-btn"
+            for o in ctx.outputs_list]
+
+
+@app.callback(
+    Output("log-wellness-wrap", "style"),
+    Input("log-wellness-toggle", "n_clicks"),
+    prevent_initial_call=True,
+)
+def toggle_log_wellness(n):
+    if not n:
+        raise PreventUpdate
+    return {"display": "block"} if n % 2 == 1 else {"display": "none"}
 
 
 @app.callback(
@@ -6084,6 +6821,8 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data, theme):
         weekly_pct = None
         session_note = ""
         session_rpe = None
+        days_since_session = None
+        trained_today = False
 
         if not df.empty:
             try:
@@ -6122,11 +6861,16 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data, theme):
                 df2 = df.copy()
                 df2["Date"] = pd.to_datetime(df2["Date"], errors="coerce").dt.date
                 df2 = df2.sort_values("Date")
-                logged_days = [d for d in df2["Date"].dropna().unique()
-                               if get_day_status(df2, d).get("logged", False)]
+                statuses = {d: get_day_status(df2, d) for d in df2["Date"].dropna().unique()
+                            if d <= today}
+                logged_days = [d for d, s in statuses.items() if s.get("logged", False)]
+                session_days = [d for d, s in statuses.items() if s.get("session", False)]
                 if logged_days:
                     last_logged = max(logged_days)
                     days_ago = (today - last_logged).days
+                if session_days:
+                    days_since_session = (today - max(session_days)).days
+                    trained_today = max(session_days) == today
 
                 today_rows = df2[df2["Date"] == today]
                 if not today_rows.empty:
@@ -6144,10 +6888,15 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data, theme):
             status_label = "No data";
             status_bg = "#f5f5f5";
             status_color = "#999"
-        elif days_ago == 0:
-            status_label = "Logged today ✓";
+        elif days_ago == 0 and trained_today:
+            status_label = "Trained today ✓";
             status_bg = "#e8f5e9";
             status_color = "#2E7D32"
+        elif days_ago == 0:
+            # Checked in this morning, no session logged yet.
+            status_label = "Checked in";
+            status_bg = "#e3f2fd";
+            status_color = "#1565C0"
         elif days_ago == 1:
             status_label = "Yesterday";
             status_bg = "#fff8e1";
@@ -6161,6 +6910,7 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data, theme):
             status_bg = "#ffebee";
             status_color = "#C62828"
 
+        stale_athlete = days_ago is None or days_ago >= STALE_DAYS
         r_col = score_colour(readiness_val)
         n_col = score_colour(neuro_val)
         card_border = TRAFFIC[r_col]["border"]
@@ -6180,12 +6930,14 @@ def update_squad_view(nav_clicks, refresh_clicks, auth_data, theme):
                     mini_ring(readiness_val, r_col),
                     html.Div("Readiness", style={"fontSize": "10px", "color": _muted_col,
                                                  "textAlign": "center", "marginTop": "3px"}),
-                ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
+                ], className="squad-stale" if stale_athlete else None,
+                    style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
                 html.Div([
                     mini_ring(neuro_val, n_col),
                     html.Div("Neuro", style={"fontSize": "10px", "color": _muted_col,
                                              "textAlign": "center", "marginTop": "3px"}),
-                ], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
+                ], className="squad-stale" if stale_athlete else None,
+                    style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
                 html.Div([
                     mini_ring(weekly_pct, score_colour(weekly_pct)),
                     html.Div("Exposure", style={"fontSize": "10px", "color": _muted_col,
