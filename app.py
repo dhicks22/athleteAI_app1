@@ -7086,5 +7086,6 @@ def debug_dashboard(tab_name):
         return jsonify({"error": str(e), "trace": traceback.format_exc()})
 
 
+
 if __name__ == "__main__":
     app.run(debug=True)
