@@ -3060,8 +3060,20 @@ app._favicon = "icon-192.png"
 
 app.index_string = """
 <!DOCTYPE html>
-<html>
+<html data-theme="dark">
     <head>
+        <script>
+        /* Apply the saved theme before first paint — avoids a white flash
+           on load. Defaults to dark when nothing has been saved. */
+        (function(){
+          try {
+            var raw = window.localStorage.getItem("theme-store");
+            var t = "dark";
+            if (raw) { var v = JSON.parse(raw); if (v === "light" || v === "dark") t = v; }
+            document.documentElement.setAttribute("data-theme", t);
+          } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
+        })();
+        </script>
         {%metas%}
         <meta name="mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-capable" content="yes">
@@ -5200,16 +5212,13 @@ app.clientside_callback(
 
 
 # ── Apply the stored theme to <html data-theme="…"> and update the toggle
-#    icon. Runs on load (stored value flows in) and on every toggle. If no
-#    preference is stored yet, fall back to the OS setting. ──
+#    icon. Runs on load (stored value flows in) and on every toggle.
+#    The app opens in DARK unless the athlete has chosen light before. ──
 app.clientside_callback(
     """
     function(theme){
         let t = theme;
-        if(t !== "dark" && t !== "light"){
-            t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches)
-                ? "dark" : "light";
-        }
+        if(t !== "dark" && t !== "light"){ t = "dark"; }   // dark by default
         document.documentElement.setAttribute("data-theme", t);
         const btn = document.getElementById("theme-toggle");
         if(btn){ btn.textContent = (t === "dark") ? "☀️" : "🌙"; }
@@ -7084,7 +7093,6 @@ def debug_dashboard(tab_name):
     except Exception as e:
         import traceback
         return jsonify({"error": str(e), "trace": traceback.format_exc()})
-
 
 
 if __name__ == "__main__":

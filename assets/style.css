@@ -1426,3 +1426,54 @@ body, .card, .login-card, .dial-circle, .compact-today, .bottom-nav,
     text-align: center;
   }
 }
+
+/* ============================================================
+   26) PHONE: keep the three supporting dials on ONE row
+   The Bootstrap columns are col-4 (33.33% each). Section 22 adds
+   gap:12px to the row, so 100% + gaps overflowed and Streak wrapped
+   onto a second line. Auto-width columns let the gap fit.
+============================================================ */
+.dial-secondary {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  justify-content: center !important;
+  align-items: flex-start !important;
+  width: auto !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+.dial-secondary > [class*="col"] {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  max-width: none !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+@media (max-width: 767px) {
+  .dial-secondary { gap: 14px !important; }
+
+  /* Sized so three dials + gaps clear a 320px-wide phone */
+  .dial-secondary .dial-center {
+    --dial-size: 82px !important;
+    --dial-thickness: 9px !important;
+  }
+  .hero-block .dial-hero {
+    --dial-size: 150px !important;
+    --dial-thickness: 14px !important;
+  }
+  .dial-secondary .dial-label {
+    font-size: 8px;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+  .dial-secondary .dial-block { padding-left: 0; padding-right: 0; }
+}
+
+@media (max-width: 360px) {
+  .dial-secondary { gap: 10px !important; }
+  .dial-secondary .dial-center { --dial-size: 72px !important; --dial-thickness: 8px !important; }
+  .hero-block .dial-hero { --dial-size: 134px !important; --dial-thickness: 13px !important; }
+  .dial-secondary .dial-label { font-size: 7.5px; }
+}
