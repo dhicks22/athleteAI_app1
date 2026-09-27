@@ -1471,6 +1471,7 @@ body, .card, .login-card, .dial-circle, .compact-today, .bottom-nav,
   .dial-secondary .dial-block { padding-left: 0; padding-right: 0; }
 }
 
+
 @media (max-width: 360px) {
   .dial-secondary { gap: 10px !important; }
   .dial-secondary .dial-center { --dial-size: 72px !important; --dial-thickness: 8px !important; }
