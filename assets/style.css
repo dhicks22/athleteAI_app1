@@ -1057,7 +1057,7 @@ body, .card, .login-card, .dial-circle, .compact-today, .bottom-nav,
 ============================================================ */
 
 /* Readiness / Neuro dials grey out when the data behind them is old */
-.dial-stale .dial-circle {
+.dial-stale .dial-ring-img {
   filter: grayscale(1);
   opacity: 0.55;
 }
@@ -1145,23 +1145,47 @@ body, .card, .login-card, .dial-circle, .compact-today, .bottom-nav,
 }
 
 /* ============================================================
-   22) VERDICT ROW — sits under the four dials
+   22) DIAL RINGS + HERO LAYOUT
+   Dials are now flat SVG rings with a transparent centre — no
+   inner disc, drop shadow or gloss (that stack is what made them
+   look like bubbles). Size comes from --dial-size on the block.
 ============================================================ */
-.verdict-row {
+.dial-ring {
+  position: relative;
+  width: var(--dial-size);
+  height: var(--dial-size);
+  flex-shrink: 0;
+}
+.dial-ring-img { width: 100%; height: 100%; display: block; }
+.dial-ring .dial-text {
+  font-size: calc(var(--dial-size) * 0.27);
+  text-shadow: none;
+}
+
+/* ---- Phone: hero Readiness, three supporting dials underneath ---- */
+.dials-wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
   margin: 6px auto 0;
-  max-width: 620px;
 }
-.verdict-text {
+.hero-block {
+  --dial-size: 164px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.hero-block .dial-label { margin-bottom: 8px; }
+.hero-block .dial-ring .dial-text { font-size: calc(var(--dial-size) * 0.32); }
+.hero-verdict {
   font-family: 'Barlow Condensed', system-ui, sans-serif;
   font-size: 22px;
   font-weight: 700;
   line-height: 1.15;
   text-align: center;
   min-height: 24px;
+  margin-top: 6px;
 }
 .drivers-toggle {
   min-height: 40px;
@@ -1173,9 +1197,44 @@ body, .card, .login-card, .dial-circle, .compact-today, .bottom-nav,
   font-weight: 600;
   cursor: pointer;
 }
+.dial-secondary {
+  --dial-size: 82px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 22px;
+  margin-top: 14px;
+}
+.dial-secondary .dial-block { width: auto; padding: 0; }
+.dial-secondary .dial-label {
+  font-size: 8.5px;
+  white-space: nowrap;
+  margin-bottom: 6px;
+}
+
+@media (max-width: 360px) {
+  .hero-block { --dial-size: 144px; }
+  .dial-secondary { --dial-size: 74px; gap: 14px; }
+}
+
+/* ---- Desktop: the same four dials in one even row ---- */
+@media (min-width: 768px) {
+  .dials-wrap {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 34px;
+  }
+  .hero-block { --dial-size: 120px; gap: 0; }
+  .hero-block .dial-label { margin-bottom: 6px; }
+  .hero-block .dial-ring .dial-text { font-size: calc(var(--dial-size) * 0.27); }
+  .hero-verdict { font-size: 16px; max-width: 140px; }
+  .dial-secondary { --dial-size: 120px; gap: 34px; margin-top: 0; }
+  .dial-secondary .dial-label { font-size: 9px; }
+}
 
 /* ============================================================
-   23) DRIVERS PANEL — what's pushing the score up or down
+      23) DRIVERS PANEL — what's pushing the score up or down
 ============================================================ */
 .drivers-panel, .drivers-empty {
   max-width: 620px;
@@ -1274,7 +1333,7 @@ body, .card, .login-card, .dial-circle, .compact-today, .bottom-nav,
 .ts-card,
 .drivers-panel,
 .drivers-empty,
-.verdict-row {
+.verdict-row-unused {
   max-width: 620px !important;
   margin-left: auto !important;
   margin-right: auto !important;

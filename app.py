@@ -312,16 +312,59 @@ def dial_class_from_score(score: float | None):
         return "dial-red"
 
 
+_RING_COLOURS = {
+    "dial-red": "#f44336",
+    "dial-amber": "#f5b301",
+    "dial-green": "#2fb344",
+    "dial-blue": "#2f80ed",
+    "dial-pink": "#E91E8C",
+    "dial-grey": "#8a939e",
+}
+
+
+def _ring_svg(percent: float, colour: str) -> str:
+    """
+    A flat progress ring: thin track, rounded coloured arc, transparent centre.
+    Drawn as an SVG data URI so it has no disc, shadow or gloss behind it —
+    the old conic-gradient dial stacked a solid inner disc on top, which is
+    what made every dial read as a raised bubble.
+    """
+    import math, base64
+    stroke = 8
+    r = 50 - stroke / 2
+    circ = 2 * math.pi * r
+    arc = circ * max(0.0, min(percent, 100.0)) / 100.0
+    parts = [
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">',
+        '<style>@keyframes f{from{stroke-dasharray:0 %.2f}}'
+        '.f{animation:f 1.4s cubic-bezier(.22,1,.36,1)}</style>' % circ,
+        f'<circle cx="50" cy="50" r="{r}" fill="none" '
+        f'stroke="rgba(128,128,128,0.22)" stroke-width="{stroke}"/>',
+    ]
+    if arc > 0.5:
+        parts.append(
+            f'<circle class="f" cx="50" cy="50" r="{r}" fill="none" stroke="{colour}" '
+            f'stroke-width="{stroke}" stroke-linecap="round" '
+            f'stroke-dasharray="{arc:.2f} {circ:.2f}" transform="rotate(-90 50 50)"/>'
+        )
+    parts.append('</svg>')
+    b64 = base64.b64encode("".join(parts).encode()).decode()
+    return f"data:image/svg+xml;base64,{b64}"
+
+
 def _build_dial(value_str: str, percent: float, colour_class: str):
     percent = 0 if percent is None else float(percent)
     percent = max(0, min(percent, 100))
+    colour = _RING_COLOURS.get(colour_class, "#8a939e")
     return html.Div(
         className="dial-wrapper",
         children=[
             html.Div(
-                className=f"dial-circle updated {colour_class}",
-                style={"--dial-progress": round(percent)},
-                children=[html.Div(value_str, className="dial-text")],
+                className=f"dial-ring {colour_class}",
+                children=[
+                    html.Img(src=_ring_svg(percent, colour), alt="", className="dial-ring-img"),
+                    html.Div(value_str, className="dial-text"),
+                ],
             )
         ],
     )
@@ -3424,34 +3467,28 @@ def build_main_layout(auth_data):
                     ], lg=6, md=6, width=12),
                 ],
             ),
-            # Four equal dials: 2x2 on phone, one row of four on desktop.
-            dbc.Row(
-                className="g-2 align-items-stretch mt-1 dial-row",
-                children=[
-                    dbc.Col(html.Div([html.Div("Daily Readiness", className="dial-label"),
-                                      html.Div(id="readiness-dial-container", className="dial-center")],
-                                     className="dial-block"),
-                            lg=3, md=3, sm=6, xs=6, width=6),
-                    dbc.Col(html.Div([html.Div("Neuromuscular Readiness", className="dial-label"),
-                                      html.Div(id="neuromuscular-dial-container", className="dial-center")],
-                                     className="dial-block"),
-                            lg=3, md=3, sm=6, xs=6, width=6),
-                    dbc.Col(html.Div([html.Div("Training Exposure", className="dial-label"),
-                                      html.Div(id="weekly-dial-container", className="dial-center")],
-                                     className="dial-block"),
-                            lg=3, md=3, sm=6, xs=6, width=6),
-                    dbc.Col(html.Div([html.Div("Training Streak", className="dial-label"),
-                                      html.Div(id="streak-dial-container", className="dial-center")],
-                                     className="dial-block"),
-                            lg=3, md=3, sm=6, xs=6, width=6),
-                ],
-            ),
-            # Verdict + drivers link sit under the whole dial row.
-            html.Div([
-                html.Div(id="readiness-verdict", className="verdict-text"),
-                html.Button("See what's driving it", id="drivers-toggle", n_clicks=0,
-                            className="drivers-toggle"),
-            ], className="verdict-row"),
+            # Phone: hero Readiness + three supporting dials underneath.
+            # Desktop (768px+): CSS lays the same markup out as four in a row.
+            html.Div(className="dials-wrap", children=[
+                html.Div(className="hero-block", children=[
+                    html.Div("Daily Readiness", className="dial-label"),
+                    html.Div(id="readiness-dial-container", className="dial-center"),
+                    html.Div(id="readiness-verdict", className="hero-verdict"),
+                    html.Button("See what's driving it", id="drivers-toggle", n_clicks=0,
+                                className="drivers-toggle"),
+                ]),
+                html.Div(className="dial-secondary", children=[
+                    html.Div([html.Div("Neuromuscular", className="dial-label"),
+                              html.Div(id="neuromuscular-dial-container", className="dial-center")],
+                             className="dial-block"),
+                    html.Div([html.Div("Exposure", className="dial-label"),
+                              html.Div(id="weekly-dial-container", className="dial-center")],
+                             className="dial-block"),
+                    html.Div([html.Div("Streak", className="dial-label"),
+                              html.Div(id="streak-dial-container", className="dial-center")],
+                             className="dial-block"),
+                ]),
+            ]),
             html.Div(id="drivers-panel"),
             html.Div(id="welcome-message", className="mt-3"),
             html.Div(id="badges-row", className="mt-2"),
@@ -5213,7 +5250,7 @@ app.clientside_callback(
 #    The app opens in DARK unless the athlete has chosen light before. ──
 app.clientside_callback(
     """
-    function(theme){
+    function(theme, _page){
         let t = theme;
         if(t !== "dark" && t !== "light"){ t = "dark"; }   // dark by default
         document.documentElement.setAttribute("data-theme", t);
@@ -5224,6 +5261,9 @@ app.clientside_callback(
     """,
     Output("theme-store", "data", allow_duplicate=True),
     Input("theme-store", "data"),
+    # Re-run once the main layout renders after login, so the toggle button
+    # (which doesn't exist on the login page) gets the right sun/moon icon.
+    Input("page-content", "children"),
     prevent_initial_call="initial_duplicate",
 )
 
@@ -5378,8 +5418,6 @@ def update_welcome(athlete_id, _today):
         html.Div([
             html.Span(sub_line, style={"fontSize": "14px", "color": "var(--text)",
                                        "lineHeight": "1.45"}),
-            html.Span(streak_txt, style={"fontSize": "13px", "color": "#E65100",
-                                         "marginLeft": "6px", "whiteSpace": "nowrap"}),
         ]),
     ], style={"maxWidth": "620px", "margin": "10px auto 4px auto", "textAlign": "center",
               "padding": "0 8px", "background": "transparent", "border": "none"})
