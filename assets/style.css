@@ -1145,24 +1145,22 @@ body, .card, .login-card, .dial-circle, .compact-today, .bottom-nav,
 }
 
 /* ============================================================
-   22) HERO SCORE, DRIVERS, TODAY'S SESSION, TAKEAWAYS, TAP LOG
+   22) VERDICT ROW — sits under the four dials
 ============================================================ */
-
-/* ---- Hero readiness ---- */
-.hero-block {
+.verdict-row {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 6px 0 2px;
+  gap: 2px;
+  margin: 6px auto 0;
+  max-width: 620px;
 }
-.hero-block .dial-hero { --dial-size: 168px; }
-@media (max-width: 600px) { .hero-block .dial-hero { --dial-size: 150px; } }
-.hero-verdict {
+.verdict-text {
   font-family: 'Barlow Condensed', system-ui, sans-serif;
   font-size: 22px;
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1.15;
+  text-align: center;
   min-height: 24px;
 }
 .drivers-toggle {
@@ -1175,14 +1173,13 @@ body, .card, .login-card, .dial-circle, .compact-today, .bottom-nav,
   font-weight: 600;
   cursor: pointer;
 }
-/* Secondary dials sit smaller under the hero */
-.dial-secondary .dial-center { --dial-size: 86px; }
-.dial-secondary .dial-label { font-size: 8.5px; }
 
-/* ---- Drivers panel ---- */
+/* ============================================================
+   23) DRIVERS PANEL — what's pushing the score up or down
+============================================================ */
 .drivers-panel, .drivers-empty {
-  max-width: 560px;
-  margin: 4px auto 0;
+  max-width: 620px;
+  margin: 6px auto 0;
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: 18px;
@@ -1201,9 +1198,11 @@ body, .card, .login-card, .dial-circle, .compact-today, .bottom-nav,
 .drv-detail { font-size: 12.5px; color: var(--text-muted); }
 .drv-key { font-size: 11.5px; color: var(--text-muted); padding-top: 8px; }
 
-/* ---- Today's session card ---- */
+/* ============================================================
+   24) TODAY'S SESSION CARD
+============================================================ */
 .ts-card {
-  max-width: 560px;
+  max-width: 620px;
   margin: 0 auto;
   background: var(--card-bg);
   border: 1px solid var(--border);
@@ -1215,7 +1214,17 @@ body, .card, .login-card, .dial-circle, .compact-today, .bottom-nav,
   gap: 6px;
 }
 .ts-label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; color: var(--text-muted); }
-.ts-title { font-family: 'Barlow Condensed', system-ui, sans-serif; font-size: 24px; font-weight: 700; color: var(--text); line-height: 1.1; }
+.ts-title {
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.15;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .ts-meta { font-size: 13.5px; color: var(--text-muted); }
 .ts-advice { margin-top: 8px; padding: 12px; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; }
 .ts-advice-head { font-size: 15px; font-weight: 700; }
@@ -1228,12 +1237,16 @@ body, .card, .login-card, .dial-circle, .compact-today, .bottom-nav,
 .ts-log-btn:hover { border-color: var(--accent); color: var(--accent); }
 .ts-logged { margin-top: 6px; font-size: 13.5px; font-weight: 600; color: #2fb344; }
 
-/* ---- Chart takeaways ---- */
+/* ============================================================
+   25) CHART TAKEAWAYS — one plain line above each graph
+============================================================ */
 .takeaway { max-width: 900px; margin: 0 auto 6px; padding: 2px 4px 8px; }
 .tk-head { font-family: 'Barlow Condensed', system-ui, sans-serif; font-size: 19px; font-weight: 700; line-height: 1.15; }
 .tk-sub { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
 
-/* ---- Session log: wellness collapse ---- */
+/* ============================================================
+   26) SESSION LOG — collapsible wellness block
+============================================================ */
 .log-taps { margin-bottom: 4px; }
 .lw-block { margin: 8px 0 12px; }
 .lw-toggle {
@@ -1247,234 +1260,27 @@ body, .card, .login-card, .dial-circle, .compact-today, .bottom-nav,
 .lw-note { flex-grow: 1; font-size: 12.5px; font-weight: 500; color: var(--text-muted); }
 .lw-caret { color: var(--text-muted); }
 
-/* Squad: grey an athlete's readiness/neuro rings when their data is old */
+/* ============================================================
+   27) SQUAD — grey stale rings
+============================================================ */
 .squad-stale img { filter: grayscale(1); opacity: 0.55; }
 
 /* ============================================================
-   23) DESKTOP WIDTHS — keep Home readable on a wide screen
-   Everything on Home now sits in one centred column instead of
-   stretching the full browser width.
+   28) DESKTOP WIDTHS — keep Home in a readable centred column
 ============================================================ */
-.dial-secondary,
-#wellness-alert-banner > div,
 #badges-row > div,
 #welcome-message > div,
 .checkin-card,
 .ts-card,
 .drivers-panel,
-.drivers-empty {
+.drivers-empty,
+.verdict-row {
   max-width: 620px !important;
   margin-left: auto !important;
   margin-right: auto !important;
 }
 
-/* The three supporting dials sit as a tight group under the hero,
-   not spread across the whole window. */
-.dial-secondary { display: flex; justify-content: center; gap: 12px; }
-.dial-secondary > [class*="col"] { flex: 0 0 auto; max-width: 180px; }
-
-/* Top row (athlete + today) also capped on desktop */
 @media (min-width: 900px) {
   #home-view > .row:first-of-type { max-width: 620px; margin-left: auto; margin-right: auto; }
-}
-
-/* Long workout strings from the sheet: cap the title at two lines so the
-   card stays scannable, full text still shows on hover/long-press. */
-.ts-title {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  font-size: 20px;
-}
-
-/* ============================================================
-   24) DIAL SIZING + FINISH
-   Ring thickness now scales with each dial, and the glossy
-   "bubble" treatment is dropped for a flat ring.
-============================================================ */
-
-/* Hero: large ring, proportionally thick */
-.hero-block .dial-hero {
-  --dial-size: 168px;
-  --dial-thickness: 16px;
-}
-
-/* Supporting three: smaller ring, proportionally thinner */
-.dial-secondary .dial-center {
-  --dial-size: 88px;
-  --dial-thickness: 9px;
-}
-
-/* Flat finish — no gloss highlight, no puffy drop shadow */
-.hero-block .dial-circle::after,
-.dial-secondary .dial-circle::after { display: none; }
-
-.hero-block .dial-circle,
-.dial-secondary .dial-circle {
-  box-shadow: 0 0 0 1px var(--dial-stroke);
-}
-.hero-block .dial-circle::before,
-.dial-secondary .dial-circle::before {
-  box-shadow: none;
-}
-
-/* Number scales with the ring rather than looking oversized */
-.dial-secondary .dial-text { font-size: calc(var(--dial-size) * 0.30); }
-.hero-block .dial-text { font-size: calc(var(--dial-size) * 0.30); }
-
-/* Labels above the small dials: one line, evenly spaced */
-.dial-secondary .dial-label {
-  font-size: 8.5px;
-  white-space: nowrap;
-  margin-bottom: 4px;
-}
-
-/* Phone sizing */
-@media (max-width: 600px) {
-  .hero-block .dial-hero { --dial-size: 148px; --dial-thickness: 14px; }
-  .dial-secondary .dial-center { --dial-size: 76px; --dial-thickness: 8px; }
-  .dial-secondary { gap: 6px; }
-  .dial-secondary > [class*="col"] { max-width: 120px; }
-}
-
-/* Very small phones */
-@media (max-width: 360px) {
-  .hero-block .dial-hero { --dial-size: 132px; --dial-thickness: 13px; }
-  .dial-secondary .dial-center { --dial-size: 68px; --dial-thickness: 7px; }
-  .dial-secondary .dial-label { font-size: 8px; }
-}
-
-/* ============================================================
-   25) DESKTOP = the original row of four equal dials
-   Phone keeps the hero layout from section 24. Same markup,
-   different arrangement.
-============================================================ */
-@media (min-width: 768px) {
-  .dials-wrap {
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 28px;
-    max-width: 900px;
-    margin: 0 auto;
-  }
-  .dials-wrap .hero-block { flex: 0 0 auto; padding-top: 0; }
-  .dials-wrap .dial-secondary { flex: 0 0 auto; margin: 0 !important; gap: 28px; }
-
-  /* All four dials the same size again */
-  .dials-wrap .hero-block .dial-hero,
-  .dials-wrap .dial-secondary .dial-center {
-    --dial-size: 120px;
-    --dial-thickness: 15px;
-  }
-  .dials-wrap .dial-text { font-size: calc(var(--dial-size) * 0.25); }
-
-  /* Original dial finish: gloss highlight and soft shadow */
-  .dials-wrap .dial-circle::after { display: block; }
-  .dials-wrap .dial-circle {
-    box-shadow: 0 0 12px rgba(0,0,0,0.12), 0 0 0 1px var(--dial-stroke);
-  }
-  .dials-wrap .dial-circle::before {
-    box-shadow: inset 0 8px 14px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.80);
-  }
-  [data-theme="dark"] .dials-wrap .dial-circle {
-    box-shadow: 0 12px 28px rgba(0,0,0,0.50), 0 0 0 1px var(--dial-stroke);
-  }
-  [data-theme="dark"] .dials-wrap .dial-circle::before {
-    box-shadow: inset 0 12px 20px rgba(0,0,0,0.55);
-  }
-
-  /* Labels match the other three */
-  .dials-wrap .dial-secondary .dial-label { font-size: 9px; }
-
-  /* Verdict + link sit under the first dial without stretching the row */
-  .dials-wrap .hero-verdict { font-size: 18px; max-width: 150px; text-align: center; }
-  .dials-wrap .drivers-toggle { font-size: 13px; }
-}
-
-/* --- Desktop: stop the Bootstrap row from wrapping the three dials --- */
-@media (min-width: 768px) {
-  .dials-wrap .dial-secondary {
-    flex-wrap: nowrap !important;
-    width: auto !important;
-  }
-  .dials-wrap .dial-secondary > [class*="col"] {
-    flex: 0 0 auto !important;
-    width: auto !important;
-    max-width: none !important;
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-  }
-  /* Belt and braces over any legacy sizing */
-  .dials-wrap .hero-block .dial-hero { --dial-size: 120px !important; --dial-thickness: 15px !important; }
-  .dials-wrap .dial-secondary .dial-center { --dial-size: 120px !important; --dial-thickness: 15px !important; }
-}
-
-/* Phone: hero stays larger than the supporting three */
-@media (max-width: 767px) {
-  .hero-block .dial-hero { --dial-size: 148px !important; --dial-thickness: 14px !important; }
-  .dial-secondary .dial-center { --dial-size: 76px !important; --dial-thickness: 8px !important; }
-}
-
-/* --- Verdict text: keep it under the Readiness dial, not drifting across --- */
-@media (min-width: 768px) {
-  .dials-wrap .hero-verdict {
-    font-size: 16px !important;
-    max-width: 130px;
-    line-height: 1.2;
-    text-align: center;
-  }
-}
-
-/* ============================================================
-   26) PHONE: keep the three supporting dials on ONE row
-   The Bootstrap columns are col-4 (33.33% each). Section 22 adds
-   gap:12px to the row, so 100% + gaps overflowed and Streak wrapped
-   onto a second line. Auto-width columns let the gap fit.
-============================================================ */
-.dial-secondary {
-  display: flex !important;
-  flex-wrap: nowrap !important;
-  justify-content: center !important;
-  align-items: flex-start !important;
-  width: auto !important;
-  margin-left: auto !important;
-  margin-right: auto !important;
-}
-
-.dial-secondary > [class*="col"] {
-  flex: 0 0 auto !important;
-  width: auto !important;
-  max-width: none !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-}
-
-@media (max-width: 767px) {
-  .dial-secondary { gap: 14px !important; }
-
-  /* Sized so three dials + gaps clear a 320px-wide phone */
-  .dial-secondary .dial-center {
-    --dial-size: 82px !important;
-    --dial-thickness: 9px !important;
-  }
-  .hero-block .dial-hero {
-    --dial-size: 150px !important;
-    --dial-thickness: 14px !important;
-  }
-  .dial-secondary .dial-label {
-    font-size: 8px;
-    letter-spacing: 0.03em;
-    white-space: nowrap;
-  }
-  .dial-secondary .dial-block { padding-left: 0; padding-right: 0; }
-}
-
-
-@media (max-width: 360px) {
-  .dial-secondary { gap: 10px !important; }
-  .dial-secondary .dial-center { --dial-size: 72px !important; --dial-thickness: 8px !important; }
-  .hero-block .dial-hero { --dial-size: 134px !important; --dial-thickness: 13px !important; }
-  .dial-secondary .dial-label { font-size: 7.5px; }
+  .dial-row { max-width: 700px; margin-left: auto !important; margin-right: auto !important; }
 }

@@ -3424,38 +3424,35 @@ def build_main_layout(auth_data):
                     ], lg=6, md=6, width=12),
                 ],
             ),
-            # Phone: hero + three supporting dials. Desktop: CSS lays the
-            # same markup out as one row of four equal dials (see .dials-wrap).
-            html.Div(className="dials-wrap", children=[
-            html.Div(
-                className="hero-block",
-                children=[
-                    html.Div("Daily Readiness", className="dial-label"),
-                    html.Div(id="readiness-dial-container", className="dial-center dial-hero"),
-                    html.Div(id="readiness-verdict", className="hero-verdict"),
-                    html.Button("See what's driving it", id="drivers-toggle", n_clicks=0,
-                                className="drivers-toggle"),
-                ],
-            ),
-            html.Div(id="drivers-panel"),
+            # Four equal dials: 2x2 on phone, one row of four on desktop.
             dbc.Row(
-                className="g-2 align-items-stretch mt-1 dial-row dial-secondary",
+                className="g-2 align-items-stretch mt-1 dial-row",
                 children=[
-                    dbc.Col(html.Div([html.Div("Neuromuscular", className="dial-label"),
+                    dbc.Col(html.Div([html.Div("Daily Readiness", className="dial-label"),
+                                      html.Div(id="readiness-dial-container", className="dial-center")],
+                                     className="dial-block"),
+                            lg=3, md=3, sm=6, xs=6, width=6),
+                    dbc.Col(html.Div([html.Div("Neuromuscular Readiness", className="dial-label"),
                                       html.Div(id="neuromuscular-dial-container", className="dial-center")],
                                      className="dial-block"),
-                            lg=4, md=4, sm=4, xs=4, width=4),
+                            lg=3, md=3, sm=6, xs=6, width=6),
                     dbc.Col(html.Div([html.Div("Training Exposure", className="dial-label"),
                                       html.Div(id="weekly-dial-container", className="dial-center")],
                                      className="dial-block"),
-                            lg=4, md=4, sm=4, xs=4, width=4),
+                            lg=3, md=3, sm=6, xs=6, width=6),
                     dbc.Col(html.Div([html.Div("Training Streak", className="dial-label"),
                                       html.Div(id="streak-dial-container", className="dial-center")],
                                      className="dial-block"),
-                            lg=4, md=4, sm=4, xs=4, width=4),
+                            lg=3, md=3, sm=6, xs=6, width=6),
                 ],
             ),
-            ]),
+            # Verdict + drivers link sit under the whole dial row.
+            html.Div([
+                html.Div(id="readiness-verdict", className="verdict-text"),
+                html.Button("See what's driving it", id="drivers-toggle", n_clicks=0,
+                            className="drivers-toggle"),
+            ], className="verdict-row"),
+            html.Div(id="drivers-panel"),
             html.Div(id="welcome-message", className="mt-3"),
             html.Div(id="badges-row", className="mt-2"),
             html.Div(id="checkin-card", className="mt-3"),
