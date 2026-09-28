@@ -361,8 +361,11 @@ def _build_dial(value_str: str, percent: float, colour_class: str):
         children=[
             html.Div(
                 className=f"dial-ring {colour_class}",
+                style={"position": "relative", "width": "var(--dial-size, 110px)",
+                       "height": "var(--dial-size, 110px)", "flexShrink": "0"},
                 children=[
-                    html.Img(src=_ring_svg(percent, colour), alt="", className="dial-ring-img"),
+                    html.Img(src=_ring_svg(percent, colour), alt="", className="dial-ring-img",
+                             style={"width": "100%", "height": "100%", "display": "block"}),
                     html.Div(value_str, className="dial-text"),
                 ],
             )
@@ -3231,6 +3234,39 @@ app.index_string = """
             .dial-secondary-item .dial-center { --dial-size: 120px !important; }
             .dial-secondary-label { display: none; }
           }
+          /* ── Dial rings + hero layout (ships with app.py so markup and
+                styling can never be deployed out of step) ── */
+          .dial-ring { position: relative; flex-shrink: 0; }
+          .dial-ring .dial-text { font-size: calc(var(--dial-size) * 0.27); text-shadow: none; }
+          .dials-wrap { display: flex; flex-direction: column; align-items: center; margin: 6px auto 0; }
+          .hero-block { --dial-size: 164px; display: flex; flex-direction: column;
+                        align-items: center; gap: 4px; }
+          .hero-block .dial-center { margin: 0 auto; }
+          .hero-block .dial-label { margin-bottom: 8px; }
+          .hero-block .dial-ring .dial-text { font-size: calc(var(--dial-size) * 0.32); }
+          .hero-verdict { font-family: 'Barlow Condensed', system-ui, sans-serif; font-size: 22px;
+                          font-weight: 700; line-height: 1.15; text-align: center;
+                          min-height: 24px; margin-top: 6px; }
+          .drivers-toggle { min-height: 40px; padding: 0 14px; border: none; background: transparent;
+                            color: var(--accent); font-size: 14px; font-weight: 600; cursor: pointer; }
+          .dial-secondary { --dial-size: 82px; display: flex; justify-content: center;
+                            align-items: flex-start; gap: 22px; margin-top: 14px; }
+          .dial-secondary .dial-block { width: auto; padding: 0; }
+          .dial-secondary .dial-label { font-size: 8.5px; white-space: nowrap; margin-bottom: 6px; }
+          @media (max-width: 360px) {
+            .hero-block { --dial-size: 144px; }
+            .dial-secondary { --dial-size: 74px; gap: 14px; }
+          }
+          @media (min-width: 768px) {
+            .dials-wrap { flex-direction: row; align-items: flex-start; justify-content: center; gap: 34px; }
+            .hero-block { --dial-size: 120px; gap: 0; }
+            .hero-block .dial-label { margin-bottom: 6px; }
+            .hero-block .dial-ring .dial-text { font-size: calc(var(--dial-size) * 0.27); }
+            .hero-verdict { font-size: 16px; max-width: 140px; }
+            .dial-secondary { --dial-size: 120px; gap: 34px; margin-top: 0; }
+            .dial-secondary .dial-label { font-size: 9px; }
+          }
+          .dial-stale .dial-ring-img { filter: grayscale(1); opacity: 0.55; }
           /* Hero + small dial sizing is handled in assets/dashboard.css
              (sections 24-25) so it can differ between phone and desktop.
              The old !important rules here overrode that and are removed. */
