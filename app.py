@@ -2462,6 +2462,7 @@ def compute_drivers(df: pd.DataFrame, today: dt.date, lookback: int = 28) -> lis
             "status": status,
             "tone": tone,
             "kind": "scale",
+            "delta": abs(diff),
         })
 
     acwr = compute_acwr_series(df, today).dropna()
@@ -2483,8 +2484,65 @@ def compute_drivers(df: pd.DataFrame, today: dt.date, lookback: int = 28) -> lis
             "status": status,
             "tone": tone,
             "kind": "load",
+            "delta": 0.0 if 0.8 <= v <= 1.3 else min(abs(v - 1.3), abs(v - 0.8)) * 3,
         })
     return out
+
+
+_REASON_PHRASES = {
+    # (label, tone) -> short reason shown under the verdict
+    ("Sleep", "watch"): "sleep below your usual",
+    ("Sleep", "good"): "sleep better than usual",
+    ("Energy", "watch"): "energy lower than usual",
+    ("Energy", "good"): "energy higher than usual",
+    ("Soreness", "watch"): "soreness higher than your usual",
+    ("Soreness", "good"): "soreness lower than usual",
+    ("Mood", "watch"): "mood lower than usual",
+    ("Mood", "good"): "mood better than usual",
+}
+
+
+def verdict_reason(df, today, readiness, neuro, stale: bool = False) -> str:
+    """
+    One short line under the verdict naming today's main reason, so it changes
+    day to day even when the verdict band doesn't. Uses the same comparison as
+    the drivers panel: each marker against the athlete's own 28-day average.
+    """
+    if stale:
+        return freshness_label(days_since_last_data(df, today)) + " — check in to update"
+    try:
+        drivers = compute_drivers(df, today)
+    except Exception:
+        drivers = []
+    both = [v for v in [readiness, neuro] if v is not None]
+    score = sum(both) / len(both) if both else None
+    good_day = score is not None and score >= 70
+
+    # Load outside the safe range outranks everything else.
+    for d in drivers:
+        if d["kind"] == "load" and d["tone"] == "watch":
+            return "training load " + d["status"].lower()
+
+    wanted = "good" if good_day else "watch"
+    picks = sorted((d for d in drivers if d["kind"] == "scale" and d["tone"] == wanted),
+                   key=lambda d: d.get("delta", 0), reverse=True)
+    if picks:
+        first = _REASON_PHRASES.get((picks[0]["label"], wanted), "")
+        if len(picks) > 1 and picks[1].get("delta", 0) >= 0.5:
+            second = _REASON_PHRASES.get((picks[1]["label"], wanted), "")
+            second = second.replace(" than your usual", "").replace(" than usual", "")
+            second = second.replace(" below your usual", " down").replace(" lower", " down")
+            return f"{first}, {second}" if second else first
+        return first
+
+    # Nothing stands out against normal: say which score is holding the day back.
+    if readiness is not None and neuro is not None and abs(readiness - neuro) >= 15:
+        if neuro < readiness:
+            return f"neuromuscular score {int(round(neuro))} is the one to watch"
+        return f"training load balance {int(round(readiness))} is the one to watch"
+    if good_day:
+        return "all markers in your normal range"
+    return "no single marker off — a general dip"
 
 
 def todays_session(df: pd.DataFrame, today: dt.date) -> dict | None:
@@ -3267,6 +3325,11 @@ app.index_string = """
             .dial-secondary .dial-label { font-size: 9px; }
           }
           .dial-stale .dial-ring-img { filter: grayscale(1); opacity: 0.55; }
+          .verdict-reason { font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+                            font-size: 14px; font-weight: 500; line-height: 1.35;
+                            color: var(--text-muted); margin-top: 4px; max-width: 280px;
+                            margin-left: auto; margin-right: auto; }
+          @media (min-width: 768px) { .verdict-reason { font-size: 12.5px; max-width: 150px; } }
           /* Hero + small dial sizing is handled in assets/dashboard.css
              (sections 24-25) so it can differ between phone and desktop.
              The old !important rules here overrode that and are removed. */
@@ -4132,7 +4195,7 @@ def update_radar_ai_summary(athlete_id, mode):
     Input("theme-store", "data"),
 )
 def update_radar_plot(athlete_id, mode, theme):
-    theme = theme if theme in ("dark", "light") else "light"
+    theme = theme if theme in ("dark", "light") else "dark"   # app defaults to dark
     if not athlete_id:
         return _radar_empty(theme)
     df = load_tab_cached(athlete_id)
@@ -4438,7 +4501,7 @@ def update_calendar(athlete_tab, window_start, selected_date):
     Input("theme-store", "data"),
 )
 def update_dashboard(athlete_id, view_mode, n_clicks, theme):
-    theme = theme if theme in ("dark", "light") else "light"
+    theme = theme if theme in ("dark", "light") else "dark"   # app defaults to dark
     if not athlete_id:
         today_date_str = today_adl().strftime("%d %b %Y")
         return (today_date_str,
@@ -4582,7 +4645,15 @@ def update_dashboard(athlete_id, view_mode, n_clicks, theme):
         readiness_ui = html.Div(readiness_ui, className="dial-stale")
 
     verdict_txt, verdict_col = readiness_verdict(readiness_val, neuro_val, is_stale)
-    verdict = html.Span(verdict_txt, style={"color": verdict_col})
+    try:
+        reason = verdict_reason(df, today, readiness_val, neuro_val, is_stale)
+    except Exception:
+        reason = ""
+    reason = (reason[:1].upper() + reason[1:]) if reason else ""
+    verdict = html.Div([
+        html.Div(verdict_txt, style={"color": verdict_col}),
+        html.Div(reason, className="verdict-reason") if reason else None,
+    ])
 
     return (today_date_str, weekly_ui, streak_ui, neuro_ui, readiness_ui,
             verdict, load_fig, wellness_fig, speed_fig)
@@ -5419,7 +5490,7 @@ def update_welcome(athlete_id, _today):
             "Write ONE sentence of practical guidance for today — what the data means for "
             "this session, and what to do about it.\n"
             "The athlete can already see their readiness score and a verdict on screen, so do "
-            "NOT restate the score, and do not open with a greeting or their name.\n"
+            "NOT restate the score. Start with the athlete's first name and a comma, e.g. \"Harrison, prioritise recovery today...\" — no other greeting.\n"
             "Ground it in one specific marker: a wellness score (rated X/5), a load trend, "
             "a streak, or a flag. If a wellness flag is present, address that flag.\n"
             "CRITICAL: sleep/fatigue/mood/soreness are 1-5 SCALE scores, not hours. "
@@ -5449,6 +5520,15 @@ def update_welcome(athlete_id, _today):
             "low": "Both markers are suppressed. Prioritise sleep and light movement today.",
         }
         sub_line = fallback.get(band, fallback["no_data"])
+
+    # Always open with the athlete's first name, whether the line came from the
+    # AI or a fallback. Lower-case the next word unless it's an acronym (ACWR).
+    s = (sub_line or "").strip()
+    if first_name and not s.lower().startswith(first_name.lower()):
+        if len(s) > 1 and s[0].isupper() and not s[1].isupper():
+            s = s[0].lower() + s[1:]
+        s = f"{first_name}, {s}"
+    sub_line = s
 
     return html.Div([
         html.Div([
@@ -6764,7 +6844,7 @@ def streak_at_risk():
     prevent_initial_call=True,
 )
 def update_squad_view(nav_clicks, refresh_clicks, auth_data, theme):
-    _dark = theme == "dark"
+    _dark = theme != "light"   # app defaults to dark
     _card_bg = "#161b22" if _dark else "white"
     _name_col = "#f2f2f2" if _dark else "#1a1a1a"
     _muted_col = "#9ca3af" if _dark else "#888"
