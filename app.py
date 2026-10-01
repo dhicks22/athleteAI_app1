@@ -2404,6 +2404,33 @@ def readiness_verdict(readiness, neuro, stale: bool = False):
     return "Recovery priority", "#f44336"
 
 
+def compute_readiness_for_athlete(df: pd.DataFrame, today: dt.date):
+    """Daily readiness exactly as the hero dial computes it (same RPE fallback, span 7)."""
+    if df is None or df.empty or "Date" not in df.columns:
+        return None
+    t = df.copy()
+    t["Date"] = pd.to_datetime(t["Date"], errors="coerce")
+    t = t.dropna(subset=["Date"]).sort_values("Date")
+    t = t[~t["Date"].duplicated(keep="last")].set_index("Date")
+    if t.empty:
+        return None
+    t = t.reindex(pd.date_range(start=t.index.min(), end=today, freq="D"))
+    load_s = pd.to_numeric(t.get("Load"), errors="coerce")
+    rpe_post = pd.to_numeric(t["RPE_Post_Session"] if "RPE_Post_Session" in t.columns
+                             else pd.Series(dtype=float), errors="coerce")
+    rpe_plan = pd.to_numeric(t["RPE"] if "RPE" in t.columns else pd.Series(dtype=float),
+                             errors="coerce")
+    if rpe_post.notna().sum() > 0:
+        rpe_s = rpe_post
+    elif rpe_plan.notna().sum() > 0:
+        v = rpe_plan.dropna()
+        rpe_s = rpe_plan / 2.0 if (not v.empty and v.max() > 5) else rpe_plan
+    else:
+        rpe_s = pd.Series(dtype=float, index=t.index)
+    qual_s = pd.to_numeric(t.get("Session_1_5"), errors="coerce")
+    return calc_daily_readiness(load_s, rpe_s, qual_s, span=7)
+
+
 def _latest_and_usual(d, col, lookback):
     """(latest value, mean over the lookback window) for one wellness column."""
     if col not in d.columns:
@@ -5375,154 +5402,200 @@ app.clientside_callback(
 )
 
 
+# Words that mean "back off". The note must never use them on a green day, and
+# must never tell the athlete to push on a red day.
+_EASE_RE = re.compile(r"\b(recover\w*|rest|resting|avoid\w*|back off|ease|easing|easy|light|"
+                      r"low[- ]intensity|skip\w*|deload\w*|overreach\w*|hold back|reduc\w+|cut back)\b", re.I)
+_PUSH_RE = re.compile(r"\b(push\w*|full[- ]effort|max(imal)? effort|go hard|attack\w*|pb|personal best)\b", re.I)
+
+
+_FULL_REST_RE = re.compile(r"\b(active recovery|recovery day|rest day|take the day off|skip\w*)\b", re.I)
+_HARD_PUSH_RE = re.compile(r"\b(push hard|go hard|max(imal)? effort|pb|personal best)\b", re.I)
+
+
+def _note_contradicts(line: str, verdict: str) -> bool:
+    if verdict == "Ready to train":
+        return bool(_EASE_RE.search(line))
+    if verdict == "Recovery priority":
+        return bool(_PUSH_RE.search(line))
+    if verdict == "Train with care":
+        # Amber is "train, but adjust" — neither a rest day nor an all-out day.
+        return bool(_FULL_REST_RE.search(line) or _HARD_PUSH_RE.search(line))
+    return False
+
+
+def _session_name(session) -> str:
+    """Short, readable name for today's session (Focus beats the long Workout text)."""
+    if not session:
+        return ""
+    focus = (session.get("focus") or "").strip()
+    if focus:
+        return focus.lower() if not focus.isupper() else focus
+    w = (session.get("workout") or "").strip()
+    return w if len(w) <= 40 else ""
+
+
+def _fallback_note(verdict, reason, session, today):
+    """Rule-based note used when the AI is unavailable or contradicts the dials.
+    Rotates wording by date so it doesn't read the same every day."""
+    name = _session_name(session)
+    sess = f"today's {name} session" if name else "today's session"
+    pick = lambda opts: opts[today.toordinal() % len(opts)]
+    r = (reason or "").strip()
+    if verdict == "Ready to train":
+        return pick([
+            f"you're good to go, so make every rep in {sess} count.",
+            f"green light for {sess} — train as planned and chase quality.",
+            f"conditions are right for {sess}; hit your targets and keep the reps sharp.",
+        ])
+    if verdict == "Train with care":
+        low = r.lower()
+        if low.startswith("training load"):
+            return f"load has climbed quickly, so keep {sess} to the planned volume and don't add extras."
+        if low.startswith("soreness"):
+            return f"take a longer warm-up into {sess} and drop the last sets if you're still tight."
+        if low.startswith("sleep"):
+            return f"short on sleep, so keep the quality in {sess} high and trim volume if you feel flat."
+        if low.startswith("energy"):
+            return f"energy is down, so hold quality in {sess} and stop reps once speed drops."
+        if low.startswith("mood"):
+            return f"keep {sess} simple — nail the key reps and leave it there."
+        if low.startswith("neuromuscular"):
+            return f"your nervous system is down today, so keep {sess} crisp and cut reps once quality drops."
+        return pick([
+            f"get through {sess}, but stop reps once quality drops.",
+            f"keep the quality in {sess} and trim the volume if needed.",
+        ])
+    if verdict == "Recovery priority":
+        return pick([
+            "your body needs a lighter day — mobility, easy movement and an early night.",
+            "make today about recovery: easy movement, food and sleep, and check in with your coach about the plan.",
+        ])
+    return "log a check-in so today's advice is based on fresh data."
+
+
 @app.callback(
     Output("welcome-message", "children"),
     Input("athlete-dropdown", "value"),
     Input("today-date", "children"),
+    Input("checkin-saved", "data"),
     prevent_initial_call=True,
 )
-def update_welcome(athlete_id, _today):
+def update_welcome(athlete_id, _today, _checkin):
+    """
+    The coaching note under the dials. It is built from the SAME numbers as the
+    hero (readiness, neuro, verdict, reason) and the small dials (exposure,
+    streak), so it can never say "recover" under a green "Ready to train".
+    """
     if not athlete_id:
         raise PreventUpdate
 
     first_name = athlete_id.strip().split()[0] if athlete_id.strip() else "Athlete"
     today = today_adl()
-    hour = dt.datetime.now(ADL_TZ).hour
-    greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 17 else "Good evening"
 
-    readiness_val = neuro_val = None
+    df = pd.DataFrame()
+    readiness_val = neuro_val = stale_days = None
     streak = 0
-
     try:
         df = load_tab_cached(athlete_id)
-        if not df.empty:
+        if df is not None and not df.empty:
             streak, _ = compute_streaks(df)
+            readiness_val = compute_readiness_for_athlete(df, today)
+            neuro_val = compute_neuro_for_athlete(df, today)
+            stale_days = days_since_last_data(df, today)
+    except Exception as e:
+        print(f"⚠️ welcome data error for {athlete_id}: {e}")
 
-            df_time = df.copy()
-            df_time["Date"] = pd.to_datetime(df_time["Date"], errors="coerce")
-            df_time = df_time.sort_values("Date")
-            df_time = df_time[~df_time["Date"].duplicated(keep="last")]
-            df_time = df_time.set_index("Date")
-            full_range = pd.date_range(start=df_time.index.min(), end=today, freq="D")
-            df_time = df_time.reindex(full_range)
-
-            load_series = pd.to_numeric(df_time.get("Load"), errors="coerce")
-            rpe_post_w = pd.to_numeric(
-                df_time["RPE_Post_Session"] if "RPE_Post_Session" in df_time.columns else pd.Series(dtype=float),
-                errors="coerce")
-            rpe_plan_w = pd.to_numeric(df_time["RPE"] if "RPE" in df_time.columns else pd.Series(dtype=float),
-                                       errors="coerce")
-            if rpe_post_w.notna().sum() > 0:
-                rpe_series = rpe_post_w
-            elif rpe_plan_w.notna().sum() > 0:
-                rpe_vals_w = rpe_plan_w.dropna()
-                rpe_series = rpe_plan_w / 2.0 if (not rpe_vals_w.empty and rpe_vals_w.max() > 5) else rpe_plan_w
-            else:
-                rpe_series = pd.Series(dtype=float, index=df_time.index)
-            quality_series = pd.to_numeric(df_time.get("Session_1_5"), errors="coerce")
-            readiness_val = calc_daily_readiness(load_series, rpe_series, quality_series)
-
-            df_neuro = df.copy()
-            df_neuro["Date"] = pd.to_datetime(df_neuro["Date"], errors="coerce").dt.date
-            df_neuro = df_neuro.sort_values("Date")
-            recent_neuro = df_neuro[df_neuro["Date"] >= today - dt.timedelta(days=14)]
-
-            def _last(frame, col):
-                s = pd.to_numeric(frame.get(col, pd.Series(dtype=float)), errors="coerce").dropna()
-                return float(s.iloc[-1]) if not s.empty else None
-
-            sl = _last(recent_neuro, "Sleep_1_5");
-            fa = _last(recent_neuro, "Fatigue_1_5")
-            so = _last(recent_neuro, "Soreness_1_5");
-            mo = _last(recent_neuro, "Mood_1_5")
-            if all(v is not None for v in [sl, fa, so, mo]):
-                neuro_val = calc_neuro_readiness(sl, fa, so, mo, history_df=recent_neuro)
-    except Exception:
-        streak = 0
-
-    # Same neuro value as the dashboard dial, and how old the data is.
-    stale_days = None
+    is_stale = stale_days is None or stale_days >= STALE_DAYS
+    verdict, _ = readiness_verdict(readiness_val, neuro_val, is_stale)
     try:
-        neuro_val = compute_neuro_for_athlete(df, today)
-        stale_days = days_since_last_data(df, today)
+        reason = verdict_reason(df, today, readiness_val, neuro_val, is_stale) if not df.empty else ""
+    except Exception:
+        reason = ""
+    try:
+        session = todays_session(df, today) if not df.empty else None
+    except Exception:
+        session = None
+
+    # Exposure dial: same week window as the dashboard (Sat → Fri).
+    exposure_pct = completed = planned = None
+    try:
+        week_start = today - dt.timedelta(days=(today.weekday() - 5) % 7)
+        week_end = week_start + dt.timedelta(days=6)
+        planned = count_planned_sessions_in_week(df, week_start, week_end)
+        completed = count_logged_sessions_in_week(df, week_start, week_end)
+        if planned:
+            exposure_pct = int(round(min(max(completed / planned * 100, 0), 100)))
     except Exception:
         pass
 
-    r = readiness_val if readiness_val is not None else 0
-    n = neuro_val if neuro_val is not None else 0
-
-    if readiness_val is None and neuro_val is None:
-        color = "#6e6e6e";
-        icon = "—";
-        band = "no_data"
-    elif r >= 75 and n >= 75:
-        color = "#2E7D32";
-        icon = "↑";
-        band = "high"
-    elif r >= 60 and n >= 60:
-        color = "#1565C0";
-        icon = "→";
-        band = "good"
-    elif r >= 40 or n >= 40:
-        color = "#E65100";
-        icon = "↓";
-        band = "moderate"
-    else:
-        color = "#C62828";
-        icon = "⚠";
-        band = "low"
-
-    if band != "no_data" and stale_days is not None and stale_days >= STALE_DAYS:
-        color = "#8a939e"
-        icon = "•"
-        band = "stale"
-
-    streak_txt = f" • {streak}-day streak 🔥" if streak >= 3 else ""
-
     try:
-        if band == "stale":
-            raise ValueError("stale data — use the fixed message")
-        df_safe = df if not df.empty else pd.DataFrame()
-        summary = build_context_summary(df_safe, days=7) if not df_safe.empty else "No data."
-        wellness = build_wellness_flags(df_safe, days=7) if not df_safe.empty else ""
+        drivers = compute_drivers(df, today) if not df.empty else []
+    except Exception:
+        drivers = []
+
+    sub_line = None
+    if verdict in ("Scores out of date", "No data yet"):
+        sub_line = (f"your scores are from {freshness_label(stale_days).lower()} — check in below to update them."
+                    if stale_days is not None else "log your first session to activate your dials.")
+    else:
+        direction = {
+            "Ready to train": "Green light: tell them to train as planned and chase quality. "
+                              "Do NOT mention recovery, rest, easing off, avoiding intensity or overreaching.",
+            "Train with care": "Amber: train, but adjust — keep quality, trim volume, or manage the "
+                               "specific marker that is down. Not a rest day.",
+            "Recovery priority": "Red: lighter day — recovery, mobility, easy movement. Do not tell them to push.",
+        }[verdict]
+        driver_txt = "; ".join(f"{d['label']}: {d['status']} ({d['detail']})" for d in drivers) or "none"
+        sess_txt = "no session planned"
+        if session:
+            sess_txt = session["workout"] + (f" (focus: {session['focus']})" if session.get("focus") else "")
+            if session.get("srpe"):
+                sess_txt += f" (planned effort {session['srpe']:.0f}/10)"
+            if session.get("logged"):
+                sess_txt += " — already logged today"
+        exp_txt = (f"{completed} of {planned} planned sessions logged this week ({exposure_pct}%)"
+                   if exposure_pct is not None else "no sessions planned this week")
+
         sys_msg = (
-            "You are a high-performance sprint and strength coach who knows this athlete well. "
-            "Write ONE sentence of practical guidance for today — what the data means for "
-            "this session, and what to do about it.\n"
-            "The athlete can already see their readiness score and a verdict on screen, so do "
-            "NOT restate the score. Start with the athlete's first name and a comma, e.g. \"Harrison, prioritise recovery today...\" — no other greeting.\n"
-            "Ground it in one specific marker: a wellness score (rated X/5), a load trend, "
-            "a streak, or a flag. If a wellness flag is present, address that flag.\n"
-            "CRITICAL: sleep/fatigue/mood/soreness are 1-5 SCALE scores, not hours. "
-            "Say rated X/5, never X hours. "
-            "Max 22 words. No greeting, no score, no hype, no hashtags, no exclamation marks, no emoji. "
-            "BANNED words: greatness, dedication, potential, journey, warrior, champion, champions, "
-            "amazing, incredible, outstanding, path, destiny, mindset, process."
+            "You are a sprint and strength coach. Write ONE sentence (max 24 words) of guidance "
+            "for today. Output only the sentence.\n"
+            "The verdict on screen is FINAL and your sentence must agree with it.\n"
+            f"{direction}\n"
+            "Make it specific: refer to today's session by what it is, or the marker named in "
+            "'Main reason'. If weekly exposure is under 50%, you may note getting sessions in.\n"
+            "Do not restate any score number. Wellness markers are 1–5 ratings, never hours.\n"
+            "The streak counts days the athlete has LOGGED in the app — it is a habit, not "
+            "consecutive training, and never a reason for fatigue or recovery.\n"
+            "No greeting, no hype, no emoji, no exclamation marks. Banned: greatness, dedication, "
+            "potential, journey, warrior, champion, amazing, incredible, mindset, process."
         )
         usr_msg = (
-            f"Athlete: {first_name}. Readiness: {int(round(r))}/100. Neuro: {int(round(n))}/100. "
-            f"Band: {band}. Streak: {streak} days. "
-            f"7-day summary: {summary} Wellness: {wellness}"
+            f"Athlete: {first_name}\n"
+            f"Verdict: {verdict}\n"
+            f"Main reason: {reason or 'none'}\n"
+            f"Readiness (load balance): {int(round(readiness_val)) if readiness_val is not None else 'n/a'}/100; "
+            f"Neuromuscular: {int(round(neuro_val)) if neuro_val is not None else 'n/a'}/100\n"
+            f"Markers vs their own 28-day usual: {driver_txt}\n"
+            f"Today's session: {sess_txt}\n"
+            f"Weekly exposure: {exp_txt}\n"
+            f"Logging streak: {streak} days"
         )
-        raw = call_openai_chat([{"role": "system", "content": sys_msg}, {"role": "user", "content": usr_msg}],
-                               max_tokens=70)
-        if raw and "unavailable" not in raw.lower():
-            sub_line = raw.strip().split("|")[-1].strip()
-        else:
-            raise ValueError("bad response")
-    except Exception:
-        fallback = {
-            "stale": f"Your scores are from {freshness_label(stale_days).lower()} — check in below to update them.",
-            "no_data": "Log your first session to activate your dials.",
-            "high": "Load and recovery are balanced. Good conditions to push quality today.",
-            "good": "Numbers are steady. Execute your plan and stay sharp.",
-            "moderate": "Focus on quality over quantity and monitor how the session feels.",
-            "low": "Both markers are suppressed. Prioritise sleep and light movement today.",
-        }
-        sub_line = fallback.get(band, fallback["no_data"])
+        try:
+            raw = call_openai_chat([{"role": "system", "content": sys_msg},
+                                    {"role": "user", "content": usr_msg}], max_tokens=70)
+            cand = (raw or "").strip().split("|")[-1].strip().strip('"')
+            if cand and "unavailable" not in cand.lower() and not _note_contradicts(cand, verdict):
+                sub_line = cand
+            elif cand:
+                print(f"ℹ️ welcome note rejected (contradicts '{verdict}'): {cand}")
+        except Exception as e:
+            print(f"⚠️ welcome AI failed: {e}")
+        if not sub_line:
+            sub_line = _fallback_note(verdict, reason, session, today)
 
-    # Always open with the athlete's first name, whether the line came from the
-    # AI or a fallback. Lower-case the next word unless it's an acronym (ACWR).
+    # Always open with the athlete's first name. Lower-case the next word
+    # unless it's an acronym (ACWR).
     s = (sub_line or "").strip()
     if first_name and not s.lower().startswith(first_name.lower()):
         if len(s) > 1 and s[0].isupper() and not s[1].isupper():
@@ -6391,18 +6464,7 @@ def update_today_session(athlete_id, _today, _saved):
     stale_days = days_since_last_data(df, today)
     is_stale = stale_days is None or stale_days >= STALE_DAYS
 
-    df_t = df.copy()
-    df_t["Date"] = pd.to_datetime(df_t["Date"], errors="coerce")
-    df_t = df_t.sort_values("Date")
-    df_t = df_t[~df_t["Date"].duplicated(keep="last")].set_index("Date")
-    try:
-        df_t = df_t.reindex(pd.date_range(df_t.index.min(), today, freq="D"))
-    except Exception:
-        return None
-    load_s = pd.to_numeric(df_t.get("Load"), errors="coerce")
-    rpe_s = pd.to_numeric(df_t.get("RPE_Post_Session"), errors="coerce")
-    qual_s = pd.to_numeric(df_t.get("Session_1_5"), errors="coerce")
-    readiness = calc_daily_readiness(load_s, rpe_s, qual_s)
+    readiness = compute_readiness_for_athlete(df, today)
     neuro = compute_neuro_for_athlete(df, today)
 
     # Use the SAME combined score as the hero verdict, so the card can never
