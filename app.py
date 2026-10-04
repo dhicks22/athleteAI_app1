@@ -3397,6 +3397,19 @@ app.index_string = """
             .dial-secondary .dial-label { font-size: 9px; }
           }
           .dial-stale .dial-ring-img { filter: grayscale(1); opacity: 0.55; }
+          /* Calendar day states — distinct in both themes:
+             logged = green tint + green edge, today = blue ring, selected = amber ring + fill */
+          body .calendar-day.logged { background: rgba(34,197,94,0.16); box-shadow: inset 0 0 0 1px rgba(34,197,94,0.45); }
+          html[data-theme="dark"] body .calendar-day.logged { background: rgba(34,197,94,0.20); box-shadow: inset 0 0 0 1px rgba(34,197,94,0.50); }
+          body .calendar-day.today { box-shadow: inset 0 0 0 2px #1e88e5; }
+          html[data-theme="dark"] body .calendar-day.today { background: rgba(77,171,247,0.16); box-shadow: inset 0 0 0 2px #4dabf7; }
+          body .calendar-day.today .cal-day-number { color: #1e88e5; font-weight: 800; }
+          html[data-theme="dark"] body .calendar-day.today .cal-day-number { color: #74c0fc; }
+          body .calendar-day.today.logged { background: rgba(34,197,94,0.20); }
+          body .calendar-day.selected,
+          html[data-theme="dark"] body .calendar-day.selected { background: rgba(245,158,11,0.24); box-shadow: inset 0 0 0 2px #f5a524; }
+          body .calendar-day.selected .cal-day-number { font-weight: 800; }
+          html[data-theme="dark"] body .calendar-day.selected .cal-day-number { color: #fff; }
           .verdict-reason { font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
                             font-size: 14px; font-weight: 500; line-height: 1.35;
                             color: var(--text-muted); margin-top: 4px; max-width: 280px;
