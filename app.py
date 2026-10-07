@@ -1521,36 +1521,64 @@ def verify_and_revise_insight(insight: str, session_block: str, coach_label: str
     return insight
 
 
+def _claude_post(body: dict):
+    resp = requests.post(
+        "https://api.anthropic.com/v1/messages",
+        headers={
+            "x-api-key": ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        json=body,
+        timeout=60,
+    )
+    if resp.status_code != 200:
+        return resp.status_code, resp.text[:300], None
+    data = resp.json()
+    text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
+    return 200, text.strip(), data.get("stop_reason")
+
+
 def call_claude_chat(messages: list, max_tokens: int = 700, model: str | None = None) -> str:
-    """Anthropic Messages API. System prompts go in the top-level 'system' field."""
+    """
+    Anthropic Messages API. System prompts go in the top-level 'system' field.
+
+    Claude Sonnet 5.5 (and newer large models) think before answering by default,
+    and that thinking counts toward max_tokens — with the short limits used here
+    it can use the whole budget and return no text. So for Sonnet 5.x we turn
+    up-front thinking off (thinking: between_tools), and if a reply still comes
+    back empty we retry once with plenty of extra room.
+    """
     if not ANTHROPIC_API_KEY:
         return "AI suggestion unavailable (missing Anthropic API key)."
+    model = model or CLAUDE_MODEL
     system_text = "\n\n".join(m["content"] for m in messages if m.get("role") == "system")
     convo = [{"role": m["role"], "content": m["content"]}
              for m in messages if m.get("role") in ("user", "assistant")]
-    body = {"model": model or CLAUDE_MODEL, "max_tokens": max_tokens, "messages": convo}
+    body = {"model": model, "max_tokens": max_tokens, "messages": convo}
     if system_text:
         body["system"] = system_text
+    if model.startswith("claude-sonnet-5"):
+        body["thinking"] = {"type": "between_tools"}
     try:
-        resp = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json=body,
-            timeout=45,
-        )
-        if resp.status_code != 200:
-            print(f"⚠️ Claude HTTP {resp.status_code}: {resp.text[:300]}")
-            return f"AI suggestion unavailable (HTTP {resp.status_code})."
-        data = resp.json()
-        text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
-        return text.strip()
+        code, text, stop = _claude_post(body)
+        if code == 400 and "thinking" in body:
+            # Model didn't accept the setting — drop it and allow room for thinking.
+            print(f"⚠️ Claude rejected thinking setting: {text}")
+            body.pop("thinking", None)
+            body["max_tokens"] = max_tokens + 2048
+            code, text, stop = _claude_post(body)
+        if code == 200 and not text:
+            print(f"⚠️ Claude {model} returned no text (stop_reason={stop}) — retrying with more room")
+            body.pop("thinking", None)
+            body["max_tokens"] = max_tokens + 2048
+            code, text, stop = _claude_post(body)
+        if code != 200:
+            print(f"⚠️ Claude HTTP {code}: {text}")
+            return f"AI suggestion unavailable (HTTP {code})."
+        return text or "AI suggestion unavailable (empty reply)."
     except Exception as e:
         return f"AI suggestion unavailable ({e})."
-
 
 
 def call_claude_fast(messages: list, max_tokens: int = 700) -> str:
@@ -3950,6 +3978,26 @@ app.index_string = """
                      border-radius: 18px; padding: 16px; box-shadow: 0 3px 8px var(--card-shadow);
                      display: flex; flex-direction: column; gap: 10px; }
           .pb-head { display: flex; align-items: center; justify-content: space-between; }
+          .pb-head-btns { display: flex; gap: 6px; }
+          .pb-title-btn { background: transparent; border: none; padding: 6px 0; display: flex; align-items: center;
+                          gap: 8px; cursor: pointer; min-height: 36px; }
+          .pb-chevron { color: var(--text-muted); font-size: 14px; line-height: 1; }
+          .pb-summary { font-size: 13.5px; color: var(--text); line-height: 1.4; }
+          .pb-summary-new { color: #2fb344; font-weight: 700; }
+          .pb-flash { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px;
+                      background: rgba(47,179,68,0.14); border: 1px solid rgba(47,179,68,0.45);
+                      animation: pbFlash 9s ease forwards; overflow: hidden; }
+          @keyframes pbFlash { 0% { opacity: 0; transform: translateY(-4px); } 6% { opacity: 1; transform: none; }
+                               85% { opacity: 1; max-height: 80px; } 100% { opacity: 0; max-height: 0; padding: 0 12px;
+                               margin: 0; border-width: 0; } }
+          .pb-flash-tick { width: 24px; height: 24px; border-radius: 50%; background: #2fb344; color: #06210e;
+                           display: flex; align-items: center; justify-content: center; font-weight: 900; flex-shrink: 0; }
+          .pb-flash-txt { flex: 1; font-size: 14px; font-weight: 600; color: var(--text); }
+          .pb-flash-share { min-height: 34px; padding: 0 14px; border-radius: 999px; border: none; background: #2fb344;
+                            color: #06210e; font-weight: 700; font-size: 13px; cursor: pointer; }
+          .pb-tile-new { border-color: #2fb344 !important; box-shadow: 0 0 0 2px rgba(47,179,68,0.35);
+                         animation: pbGlow 2.4s ease 2; }
+          @keyframes pbGlow { 50% { box-shadow: 0 0 0 5px rgba(47,179,68,0.18); } }
           .pb-edit-btn { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--border);
                          background: transparent; color: var(--accent); font-size: 13.5px; font-weight: 700; cursor: pointer; }
           .pb-sec { font-size: 12px; font-weight: 700; color: var(--text-muted); margin: 4px 0 -2px; }
@@ -4290,7 +4338,7 @@ def build_main_layout(auth_data):
                        "overflow": "hidden", "flexDirection": "column", "display": "none"},
                 children=[
                     html.Div([
-                        html.Div("Share today's stats",
+                        html.Div("Share today's stats", id="share-card-title",
                                  style={"color": "white", "fontWeight": "600", "fontSize": "15px"}),
                         html.Div("✕", id="share-card-close", n_clicks=0,
                                  style={"color": "white", "cursor": "pointer", "fontSize": "22px",
@@ -6086,10 +6134,19 @@ def pb_card_layout():
         dcc.Store(id="pb-saved"),
         dcc.Store(id="pb-proposals", data=[]),
         dcc.Store(id="pb-dismissed", data=[], storage_type="local"),
+        dcc.Store(id="pb-collapsed", data=False, storage_type="local"),
         html.Div(className="pb-head", children=[
-            html.Div("PERSONAL BESTS", className="ts-label"),
-            html.Button("Update", id="pb-edit-btn", n_clicks=0, className="pb-edit-btn"),
+            html.Button([html.Span("PERSONAL BESTS", className="ts-label"),
+                         html.Span("▾", id="pb-chevron", className="pb-chevron")],
+                        id="pb-collapse-btn", n_clicks=0, className="pb-title-btn",
+                        **{"aria-label": "Show or hide personal bests"}),
+            html.Div(className="pb-head-btns", children=[
+                html.Button("Share", id="pb-share-btn", n_clicks=0, className="pb-edit-btn"),
+                html.Button("Update", id="pb-edit-btn", n_clicks=0, className="pb-edit-btn"),
+            ]),
         ]),
+        html.Div(id="pb-flash"),
+        html.Div(id="pb-summary", className="pb-summary", style={"display": "none"}),
         html.Div(id="pb-card-body"),
         html.Div(id="pb-form-wrap", style={"display": "none"}, className="pb-form", children=[
             dbc.RadioItems(
@@ -6143,7 +6200,7 @@ _PB_SHORT = {"Countermovement jump": "CMJ", "Standing long jump": "Standing LJ",
              "Trap bar deadlift": "Trap bar DL", "Weighted chin-up": "Chin-up (+kg)"}
 
 
-def _pb_tile(event, pb, last=None):
+def _pb_tile(event, pb, last=None, new=False):
     subs = []
     if pb["type"] == "Track":
         main = f"{fmt_time(pb['value'])}s"
@@ -6168,7 +6225,7 @@ def _pb_tile(event, pb, last=None):
             subs.append(html.Div([html.Span(f"Last {lift} · "),
                                   html.Span(f"{last['pct']:.0f}%", className=_pct_class(last["pct"]))],
                                  className="pb-tile-sub"))
-    return html.Div(className="pb-tile", children=[
+    return html.Div(className="pb-tile pb-tile-new" if new else "pb-tile", children=[
         html.Div(_PB_SHORT.get(event, event), className="pb-tile-ev"),
         html.Div(main, className="pb-tile-val"),
         *subs,
@@ -6182,14 +6239,26 @@ def _pct_class(p):
 @app.callback(
     Output("pb-card-body", "children"),
     Output("pb-proposals", "data"),
+    Output("pb-summary", "children"),
+    Output("pb-flash", "children"),
     Input("athlete-dropdown", "value"),
     Input("pb-saved", "data"),
     Input("refresh-btn", "n_clicks"),
     Input("pb-dismissed", "data"),
 )
-def render_pb_card(athlete_id, _saved, _refresh, dismissed):
+def render_pb_card(athlete_id, saved, _refresh, dismissed):
     if not athlete_id:
-        return html.Div("Select an athlete to see PBs.", className="pb-empty"), []
+        return html.Div("Select an athlete to see PBs.", className="pb-empty"), [], None, None
+    # Just saved? Show a green confirmation with a Share button, and highlight the tile.
+    flash, new_ev = None, None
+    trig = callback_context.triggered[0]["prop_id"] if callback_context.triggered else ""
+    if trig.startswith("pb-saved") and isinstance(saved, dict) and saved.get("msg"):
+        new_ev = saved.get("event")
+        flash = html.Div(className="pb-flash", children=[
+            html.Span("✓", className="pb-flash-tick"),
+            html.Span(saved["msg"], className="pb-flash-txt"),
+            html.Button("Share", id={"type": "pb-share-any", "i": 0}, n_clicks=0, className="pb-flash-share"),
+        ])
     today = today_adl()
     try:
         pbs = current_pbs(athlete_id)
@@ -6236,15 +6305,28 @@ def render_pb_card(athlete_id, _saved, _refresh, dismissed):
     gym = [(e, pbs[e]) for e in GYM_EVENTS if e in pbs]
     gym += [(e, p) for e, p in pbs.items() if e not in GYM_EVENTS and e not in SPRINT_EVENTS]
 
+    def _short_val(e, p):
+        if p["type"] == "Track":
+            return f"{e} {fmt_time(p['value'])}"
+        return f"{_PB_SHORT.get(e, e)} {p['value']:g}{' kg' if (p['unit'] or 'kg') == 'kg' else ' cm'}"
+    summary_bits = [_short_val(e, p) for e, p in (sprint + gym)[:4]]
+    if len(sprint + gym) > 4:
+        summary_bits.append(f"+{len(sprint + gym) - 4} more")
+    summary = html.Div([
+        html.Span(" · ".join(summary_bits) or "No PBs yet — tap to add"),
+        html.Span(f"  ·  {len(props)} new to confirm", className="pb-summary-new") if props else None,
+    ])
+
     if not sprint and not gym:
         children.append(html.Div(
             "Add your track and gym PBs — every rep and lift you log will then show as a % of your best.",
             className="pb-empty"))
-        return children, props
+        return children, props, summary, flash
 
     if sprint:
         children.append(html.Div("Track", className="pb-sec"))
-        children.append(html.Div([_pb_tile(e, p, last_any.get(e)) for e, p in sprint], className="pb-grid"))
+        children.append(html.Div([_pb_tile(e, p, last_any.get(e), e == new_ev) for e, p in sprint],
+                                 className="pb-grid"))
     if last_day and any(r.get("pct") for r in last_rows.values()):
         bits = [f"{r['event']} {r['avg_pct']:.0f}%" for r in last_rows.values() if r.get("avg_pct")]
         children.append(html.Div(
@@ -6253,8 +6335,244 @@ def render_pb_card(athlete_id, _saved, _refresh, dismissed):
     if gym:
         children.append(html.Div("Gym", className="pb-sec"))
         last_lifts = last_lift_by_exercise(df, today, pbs)
-        children.append(html.Div([_pb_tile(e, p, last_lifts.get(e)) for e, p in gym], className="pb-grid"))
-    return children, props
+        children.append(html.Div([_pb_tile(e, p, last_lifts.get(e), e == new_ev) for e, p in gym],
+                                 className="pb-grid"))
+    return children, props, summary, flash
+
+
+@app.callback(
+    Output("pb-collapsed", "data"),
+    Input("pb-collapse-btn", "n_clicks"),
+    State("pb-collapsed", "data"),
+    prevent_initial_call=True,
+)
+def toggle_pb_collapse(n, collapsed):
+    if not n:
+        raise PreventUpdate
+    return not bool(collapsed)
+
+
+@app.callback(
+    Output("pb-card-body", "style"),
+    Output("pb-summary", "style"),
+    Output("pb-chevron", "children"),
+    Input("pb-collapsed", "data"),
+)
+def apply_pb_collapse(collapsed):
+    if collapsed:
+        return {"display": "none"}, {"display": "block"}, "▸"
+    return {"display": "block"}, {"display": "none"}, "▾"
+
+
+@app.callback(
+    Output("share-card-title", "children", allow_duplicate=True),
+    Input("btn-share-card", "n_clicks"),
+    prevent_initial_call=True,
+)
+def reset_share_title(n):
+    if not n:
+        raise PreventUpdate
+    return "Share today's stats"
+
+
+def _pb_share_items(athlete: str) -> list:
+    """Every current PB, newest first, with what it improved on — for the PB share card."""
+    rows = load_pb_rows(athlete)
+    pbs = current_pbs(athlete)
+    items = []
+    for ev, p in pbs.items():
+        recs = []
+        if p["type"] == "Track":
+            recs = [r for r in (p.get("comp"), p.get("train")) if r]
+        else:
+            recs = [p]
+        for rec in recs:
+            setting = rec.get("setting", "")
+            prev = None
+            try:
+                same = rows[rows["Event"].str.strip() == ev]
+                vals = []
+                for _, r in same.iterrows():
+                    if p["type"] == "Track" and _pb_setting(r) != setting:
+                        continue
+                    try:
+                        d = pd.to_datetime(r["Date"]).date()
+                        v = float(r["Value"]); n = int(float(r.get("Reps") or 1))
+                    except Exception:
+                        continue
+                    if str(r["Date"]).strip() == rec["date"] and abs(v - rec["value"]) < 1e-9:
+                        continue
+                    vals.append((d, v, n))
+                before = [x for x in vals if str(x[0]) <= rec["date"]]
+                if before:
+                    prev = before[-1]
+            except Exception:
+                prev = None
+            if p["type"] == "Track":
+                main = fmt_time(rec["value"]) + "s"
+                sub = setting or "Training"
+                delta = (f"{prev[1] - rec['value']:.2f}s faster than {fmt_time(prev[1])}s"
+                         if prev and prev[1] > rec["value"] else "")
+            else:
+                unit = rec["unit"] or "kg"
+                main = f"{rec['value']:g} {unit}"
+                sub = (f"{rec['reps']}-rep max · ≈{epley_1rm(rec['value'], rec['reps']):.0f} kg 1RM"
+                       if unit == "kg" and rec["reps"] > 1 else ("1-rep max" if unit == "kg" else "Best"))
+                prev_y = (epley_1rm(prev[1], prev[2]) if unit == "kg" else prev[1]) if prev else None
+                cur_y = epley_1rm(rec["value"], rec["reps"]) if unit == "kg" else rec["value"]
+                delta = (f"+{cur_y - prev_y:.0f} {unit} on previous best" if prev_y and cur_y > prev_y else "")
+            try:
+                when = pd.to_datetime(rec["date"])
+                is_new = (pd.Timestamp(today_adl()) - when).days <= 14
+                when_s = when.strftime("%-d %b %Y")
+            except Exception:
+                is_new, when_s = False, rec.get("date", "")
+            items.append({"key": f"{ev}|{setting}", "event": _PB_SHORT.get(ev, ev), "raw_event": ev,
+                          "main": main, "sub": sub, "delta": delta, "date": when_s, "new": is_new,
+                          "kind": p["type"], "sort": rec.get("date", "")})
+    items.sort(key=lambda x: x["sort"], reverse=True)
+    return items
+
+
+def build_pb_share_html(athlete: str, pick_event: str | None = None) -> str:
+    import base64, json as _json
+    first = (athlete or "Athlete").strip().split()[0]
+    items = _pb_share_items(athlete)
+    if not items:
+        return ("<html><body style='background:#111;color:#ddd;font-family:system-ui;padding:24px'>"
+                "Add a PB first, then share it from here.</body></html>")
+    start = 0
+    if pick_event:
+        for i, it in enumerate(items):
+            if it["raw_event"] == pick_event:
+                start = i
+                break
+    logo_b64 = ""
+    for _lp in ["assets/app_icon.png", "/app/assets/app_icon.png", "app/assets/app_icon.png"]:
+        try:
+            with open(_lp, "rb") as _lf:
+                logo_b64 = base64.b64encode(_lf.read()).decode("utf-8")
+            break
+        except Exception:
+            pass
+    data = _json.dumps(items).replace("</", "<\\/")
+    return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#111;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:12px;color:#fff}}
+#picker{{width:100%;max-width:320px;display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none}}
+#picker::-webkit-scrollbar{{display:none}}
+.pk{{flex-shrink:0;border:1px solid rgba(255,255,255,.18);background:transparent;color:#fff;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer}}
+.pk.on{{background:#4dabf7;border-color:#4dabf7;color:#07121f}}
+#preview{{width:100%;max-width:320px;aspect-ratio:9/16;border-radius:18px;overflow:hidden;position:relative;border:1px solid rgba(255,255,255,.1)}}
+#bg{{position:absolute;inset:0;width:100%;height:100%}}
+#scrim{{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.15),rgba(0,0,0,.05) 30%,rgba(0,0,0,.6) 60%,rgba(0,0,0,.85))}}
+#ov{{position:absolute;left:0;right:0;bottom:0;padding:18px 20px 22px;text-align:center}}
+.brand{{position:absolute;top:14px;left:0;right:0;display:flex;justify-content:center;align-items:center;gap:6px;font-size:9px;letter-spacing:.16em;color:rgba(255,255,255,.7)}}
+.brand img{{width:18px;height:18px;filter:brightness(0) invert(1);opacity:.85}}
+.chip{{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.14em;padding:4px 10px;border-radius:999px;background:#2fb344;color:#06210e;margin-bottom:10px}}
+.chip.pb{{background:rgba(255,255,255,.16);color:#fff}}
+.ev{{font-size:22px;font-weight:800;letter-spacing:.02em}}
+.val{{font-size:58px;font-weight:900;line-height:1.05;margin:4px 0}}
+.sub{{font-size:12px;color:rgba(255,255,255,.75)}}
+.delta{{font-size:12px;color:#5fd97a;font-weight:700;margin-top:6px;min-height:15px}}
+.name{{font-size:12px;color:rgba(255,255,255,.6);margin-top:16px}}
+.date{{font-size:9px;color:rgba(255,255,255,.35);margin-top:4px}}
+#controls{{width:100%;max-width:320px;margin-top:10px;display:flex;flex-direction:column;gap:7px}}
+#photolabel{{display:flex;justify-content:center;gap:7px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:10px;cursor:pointer;color:rgba(255,255,255,.65);font-size:12px}}
+#photoInput{{display:none}}
+#dlBtn{{background:#1E88E5;border:none;border-radius:10px;padding:11px;color:#fff;font-size:12px;font-weight:600;cursor:pointer}}
+#hint{{text-align:center;font-size:9px;color:rgba(255,255,255,.35)}}
+</style></head><body>
+<div id="picker"></div>
+<div id="preview"><canvas id="bg"></canvas><div id="scrim"></div>
+  <div class="brand">{"<img src='data:image/png;base64," + logo_b64 + "'/>" if logo_b64 else ""}ADPTV</div>
+  <div id="ov"><div id="chip" class="chip">NEW PB</div><div class="ev" id="ev"></div>
+  <div class="val" id="val"></div><div class="sub" id="sub"></div><div class="delta" id="delta"></div>
+  <div class="name">{first}</div><div class="date" id="date"></div></div></div>
+<div id="controls">
+  <label id="photolabel" for="photoInput">Choose a background photo</label>
+  <input type="file" id="photoInput" accept="image/*">
+  <button id="dlBtn">Download story (1080&times;1920)</button>
+  <div id="hint">Pick a PB above, add a photo, then download</div>
+</div>
+<script>
+const ITEMS={data};let cur={start};let photo=null;
+const LOGO="{logo_b64 and ('data:image/png;base64,' + logo_b64) or ''}";let logo=null;
+if(LOGO){{logo=new Image();logo.src=LOGO;}}
+function paintBg(ctx,w,h){{
+  if(photo){{const s=Math.max(w/photo.naturalWidth,h/photo.naturalHeight);const dw=photo.naturalWidth*s,dh=photo.naturalHeight*s;ctx.drawImage(photo,(w-dw)/2,(h-dh)/2,dw,dh);}}
+  else{{const g=ctx.createLinearGradient(0,0,w,h);g.addColorStop(0,'#0f2027');g.addColorStop(.5,'#203a43');g.addColorStop(1,'#2c5364');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);}}
+}}
+function drawPreview(){{const c=document.getElementById('bg');const r=c.getBoundingClientRect();
+  if(!r.width){{setTimeout(drawPreview,100);return;}}c.width=r.width;c.height=r.height;paintBg(c.getContext('2d'),c.width,c.height);}}
+function show(i){{cur=i;const it=ITEMS[i];
+  document.getElementById('ev').textContent=it.event;document.getElementById('val').textContent=it.main;
+  document.getElementById('sub').textContent=it.sub;document.getElementById('delta').textContent=it.delta||'';
+  document.getElementById('date').textContent=it.date;
+  const chip=document.getElementById('chip');chip.textContent=it.new?'NEW PB':'PERSONAL BEST';chip.className=it.new?'chip':'chip pb';
+  document.querySelectorAll('.pk').forEach((b,j)=>b.classList.toggle('on',j===i));}}
+const pk=document.getElementById('picker');
+ITEMS.forEach((it,i)=>{{const b=document.createElement('button');b.className='pk';
+  b.textContent=it.event+(it.kind==='Track'&&it.sub==='Competition'?' (comp)':'');b.onclick=()=>show(i);pk.appendChild(b);}});
+show(cur);setTimeout(drawPreview,150);window.addEventListener('resize',()=>setTimeout(drawPreview,80));
+document.getElementById('photoInput').addEventListener('change',e=>{{const f=e.target.files[0];if(!f)return;
+  const rd=new FileReader();rd.onload=ev=>{{const im=new Image();im.onload=()=>{{photo=im;drawPreview();}};im.src=ev.target.result;}};rd.readAsDataURL(f);
+  document.getElementById('photolabel').textContent='Photo added — tap to change';}});
+const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||/^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+if(isIOS){{const h=document.getElementById('hint');h.textContent='iPhone: tap Download, then long-press the image → Save to Photos';h.style.color='rgba(255,200,80,.9)';}}
+document.getElementById('dlBtn').addEventListener('click',function(){{
+  const W=1080,H=1920,it=ITEMS[cur];const o=document.createElement('canvas');o.width=W;o.height=H;const x=o.getContext('2d');
+  paintBg(x,W,H);const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'rgba(0,0,0,.15)');g.addColorStop(.3,'rgba(0,0,0,.05)');
+  g.addColorStop(.6,'rgba(0,0,0,.6)');g.addColorStop(1,'rgba(0,0,0,.85)');x.fillStyle=g;x.fillRect(0,0,W,H);
+  x.textAlign='center';x.textBaseline='alphabetic';
+  if(logo&&logo.naturalWidth){{const oc=document.createElement('canvas');oc.width=48;oc.height=48;const q=oc.getContext('2d');
+    q.drawImage(logo,0,0,48,48);q.globalCompositeOperation='source-in';q.fillStyle='rgba(255,255,255,.9)';q.fillRect(0,0,48,48);
+    x.font='500 28px system-ui';const tw=x.measureText('ADPTV').width;const bx=W/2-(60+tw)/2;x.drawImage(oc,bx,70,48,48);
+    x.textAlign='left';x.fillStyle='rgba(255,255,255,.75)';x.fillText('ADPTV',bx+60,104);x.textAlign='center';}}
+  else{{x.font='500 28px system-ui';x.fillStyle='rgba(255,255,255,.75)';x.fillText('ADPTV',W/2,104);}}
+  let y=H*0.60;const chip=it.new?'NEW PB':'PERSONAL BEST';x.font='800 30px system-ui';const cw=x.measureText(chip).width+60;
+  x.fillStyle=it.new?'#2fb344':'rgba(255,255,255,.16)';x.beginPath();
+  if(x.roundRect)x.roundRect(W/2-cw/2,y-46,cw,64,32);else x.rect(W/2-cw/2,y-46,cw,64);x.fill();
+  x.fillStyle=it.new?'#06210e':'#fff';x.fillText(chip,W/2,y-3);
+  y+=110;x.fillStyle='#fff';x.font='800 72px system-ui';x.fillText(it.event,W/2,y);
+  y+=190;x.font='900 200px system-ui';x.fillText(it.main,W/2,y);
+  y+=80;x.font='40px system-ui';x.fillStyle='rgba(255,255,255,.78)';x.fillText(it.sub,W/2,y);
+  if(it.delta){{y+=70;x.font='700 40px system-ui';x.fillStyle='#5fd97a';x.fillText(it.delta,W/2,y);}}
+  y+=110;x.font='42px system-ui';x.fillStyle='rgba(255,255,255,.65)';x.fillText('{first}',W/2,y);
+  x.font='28px system-ui';x.fillStyle='rgba(255,255,255,.35)';x.fillText(it.date,W/2,H-80);
+  const url=o.toDataURL('image/png');
+  if(isIOS){{const t=window.open();if(t){{t.document.write('<html><body style="margin:0;background:#111"><img src="'+url+'" style="width:100%"></body></html>');t.document.close();}}
+    this.textContent='✅ Opened — save from new tab';}}
+  else{{const a=document.createElement('a');a.download='pb-'+it.event.replace(/\\s+/g,'-')+'.png';a.href=url;a.click();}}
+}});
+</script></body></html>"""
+
+
+@app.callback(
+    Output("share-card-modal", "style", allow_duplicate=True),
+    Output("share-card-title", "children", allow_duplicate=True),
+    Output("share-card-container", "children", allow_duplicate=True),
+    Input("pb-share-btn", "n_clicks"),
+    Input({"type": "pb-share-any", "i": ALL}, "n_clicks"),
+    State("athlete-dropdown", "value"),
+    State("pb-saved", "data"),
+    prevent_initial_call=True,
+)
+def show_pb_share_card(n, _any, athlete_id, saved):
+    trig = callback_context.triggered[0] if callback_context.triggered else None
+    if not trig or not (trig.get("value") or 0) or not athlete_id:
+        raise PreventUpdate
+    pick = saved.get("event") if (isinstance(saved, dict) and "pb-share-any" in trig["prop_id"]) else None
+    style = {"display": "flex", "position": "fixed", "top": "55px", "left": "50%",
+             "transform": "translateX(-50%)", "width": "min(400px, 95vw)",
+             "maxHeight": "88vh", "background": "#111", "borderRadius": "16px",
+             "boxShadow": "0 8px 40px rgba(0,0,0,0.75)", "zIndex": "10000",
+             "overflow": "hidden", "flexDirection": "column"}
+    return style, "Share a PB", html.Iframe(srcDoc=build_pb_share_html(athlete_id, pick),
+                              style={"width": "100%", "height": "680px", "border": "none",
+                                     "background": "#111", "display": "block"})
 
 
 @app.callback(
@@ -6292,6 +6610,10 @@ def pb_type_changed(pb_type):
     Output("pb-form-msg", "children"),
     Output("pb-saved", "data"),
     Output("pb-value", "value"),
+    Output("pb-form-wrap", "style", allow_duplicate=True),
+    Output("pb-edit-btn", "children", allow_duplicate=True),
+    Output("pb-edit-btn", "n_clicks"),
+    Output("pb-collapsed", "data", allow_duplicate=True),
     Input("pb-save-btn", "n_clicks"),
     State("athlete-dropdown", "value"),
     State("pb-type", "value"),
@@ -6306,23 +6628,23 @@ def save_pb_form(n, athlete_id, pb_type, event, value, reps, date_str, setting):
     if not n:
         raise PreventUpdate
     if not athlete_id:
-        return "Select an athlete first.", no_update, no_update
+        return "Select an athlete first.", no_update, no_update, no_update, no_update, no_update, no_update
     if not event:
-        return "Choose an event.", no_update, no_update
+        return "Choose an event.", no_update, no_update, no_update, no_update, no_update, no_update
     if pb_type == "Track":
         v = parse_time_text(value)
         d = parse_track_reps(f"{'fly ' if event.startswith('Fly') else ''}"
                              f"{re.sub(r'[^0-9]', '', event)}m {value}") if v else []
         if not v or not d:
-            return f"That doesn't look like a {event} time — e.g. 3.92 or 1:02.3.", no_update, no_update
+            return f"That doesn't look like a {event} time — e.g. 3.92 or 1:02.3.", no_update, no_update, no_update, no_update, no_update, no_update
         reps = 1
     else:
         try:
             v = float(str(value).replace("kg", "").replace("cm", "").strip())
         except (TypeError, ValueError):
-            return "Enter a number, e.g. 140.", no_update, no_update
+            return "Enter a number, e.g. 140.", no_update, no_update, no_update, no_update, no_update, no_update
         if v <= 0 or v > 500:
-            return "That number looks off — check it and try again.", no_update, no_update
+            return "That number looks off — check it and try again.", no_update, no_update, no_update, no_update, no_update, no_update
         try:
             reps = max(1, min(int(reps or 1), 12))
         except (TypeError, ValueError):
@@ -6332,11 +6654,14 @@ def save_pb_form(n, athlete_id, pb_type, event, value, reps, date_str, setting):
                 setting if pb_type == "Track" else "")
     except Exception as e:
         print(f"❌ PB save failed: {e}")
-        return "Couldn't save — check your connection and try again.", no_update, no_update
+        return "Couldn't save — check your connection and try again.", no_update, no_update, no_update, no_update, no_update, no_update
     shown = f"{fmt_time(v)}s" if pb_type == "Track" else f"{v:g} {GYM_EVENTS.get(event, 'kg')}" + (
         f" × {reps}" if reps > 1 else "")
     tag = f" ({(setting or 'Training').lower()})" if pb_type == "Track" else ""
-    return f"Saved: {event} {shown}{tag} ✓", time.time(), ""
+    msg = f"Saved: {_PB_SHORT.get(event, event)} {shown}{tag}"
+    # Close the form and show the green confirmation (with Share) in the card.
+    return ("", {"t": time.time(), "event": event, "msg": msg}, "",
+            {"display": "none"}, "Update", 0, False)
 
 
 @app.callback(
@@ -6371,7 +6696,13 @@ def answer_pb_proposal(_acc, _dis, props, dismissed, athlete_id):
         except Exception as e:
             print(f"❌ PB confirm failed: {e}")
             raise PreventUpdate
-        return time.time(), dismissed
+        if p.get("kind") == "Gym":
+            what = (f"{p['load']:g} cm" if p.get("unit") == "cm" else
+                    f"{p['load']:g} kg" + (f" × {p['reps']}" if p["reps"] > 1 else ""))
+        else:
+            what = f"{fmt_time(p['time'])}s ({p.get('setting', 'Training').lower()})"
+        return ({"t": time.time(), "event": p["event"],
+                 "msg": f"New PB saved: {_PB_SHORT.get(p['event'], p['event'])} {what}"}, dismissed)
     return no_update, dismissed
 
 
