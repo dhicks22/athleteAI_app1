@@ -1630,6 +1630,8 @@ def make_ai_suggestions(
         f"Sets × Reps × Load: {sets_reps_load}\n"
         f"Track reps & times: {track_reps_times}\n"
         f"Track reps vs personal best: {pb_context_line(track_reps_times, athlete_name)}\n"
+        f"Gym lifts vs personal best: {gym_context_line(sets_reps_load, athlete_name)}\n"
+        f"Session type: {session_setting(df, selected_date_dt)}\n"
         f"\nUpcoming sessions:\n{upcoming}"
     )
 
@@ -2428,7 +2430,8 @@ def readiness_verdict(readiness, neuro, stale: bool = False):
 # ============================================================
 
 PB_TAB = "PBs"
-PB_HEADERS = ["Athlete", "Type", "Event", "Value", "Unit", "Reps", "Est_1RM", "Date", "Source", "Logged_At"]
+PB_HEADERS = ["Athlete", "Type", "Event", "Value", "Unit", "Reps", "Est_1RM", "Date", "Source", "Logged_At",
+              "Setting"]   # Setting: Training / Competition (track only)
 
 SPRINT_EVENTS = ["10m", "20m", "30m", "40m", "50m", "60m", "80m", "100m", "120m", "150m",
                  "200m", "250m", "300m", "400m", "Fly 10m", "Fly 20m", "Fly 30m",
@@ -2448,13 +2451,24 @@ def _pb_ws(create: bool = False):
     if sh is None:
         return None
     try:
-        return sh.worksheet(PB_TAB)
+        ws = sh.worksheet(PB_TAB)
     except gspread.WorksheetNotFound:
         if not create:
             return None
         ws = sh.add_worksheet(title=PB_TAB, rows=1000, cols=len(PB_HEADERS))
         ws.append_row(PB_HEADERS, value_input_option="USER_ENTERED")
         return ws
+    if create:
+        # Tabs made by an earlier version lack newer headings (e.g. Setting) — add them.
+        try:
+            head = ws.row_values(1)
+            if len(head) < len(PB_HEADERS) and head == PB_HEADERS[:len(head)]:
+                if ws.col_count < len(PB_HEADERS):
+                    ws.add_cols(len(PB_HEADERS) - ws.col_count)
+                ws.update(values=[PB_HEADERS], range_name="A1")
+        except Exception as e:
+            print(f"⚠️ PB header check: {e}")
+    return ws
 
 
 def load_pb_rows(athlete: str) -> pd.DataFrame:
@@ -2478,9 +2492,18 @@ def load_pb_rows(athlete: str) -> pd.DataFrame:
     return df
 
 
+def _pb_setting(r) -> str:
+    v = str(r.get("Setting", "") or "").strip().lower()
+    return "Competition" if v.startswith("comp") else "Training"
+
+
 def current_pbs(athlete: str) -> dict:
-    """{event: {...}} using each event's most recent entry (so typos can be corrected)."""
-    out = {}
+    """
+    {event: {...}} using each event's most recent entry (so typos can be corrected).
+    Track events keep training and competition PBs separately; "value" is the
+    faster of the two, with "train" / "comp" holding each one.
+    """
+    latest = {}
     df = load_pb_rows(athlete)
     for _, r in df.iterrows():
         ev = str(r.get("Event", "")).strip()
@@ -2500,10 +2523,26 @@ def current_pbs(athlete: str) -> dict:
             est = None
         _t = str(r.get("Type", "")).strip()
         _t = "Track" if _t in ("Sprint", "Track") else _t
-        out[ev] = {"type": _t or ("Track" if ev in SPRINT_EVENTS else "Gym"),
-                   "value": val, "unit": str(r.get("Unit", "")).strip(), "reps": reps,
-                   "est_1rm": est, "date": str(r.get("Date", "")).strip(),
-                   "source": str(r.get("Source", "")).strip()}
+        _t = _t or ("Track" if ev in SPRINT_EVENTS else "Gym")
+        unit = str(r.get("Unit", "")).strip()
+        if _t == "Gym" and est is None:
+            est = epley_1rm(val, reps) if (unit or "kg") == "kg" else val
+        setting = _pb_setting(r) if _t == "Track" else ""
+        latest[(ev, setting)] = {"type": _t, "value": val, "unit": unit, "reps": reps,
+                                 "est_1rm": est, "date": str(r.get("Date", "")).strip(),
+                                 "source": str(r.get("Source", "")).strip(), "setting": setting}
+    out = {}
+    for (ev, setting), rec in latest.items():
+        if rec["type"] != "Track":
+            out[ev] = rec
+            continue
+        cur = out.setdefault(ev, dict(rec, train=None, comp=None))
+        if setting == "Competition":
+            cur["comp"] = rec
+        else:
+            cur["train"] = rec
+        best = min([x for x in (cur["train"], cur["comp"]) if x], key=lambda x: x["value"])
+        cur.update({k: best[k] for k in ("value", "unit", "date", "source", "setting")})
     return out
 
 
@@ -2512,7 +2551,7 @@ def epley_1rm(weight: float, reps: int) -> float:
 
 
 def save_pb(athlete: str, pb_type: str, event: str, value: float, reps: int = 1,
-            date_str: str = "", source: str = "athlete") -> None:
+            date_str: str = "", source: str = "athlete", setting: str = "") -> None:
     ws = _pb_ws(create=True)
     if ws is None:
         raise RuntimeError("Google Sheets not connected")
@@ -2523,7 +2562,8 @@ def save_pb(athlete: str, pb_type: str, event: str, value: float, reps: int = 1,
         est = f"{epley_1rm(value, reps or 1):.1f}"
     ws.append_row([athlete, pb_type, event, f"{value:g}", unit, str(reps or 1), est,
                    date_str or str(today_adl()), source,
-                   dt.datetime.now(ADL_TZ).strftime("%Y-%m-%d %H:%M")],
+                   dt.datetime.now(ADL_TZ).strftime("%Y-%m-%d %H:%M"),
+                   (setting or "Training") if pb_type == "Track" else ""],
                   value_input_option="USER_ENTERED")
     _pb_cache.pop(athlete, None)
 
@@ -2637,8 +2677,15 @@ def pb_context_line(text, athlete: str) -> str:
     for r in rows:
         if r["pct"]:
             tag = " (NEW PB)" if r["best"] < r["pb"] else ""
+            rec = pbs.get(r["event"], {})
+            split = []
+            if rec.get("train"):
+                split.append(f"training PB {fmt_time(rec['train']['value'])}s")
+            if rec.get("comp"):
+                split.append(f"competition PB {fmt_time(rec['comp']['value'])}s")
             parts.append(f"{r['event']} best {fmt_time(r['best'])}s = {r['pct']:.0f}% of PB "
-                         f"{fmt_time(r['pb'])}s, {r['n']} reps averaging {r['avg_pct']:.0f}%{tag}")
+                         f"{fmt_time(r['pb'])}s ({', '.join(split)}), {r['n']} reps averaging "
+                         f"{r['avg_pct']:.0f}%{tag}")
         else:
             parts.append(f"{r['event']} best {fmt_time(r['best'])}s (no PB recorded)")
     return "; ".join(parts)
@@ -2676,32 +2723,257 @@ def last_rep_by_event(df: pd.DataFrame, today: dt.date, pbs: dict, max_age_days:
                 out[row["event"]] = row
     return out
 
+# ---------- Training vs competition ----------
+_COMP_RE = re.compile(r"\b(comp|comps|competition|meet|race|racing|champs|championships?|heat|final|"
+                      r"carnival|nationals|state)\b", re.I)
+
+
+def session_setting(df: pd.DataFrame, day) -> str:
+    """'Competition' if that day's planned session reads like a meet, else 'Training'."""
+    try:
+        d = df.copy()
+        d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
+        row = d[d["Date"] == day].iloc[-1]
+        txt = " ".join(str(row.get(c, "") or "") for c in ("Workout", "Focus", "Venue"))
+        return "Competition" if _COMP_RE.search(txt) else "Training"
+    except Exception:
+        return "Training"
+
+
+# ---------- Gym: read lifts from the Sets × Reps × Load box ----------
+# Most specific names first so "front squat" isn't read as "squat".
+_GYM_ALIASES = [
+    ("Front squat", r"front\s*squats?|\bfs\b"),
+    ("Split squat", r"(?:bulgarian\s*)?split\s*squats?|\bbss\b"),
+    ("Back squat", r"back\s*squats?|squats?|\bbs\b"),
+    ("Trap bar deadlift", r"trap\s*bar(?:\s*dead\s*lifts?)?|hex\s*bar|\btbdl\b"),
+    ("RDL", r"\brdls?\b|romanian\s*dead\s*lifts?"),
+    ("Deadlift", r"dead\s*lifts?|\bdl\b"),
+    ("Hang clean", r"hang(?:\s*power)?\s*cleans?|\bhpc\b|\bhc\b"),
+    ("Power clean", r"power\s*cleans?|cleans?|\bpc\b"),
+    ("Bench press", r"bench(?:\s*press)?|\bbp\b"),
+    ("Hip thrust", r"hip\s*thrusts?|\bht\b"),
+    ("Weighted chin-up", r"(?:weighted\s*)?(?:chin|pull)[\s-]*ups?"),
+    ("Countermovement jump", r"\bcmj\b|counter\s*movement\s*jumps?"),
+    ("Standing long jump", r"standing\s*long\s*jumps?|\bslj\b|broad\s*jumps?"),
+]
+_GYM_ALIAS_RE = [(name, re.compile(pat, re.I)) for name, pat in _GYM_ALIASES]
+_PAIR_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(kg)?\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(kg)?", re.I)
+_LOAD_AFTER_RE = re.compile(r"^\s*(?:@|at)?\s*(\d{2,3}(?:\.\d+)?)\s*(kg)?(?!\s*%)", re.I)
+_CM_RE = re.compile(r"(?<![\d.])(\d{2,3}(?:\.\d+)?)\s*(cm)?(?![\d.%])", re.I)
+
+
+def _gym_segments(text):
+    """Split notes into one chunk per exercise mention."""
+    text = str(text or "")
+    hits = []
+    for name, rx in _GYM_ALIAS_RE:
+        for m in rx.finditer(text):
+            if any(m.start() < e and m.end() > s0 for s0, e, _ in hits):
+                continue          # already claimed by a more specific name
+            hits.append((m.start(), m.end(), name))
+    hits.sort()
+    for i, (s0, e, name) in enumerate(hits):
+        stop = hits[i + 1][0] if i + 1 < len(hits) else len(text)
+        chunk = text[e:stop]
+        nl = chunk.find("\n")
+        if nl > 0 and nl < len(chunk) - 1 and i + 1 >= len(hits):
+            chunk = chunk[:nl]
+        yield name, chunk
+
+
+def parse_gym_sets(text) -> list:
+    """
+    [(exercise, load, reps)] from free text such as
+      "Back squat 3x3 @ 140kg", "Squat 140kg x 3", "Power clean: 80x3, 85x3, 90x2",
+      "BS 5x5 100", "CMJ 52cm 54".  Reps over 12 are ignored (1RM estimates get unreliable).
+    """
+    out = []
+    for name, chunk in _gym_segments(text):
+        unit = GYM_EVENTS.get(name, "kg")
+        if unit == "cm":
+            for m in _CM_RE.finditer(chunk):
+                v = float(m.group(1))
+                if 15 <= v <= 400:
+                    out.append((name, v, 1))
+            continue
+        for m in _PAIR_RE.finditer(chunk):
+            a, a_kg, b, b_kg = float(m.group(1)), m.group(2), float(m.group(3)), m.group(4)
+            load = reps = None
+            after = _LOAD_AFTER_RE.match(chunk[m.end():])
+            if a <= 12 and b <= 12 and after:            # sets x reps @ load
+                reps, load = b, float(after.group(1))
+            elif (a_kg or a >= 20) and b <= 12:            # load x reps
+                load, reps = a, b
+            elif (b_kg or b >= 20) and a <= 12:            # reps x load
+                load, reps = b, a
+            if load and reps and 10 <= load <= 400 and 1 <= reps <= 12:
+                out.append((name, load, int(reps)))
+    return out
+
+
+def summarise_gym_vs_pb(text, pbs: dict) -> list:
+    """Top set per exercise (by estimated 1RM) and its % of the PB."""
+    by = {}
+    for name, load, reps in parse_gym_sets(text):
+        unit = GYM_EVENTS.get(name, "kg")
+        est = epley_1rm(load, reps) if unit == "kg" else load
+        cur = by.get(name)
+        sets = (cur["sets"] if cur else []) + [(load, reps)]
+        if not cur or est > cur["est"]:
+            by[name] = {"exercise": name, "load": load, "reps": reps, "est": est, "unit": unit}
+        by[name]["sets"] = sets
+    out = []
+    for name, r in by.items():
+        pb = pbs.get(name) if pbs.get(name, {}).get("type") == "Gym" else None
+        pb_est = (pb.get("est_1rm") or pb["value"]) if pb else None
+        r["pb_est"] = pb_est
+        r["pct"] = (r["est"] / pb_est * 100) if pb_est else None
+        out.append(r)
+    order = {e: i for i, e in enumerate(GYM_EVENTS)}
+    return sorted(out, key=lambda r: order.get(r["exercise"], 999))
+
+
+def fmt_set(r) -> str:
+    if r["unit"] == "cm":
+        return f"{r['load']:g} cm"
+    return f"{r['load']:g} kg × {r['reps']}" + (f" (≈{r['est']:.0f} kg 1RM)" if r["reps"] > 1 else "")
+
+
+def gym_context_line(text, athlete: str) -> str:
+    """One line for the AI prompt: each lift's top set against the athlete's PB."""
+    try:
+        rows = summarise_gym_vs_pb(text, current_pbs(athlete))
+    except Exception:
+        return "none"
+    if not rows:
+        return "none"
+    parts = []
+    for r in rows:
+        sets = ", ".join(f"{l:g}×{n}" if r["unit"] == "kg" else f"{l:g}cm" for l, n in r["sets"])
+        line = f"{r['exercise']}: {sets}; top set {fmt_set(r)}"
+        if r["pct"]:
+            tag = " (NEW PB)" if r["est"] > r["pb_est"] + 0.01 else ""
+            line += f" = {r['pct']:.0f}% of PB ({r['pb_est']:.0f}{r['unit']}){tag}"
+        else:
+            line += " (no PB recorded)"
+        parts.append(line)
+    return "; ".join(parts)
+
+
+def _recent_rows(df, today, col, max_age_days):
+    if df is None or df.empty or col not in df.columns:
+        return pd.DataFrame()
+    d = df.copy()
+    d["Date"] = pd.to_datetime(d["Date"], errors="coerce").dt.date
+    d = d.dropna(subset=["Date"])
+    d = d[(d["Date"] <= today) & (d["Date"] >= today - dt.timedelta(days=max_age_days))]
+    d = d[~d[col].astype(str).str.strip().str.lower().isin(["", "nan", "none"])]
+    return d.sort_values("Date", ascending=False)
+
+
+def last_lift_by_exercise(df, today, pbs, max_age_days: int = 28) -> dict:
+    out = {}
+    for _, r in _recent_rows(df, today, "Sets_Reps_Load", max_age_days).iterrows():
+        for row in summarise_gym_vs_pb(r.get("Sets_Reps_Load", ""), pbs):
+            if row["exercise"] not in out:
+                row["date"] = r["Date"]
+                out[row["exercise"]] = row
+    return out
+
+
+def gym_session_history(df, athlete) -> dict:
+    """{exercise: [{date, est, load, reps}]} — top set per session, oldest first."""
+    out = {}
+    pbs = current_pbs(athlete)
+    for _, r in _recent_rows(df, today_adl(), "Sets_Reps_Load", 3650).iloc[::-1].iterrows():
+        for row in summarise_gym_vs_pb(r.get("Sets_Reps_Load", ""), pbs):
+            out.setdefault(row["exercise"], []).append(
+                {"date": r["Date"], "est": row["est"], "load": row["load"], "reps": row["reps"],
+                 "unit": row["unit"]})
+    return out
+
+
+def ai_normalise_gym_text(text: str, workout: str = "") -> str:
+    """Same idea as the track version: if no lift can be read but there are
+    numbers, ask the small model to rewrite as 'Exercise: KGxREPS' lines."""
+    text = (text or "").strip()
+    if not text or parse_gym_sets(text) or not re.search(r"\d", text):
+        return text
+    names = ", ".join(GYM_EVENTS)
+    try:
+        raw = call_claude_fast([
+            {"role": "system", "content":
+                "Extract the weights lifted from an athlete's gym note. Output ONLY lines like "
+                "'Back squat: 140x3, 150x2' (load in kg x reps, one entry per set, sets with the same "
+                "load and reps may be listed once) or 'Countermovement jump: 52cm'. Use exactly one of "
+                f"these exercise names: {names}. Skip exercises not on that list, bodyweight work, "
+                "percentages without a load, and anything you're unsure of. If nothing qualifies, "
+                "output NONE."},
+            {"role": "user", "content": f"Planned workout: {workout or 'not given'}\nGym note: {text}"},
+        ], max_tokens=160)
+    except Exception as e:
+        print(f"⚠️ gym normalise failed: {e}")
+        return text
+    raw = (raw or "").strip()
+    if not raw or "NONE" in raw.upper() or "unavailable" in raw.lower():
+        return text
+    lines = [ln.strip() for ln in raw.splitlines() if ln.strip() and parse_gym_sets(ln)]
+    if not lines:
+        return text
+    return f"{text}\n→ read as {'; '.join(lines)}"
+
+
 
 def pb_proposals(df: pd.DataFrame, athlete: str, today: dt.date, dismissed=None) -> list:
-    """Reps in the latest track session that beat (or set) a PB — for one-tap confirm."""
+    """Reps/lifts from the last 7 days that beat (or set) a PB — for one-tap confirm."""
     dismissed = set(dismissed or [])
-    day, txt = latest_track_session(df, today, max_age_days=7)
-    if not day:
-        return []
     pbs = current_pbs(athlete)
     props = []
-    for r in summarise_reps_vs_pb(txt, pbs):
-        if r["event"] not in SPRINT_EVENTS:
+
+    def _pb_day(rec):
+        try:
+            return pd.to_datetime(rec["date"]).date()
+        except Exception:
+            return None
+
+    # Track: best rep per (event, training/competition) across the last 7 days.
+    best_track = {}
+    for _, row in _recent_rows(df, today, "Track_Reps_Times", 7).iterrows():
+        day = row["Date"]
+        setting = session_setting(df, day)
+        for r in summarise_reps_vs_pb(row.get("Track_Reps_Times", ""), pbs):
+            k = (r["event"], setting)
+            if r["event"] in SPRINT_EVENTS and (k not in best_track or r["best"] < best_track[k][0]):
+                best_track[k] = (r["best"], day)
+    for (event, setting), (best, day) in best_track.items():
+        cur = (pbs.get(event) or {}).get("comp" if setting == "Competition" else "train")
+        if cur and (best >= cur["value"] or (_pb_day(cur) and _pb_day(cur) >= day)):
             continue
-        cur = pbs.get(r["event"])
-        if cur:
-            try:
-                pb_day = pd.to_datetime(cur["date"]).date()
-            except Exception:
-                pb_day = None
-            if r["best"] >= cur["value"] or (pb_day and pb_day >= day):
-                continue
-        key = f"{athlete}|{r['event']}|{r['best']:.2f}|{day}"
+        key = f"{athlete}|{event}|{setting}|{best:.2f}|{day}"
         if key in dismissed:
             continue
-        props.append({"key": key, "event": r["event"], "time": round(r["best"], 2),
-                      "date": str(day), "old": cur["value"] if cur else None})
-    return props[:3]
+        props.append({"key": key, "kind": "Track", "event": event, "time": round(best, 2),
+                      "setting": setting, "date": str(day), "old": cur["value"] if cur else None})
+
+    # Gym: heaviest top set (by estimated 1RM) per exercise across the last 7 days.
+    best_gym = {}
+    for _, row in _recent_rows(df, today, "Sets_Reps_Load", 7).iterrows():
+        for g in summarise_gym_vs_pb(row.get("Sets_Reps_Load", ""), pbs):
+            if g["exercise"] not in best_gym or g["est"] > best_gym[g["exercise"]][0]["est"]:
+                best_gym[g["exercise"]] = (g, row["Date"])
+    for name, (g, gday) in best_gym.items():
+        cur = pbs.get(name) if pbs.get(name, {}).get("type") == "Gym" else None
+        if cur and (g["est"] <= (cur.get("est_1rm") or cur["value"]) + 0.01
+                    or (_pb_day(cur) and _pb_day(cur) >= gday)):
+            continue
+        key = f"{athlete}|{name}|{g['load']:g}x{g['reps']}|{gday}"
+        if key in dismissed:
+            continue
+        props.append({"key": key, "kind": "Gym", "event": name, "load": g["load"],
+                      "reps": g["reps"], "est": round(g["est"], 1), "unit": g["unit"],
+                      "date": str(gday), "old": (cur.get("est_1rm") or cur["value"]) if cur else None})
+    return props[:4]
 
 
 def compute_readiness_for_athlete(df: pd.DataFrame, today: dt.date):
@@ -3702,6 +3974,7 @@ app.index_string = """
           .pb-prop-no { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
           .pb-form { flex-direction: column; gap: 10px; border-top: 1px solid var(--border); padding-top: 12px; }
           .pb-seg { display: flex; gap: 6px; }
+          .pb-seg-sm .pb-seg-btn { min-height: 34px; line-height: 32px; font-size: 13px; }
           .pb-seg .form-check { padding: 0; margin: 0; flex: 1; }
           .pb-seg .btn-check { position: absolute; opacity: 0; pointer-events: none; }
           .pb-seg-btn { display: block; text-align: center; min-height: 40px; line-height: 38px; border-radius: 10px;
@@ -4119,8 +4392,10 @@ def build_main_layout(auth_data):
                                                      placeholder="e.g., Last two reps were my best...",
                                                      style={"width": "100%", "height": "80px", "border": "none"})]),
                             input_card([html.Label("Sets × Reps × Load"),
-                                        dcc.Textarea(id="sets-reps-load", placeholder="e.g., add here",
-                                                     style={"width": "100%", "height": "80px", "border": "none"})]),
+                                        dcc.Textarea(id="sets-reps-load",
+                                                     placeholder="e.g. Back squat 3x3 @ 140kg / Power clean 80x3, 85x2",
+                                                     style={"width": "100%", "height": "80px", "border": "none"}),
+                                        html.Div(id="sets-reps-preview", className="rep-preview")]),
                             track_reps_input_card(),
                             html.Div(
                                 id="unplanned-session-fields",
@@ -5561,6 +5836,7 @@ def save_and_ai(
     except Exception:
         _wk = ""
     track_reps_times = ai_normalise_track_text(track_reps_times, _wk)
+    sets_reps_load = ai_normalise_gym_text(sets_reps_load, _wk)
 
     ai1, ai2, ai_mode_1, ai_mode_2 = make_ai_suggestions(
         athlete_name=athlete_name, selected_date=selected_date_dt,
@@ -5836,6 +6112,16 @@ def pb_card_layout():
                               placeholder="e.g. 3.92", className="pb-input"),
                 ]),
             ]),
+            html.Div(id="pb-setting-wrap", children=[
+                dbc.RadioItems(
+                    id="pb-setting",
+                    options=[{"label": "Training", "value": "Training"},
+                             {"label": "Competition", "value": "Competition"}],
+                    value="Training", inline=True,
+                    className="pb-seg pb-seg-sm", inputClassName="btn-check",
+                    labelClassName="pb-seg-btn", labelCheckedClassName="active",
+                ),
+            ]),
             html.Div(className="pb-form-row", children=[
                 html.Div(id="pb-reps-wrap", className="pb-field", style={"display": "none"}, children=[
                     html.Label("Reps", className="pb-flabel"),
@@ -5858,23 +6144,34 @@ _PB_SHORT = {"Countermovement jump": "CMJ", "Standing long jump": "Standing LJ",
 
 
 def _pb_tile(event, pb, last=None):
-    sub = None
+    subs = []
     if pb["type"] == "Track":
         main = f"{fmt_time(pb['value'])}s"
+        tr, co = pb.get("train"), pb.get("comp")
+        if tr and co:
+            subs.append(html.Div(f"Comp {fmt_time(co['value'])} · Train {fmt_time(tr['value'])}",
+                                 className="pb-tile-sub"))
+        elif co:
+            subs.append(html.Div("Competition", className="pb-tile-sub"))
         if last and last.get("pct"):
-            sub = html.Div([html.Span(f"Last {fmt_time(last['best'])} · "),
-                            html.Span(f"{last['pct']:.0f}%", className=_pct_class(last["pct"]))],
-                           className="pb-tile-sub")
+            subs.append(html.Div([html.Span(f"Last {fmt_time(last['best'])} · "),
+                                  html.Span(f"{last['pct']:.0f}%", className=_pct_class(last["pct"]))],
+                                 className="pb-tile-sub"))
     else:
         unit = pb["unit"] or "kg"
         main = f"{pb['value']:g} {unit}"
         if unit == "kg" and pb["reps"] > 1:
-            sub = html.Div(f"{pb['reps']}RM · 1RM ≈{epley_1rm(pb['value'], pb['reps']):.0f}",
-                           className="pb-tile-sub")
+            subs.append(html.Div(f"{pb['reps']}RM · 1RM ≈{epley_1rm(pb['value'], pb['reps']):.0f}",
+                                 className="pb-tile-sub"))
+        if last and last.get("pct"):
+            lift = f"{last['load']:g}" + (f"×{last['reps']}" if unit == "kg" else "")
+            subs.append(html.Div([html.Span(f"Last {lift} · "),
+                                  html.Span(f"{last['pct']:.0f}%", className=_pct_class(last["pct"]))],
+                                 className="pb-tile-sub"))
     return html.Div(className="pb-tile", children=[
         html.Div(_PB_SHORT.get(event, event), className="pb-tile-ev"),
         html.Div(main, className="pb-tile-val"),
-        sub,
+        *subs,
     ])
 
 
@@ -5916,9 +6213,17 @@ def render_pb_card(athlete_id, _saved, _refresh, dismissed):
     children = []
     for i, p in enumerate(props):
         when = pd.to_datetime(p["date"]).strftime("%-d %b")
-        msg = (f"New PB? {p['event']} {fmt_time(p['time'])}s on {when} "
-               f"(was {fmt_time(p['old'])}s)" if p["old"]
-               else f"Save {p['event']} {fmt_time(p['time'])}s from {when} as your first PB?")
+        if p.get("kind") == "Gym":
+            lift = (f"{p['load']:g} cm" if p.get("unit") == "cm" else
+                    f"{p['load']:g} kg × {p['reps']}" + (f" (≈{p['est']:.0f} kg 1RM)" if p["reps"] > 1 else ""))
+            short = _PB_SHORT.get(p["event"], p["event"])
+            msg = (f"New PB? {short} {lift} on {when} (was ≈{p['old']:.0f})" if p["old"]
+                   else f"Save {short} {lift} from {when} as your first PB?")
+        else:
+            kind = "competition " if p.get("setting") == "Competition" else "training "
+            msg = (f"New {kind}PB? {p['event']} {fmt_time(p['time'])}s on {when} "
+                   f"(was {fmt_time(p['old'])}s)" if p["old"]
+                   else f"Save {p['event']} {fmt_time(p['time'])}s from {when} as your first {kind}PB?")
         children.append(html.Div(className="pb-prop", children=[
             html.Div(msg, className="pb-prop-txt"),
             html.Div(className="pb-prop-btns", children=[
@@ -5933,7 +6238,7 @@ def render_pb_card(athlete_id, _saved, _refresh, dismissed):
 
     if not sprint and not gym:
         children.append(html.Div(
-            "Add your track and gym PBs — every track rep you log will then show as a % of your best.",
+            "Add your track and gym PBs — every rep and lift you log will then show as a % of your best.",
             className="pb-empty"))
         return children, props
 
@@ -5947,7 +6252,8 @@ def render_pb_card(athlete_id, _saved, _refresh, dismissed):
             + ", ".join(bits) + " of PB", className="pb-last"))
     if gym:
         children.append(html.Div("Gym", className="pb-sec"))
-        children.append(html.Div([_pb_tile(e, p) for e, p in gym], className="pb-grid"))
+        last_lifts = last_lift_by_exercise(df, today, pbs)
+        children.append(html.Div([_pb_tile(e, p, last_lifts.get(e)) for e, p in gym], className="pb-grid"))
     return children, props
 
 
@@ -5971,13 +6277,15 @@ def toggle_pb_form(n):
     Output("pb-value-label", "children"),
     Output("pb-value", "placeholder"),
     Output("pb-event-label", "children"),
+    Output("pb-setting-wrap", "style"),
     Input("pb-type", "value"),
 )
 def pb_type_changed(pb_type):
     if pb_type == "Gym":
         return (list(GYM_EVENTS.keys()), None, {"display": "block"}, "Weight / height",
-                "kg (or cm for jumps)", "Exercise")
-    return SPRINT_EVENTS, None, {"display": "none"}, "Time (s)", "e.g. 3.92 or 1:02.3", "Event"
+                "kg (or cm for jumps)", "Exercise", {"display": "none"})
+    return (SPRINT_EVENTS, None, {"display": "none"}, "Time (s)", "e.g. 3.92 or 1:02.3", "Event",
+            {"display": "block"})
 
 
 @app.callback(
@@ -5991,9 +6299,10 @@ def pb_type_changed(pb_type):
     State("pb-value", "value"),
     State("pb-reps", "value"),
     State("pb-date", "value"),
+    State("pb-setting", "value"),
     prevent_initial_call=True,
 )
-def save_pb_form(n, athlete_id, pb_type, event, value, reps, date_str):
+def save_pb_form(n, athlete_id, pb_type, event, value, reps, date_str, setting):
     if not n:
         raise PreventUpdate
     if not athlete_id:
@@ -6019,13 +6328,15 @@ def save_pb_form(n, athlete_id, pb_type, event, value, reps, date_str):
         except (TypeError, ValueError):
             reps = 1
     try:
-        save_pb(athlete_id, pb_type, event, v, reps, date_str or str(today_adl()), "athlete")
+        save_pb(athlete_id, pb_type, event, v, reps, date_str or str(today_adl()), "athlete",
+                setting if pb_type == "Track" else "")
     except Exception as e:
         print(f"❌ PB save failed: {e}")
         return "Couldn't save — check your connection and try again.", no_update, no_update
     shown = f"{fmt_time(v)}s" if pb_type == "Track" else f"{v:g} {GYM_EVENTS.get(event, 'kg')}" + (
         f" × {reps}" if reps > 1 else "")
-    return f"Saved: {event} {shown} ✓", time.time(), ""
+    tag = f" ({(setting or 'Training').lower()})" if pb_type == "Track" else ""
+    return f"Saved: {event} {shown}{tag} ✓", time.time(), ""
 
 
 @app.callback(
@@ -6052,7 +6363,11 @@ def answer_pb_proposal(_acc, _dis, props, dismissed, athlete_id):
     dismissed = list(dismissed or []) + [p["key"]]
     if trig.get("type") == "pb-accept":
         try:
-            save_pb(athlete_id, "Track", p["event"], float(p["time"]), 1, p["date"], "session")
+            if p.get("kind") == "Gym":
+                save_pb(athlete_id, "Gym", p["event"], float(p["load"]), int(p["reps"]), p["date"], "session")
+            else:
+                save_pb(athlete_id, "Track", p["event"], float(p["time"]), 1, p["date"], "session",
+                        p.get("setting", "Training"))
         except Exception as e:
             print(f"❌ PB confirm failed: {e}")
             raise PreventUpdate
@@ -6178,6 +6493,30 @@ def preview_track_reps(text, athlete_id):
     return None
 
 
+@app.callback(
+    Output("sets-reps-preview", "children"),
+    Input("sets-reps-load", "value"),
+    State("athlete-dropdown", "value"),
+)
+def preview_gym_sets(text, athlete_id):
+    text = (text or "").strip()
+    if not text:
+        return None
+    rows = summarise_gym_vs_pb(text, current_pbs(athlete_id) if athlete_id else {})
+    if rows:
+        bits = []
+        for r in rows:
+            b = f"{_PB_SHORT.get(r['exercise'], r['exercise'])} {fmt_set(r)}"
+            if r["pct"]:
+                b += f" — {r['pct']:.0f}% of PB"
+            bits.append(b)
+        return html.Div([html.Span("✓ Read as: ", className="rep-ok"), html.Span(" · ".join(bits))])
+    if re.search(r"\d", text):
+        return html.Div("Couldn't match these to an exercise yet — try e.g. 'Back squat 3x3 @ 140kg'. "
+                        "We'll also try to read it when you save.", className="rep-warn")
+    return None
+
+
 def ai_normalise_track_text(text: str, workout: str = "") -> str:
     """
     If nothing in the athlete's text can be read but it has times in it, ask the
@@ -6218,6 +6557,7 @@ def pb_value_on(athlete: str, event: str, day: dt.date):
     best = None
     if rows is not None and not rows.empty:
         ev = rows[rows["Event"].str.strip() == event]
+        held = {}                  # latest training / competition entry on or before the day
         for _, r in ev.iterrows():
             try:
                 v = float(r["Value"])
@@ -6225,7 +6565,9 @@ def pb_value_on(athlete: str, event: str, day: dt.date):
             except Exception:
                 continue
             if d <= day:
-                best = v          # latest entry on or before the day
+                held[_pb_setting(r)] = v
+        if held:
+            best = min(held.values())
     if best is None:
         cur = current_pbs(athlete).get(event)
         best = cur["value"] if cur else None
@@ -6284,6 +6626,7 @@ def sprint_quality_takeaway(hist: list, event: str):
     return (f"{event} quality is holding steady", f"Last 3 sessions averaged {r_avg:.0f}% of {ref_word}.", "normal")
 
 
+_PERF_BLUE = "#3b8eea"   # brighter than the app BLUE so its shading shows on dark
 _PERF_FONT = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
 
 
@@ -6334,16 +6677,16 @@ def build_sprint_quality_plot(hist: list, event: str, theme: str = "dark"):
     fig.add_hline(y=100, line=dict(color="rgba(47,179,68,0.55)", width=1, dash="dot"))
     fig.add_trace(go.Scatter(
         x=x, y=avg, name="Average rep", mode="lines+markers",
-        line=dict(color=BLUE, width=2.0), line_shape="spline", line_smoothing=0.7,
-        marker=dict(size=5, color=BLUE),
-        fill="tozeroy", fillcolor=_rgba(BLUE, 0.07),
+        line=dict(color=_PERF_BLUE, width=2.0), line_shape="spline", line_smoothing=0.7,
+        marker=dict(size=5, color=_PERF_BLUE),
+        fill="tozeroy", fillcolor=_rgba(_PERF_BLUE, 0.20),
         hovertemplate="Average rep: %{y:.1f}%<extra></extra>"))
     fig.add_trace(go.Scatter(
         x=x, y=best, name="Best rep", mode="lines+markers",
         line=dict(color="#2fb344", width=2.4), line_shape="spline", line_smoothing=0.7,
         marker=dict(size=[10 if b >= 100 else 6 for b in best],
                     symbol=["star" if b >= 100 else "circle" for b in best], color="#2fb344"),
-        fill="tozeroy", fillcolor=_rgba("#2fb344", 0.10),
+        fill="tozeroy", fillcolor=_rgba("#2fb344", 0.22),
         customdata=[[fmt_time(s["best"]), s["n"]] for s in hist],
         hovertemplate="Best rep: %{y:.1f}% (%{customdata[0]}s, %{customdata[1]} reps)<extra></extra>"))
     _perf_layout(fig, f"{event} — % of PB per session", "% of PB", [lo, hi], "%")
@@ -6369,44 +6712,93 @@ def pb_history_series(athlete: str, event: str) -> list:
             reps = 1
         unit = str(r.get("Unit", "")).strip()
         y = epley_1rm(v, reps) if (unit == "kg" and reps > 1) else v
-        out.append({"date": d, "value": v, "reps": reps, "unit": unit, "y": y})
+        out.append({"date": d, "value": v, "reps": reps, "unit": unit, "y": y,
+                    "setting": _pb_setting(r)})
     return sorted(out, key=lambda p: p["date"])
 
 
-def build_pb_progress_plot(series: list, event: str, kind: str, theme: str = "dark"):
+def build_pb_progress_plot(series: list, event: str, kind: str, theme: str = "dark", sessions=None):
     """PB history, styled like the other charts.
-    Track: each PB as a % of the current PB (100% = today's best), so up = faster.
-    Gym: kg (rep maxes as estimated 1RM) or cm."""
+    Track: each PB as a % of the current best (100%), training and competition as
+    separate lines, so up = faster.
+    Gym: PB as estimated 1RM (kg) or cm, plus each session's top set when logged."""
     fig = go.Figure()
-    if not series:
+    sessions = sessions or []
+    if not series and not sessions:
         return apply_fig_theme(_perf_layout(fig, "", ""), theme)
-    x = [pd.Timestamp(p["date"]) for p in series]
+    xs_all = []
     if kind == "Track":
         best_now = min(p["value"] for p in series)
-        y = [best_now / p["value"] * 100 for p in series]
-        hover = [fmt_time(p["value"]) + "s" for p in series]
-        y_title, suffix, title = "% of current PB", "%", f"{event} — PB progression"
-        lo, hi = min(y) - 1.5, 101
-        hovertemplate = "PB %{customdata} · %{y:.1f}% of current<extra></extra>"
+        ys = []
+        for setting, col in (("Training", "#2fb344"), ("Competition", "#f5a524")):
+            pts = [p for p in series if p.get("setting", "Training") == setting]
+            if not pts:
+                continue
+            x = [pd.Timestamp(p["date"]) for p in pts]
+            y = [best_now / p["value"] * 100 for p in pts]
+            xs_all += x
+            ys += y
+            fig.add_trace(go.Scatter(
+                x=x, y=y, name=f"{setting} PB", mode="lines+markers",
+                line=dict(color=col, width=2.4), line_shape="spline", line_smoothing=0.7,
+                marker=dict(size=7, color=col, line=dict(width=1.5, color="rgba(255,255,255,0.85)")),
+                fill="tozeroy", fillcolor=_rgba(col, 0.22),
+                customdata=[fmt_time(p["value"]) + "s" for p in pts],
+                hovertemplate=f"{setting}: %{{customdata}} · %{{y:.1f}}%<extra></extra>"))
+        _perf_layout(fig, f"{event} — PB progression", "% of current best", [min(ys) - 1.5, 101], "%")
     else:
-        unit = series[-1]["unit"] or "kg"
-        y = [p["y"] for p in series]
-        hover = [(f"{p['value']:g} kg × {p['reps']} (≈{p['y']:.0f} kg 1RM)" if p["reps"] > 1
-                  else f"{p['value']:g} {p['unit'] or unit}") for p in series]
-        y_title = "Estimated 1RM (kg)" if unit == "kg" else f"Best ({unit})"
-        suffix, title = "", f"{_PB_SHORT.get(event, event)} — PB progression"
-        pad = (max(y) - min(y)) * 0.3 or max(y) * 0.05
-        lo, hi = min(y) - pad, max(y) + pad
-        hovertemplate = "%{customdata}<extra></extra>"
-    col = "#2fb344"
-    fig.add_trace(go.Scatter(
-        x=x, y=y, name="PB", mode="lines+markers",
-        line=dict(color=col, width=2.4), line_shape="spline", line_smoothing=0.7,
-        marker=dict(size=7, color=col, line=dict(width=1.5, color="rgba(255,255,255,0.85)")),
-        fill="tozeroy", fillcolor=_rgba(col, 0.12),
-        customdata=hover, hovertemplate=hovertemplate, showlegend=False))
-    _perf_layout(fig, title, y_title, [lo, hi], suffix)
-    _pad_x(fig, x)
+        unit = (series[-1]["unit"] if series else (sessions[-1]["unit"] if sessions else "kg")) or "kg"
+        ys = []
+        if sessions:
+            x = [pd.Timestamp(p["date"]) for p in sessions]
+            y = [p["est"] for p in sessions]
+            xs_all += x
+            ys += y
+            fig.add_trace(go.Scatter(
+                x=x, y=y, name="Session top set", mode="lines+markers",
+                line=dict(color=_PERF_BLUE, width=2.0), line_shape="spline", line_smoothing=0.7,
+                marker=dict(size=5, color=_PERF_BLUE), fill="tozeroy", fillcolor=_rgba(_PERF_BLUE, 0.20),
+                customdata=[(f"{p['load']:g} kg × {p['reps']}" if unit == "kg" else f"{p['load']:g} cm")
+                            for p in sessions],
+                hovertemplate="Session: %{customdata} · %{y:.0f}<extra></extra>"))
+        if series:
+            x = [pd.Timestamp(p["date"]) for p in series]
+            y = [p["y"] for p in series]
+            labels = [(f"{p['value']:g} kg × {p['reps']} (≈{p['y']:.0f} kg 1RM)" if p["reps"] > 1
+                       else f"{p['value']:g} {p['unit'] or unit}") for p in series]
+            col = "#2fb344"
+            if sessions:
+                # With session data, show the PB as a level that steps up when it's beaten,
+                # carried through to the latest session so the two lines can be compared.
+                if sessions[0]["date"] > series[-1]["date"]:
+                    keep = [series[-1]]         # only the PB that was current during the sessions
+                    x, y, labels = [pd.Timestamp(sessions[0]["date"])], [keep[0]["y"]], labels[-1:]
+                end = pd.Timestamp(max(sessions[-1]["date"], series[-1]["date"]))
+                if end > x[-1]:
+                    x, y, labels = x + [end], y + [y[-1]], labels + [labels[-1]]
+                fig.add_trace(go.Scatter(
+                    x=x, y=y, name="PB", mode="lines+markers",
+                    line=dict(color=col, width=2.4), line_shape="spline", line_smoothing=0.7,
+                    marker=dict(size=[7] * (len(x) - 1) + [0], color=col),
+                    fill="tozeroy", fillcolor=_rgba(col, 0.22),
+                    customdata=labels, hovertemplate="PB: %{customdata}<extra></extra>"))
+            else:
+                fig.add_trace(go.Scatter(
+                    x=x, y=y, name="PB", mode="lines+markers",
+                    line=dict(color=col, width=2.4), line_shape="spline", line_smoothing=0.7,
+                    marker=dict(size=8, color=col, line=dict(width=1.5, color="rgba(255,255,255,0.85)")),
+                    fill="tozeroy", fillcolor=_rgba(col, 0.22),
+                    customdata=labels, hovertemplate="PB: %{customdata}<extra></extra>"))
+            xs_all += x
+            ys += y
+        pad = (max(ys) - min(ys)) * 0.3 or max(ys) * 0.05
+        _perf_layout(fig, f"{_PB_SHORT.get(event, event)} — progression",
+                     "Estimated 1RM (kg)" if unit == "kg" else f"Best ({unit})", [min(ys) - pad, max(ys) + pad])
+    if kind == "Gym" and len(fig.data) == 2:
+        fig.data = (fig.data[1], fig.data[0])     # PB underneath, sessions on top
+    if len(fig.data) < 2:
+        fig.update_layout(showlegend=False)
+    _pad_x(fig, xs_all)
     return apply_fig_theme(fig, theme)
 
 
@@ -6416,7 +6808,29 @@ def _takeaway_div(head, sub, tone):
                      html.Div(sub, className="tk-sub")], className="takeaway")
 
 
-def _pb_progress_takeaway(series, event, kind):
+def _pb_progress_takeaway(series, event, kind, sessions=None):
+    if not series and sessions:
+        last = sessions[-1]
+        lift = f"{last['load']:g} kg × {last['reps']}" if last["unit"] == "kg" else f"{last['load']:g} cm"
+        return (f"{_PB_SHORT.get(event, event)}: last top set {lift}",
+                "Add a PB for this lift to see each session as a % of it.", "normal")
+    if kind == "Gym" and sessions:
+        last = sessions[-1]
+        lift = f"{last['load']:g} kg × {last['reps']}" if last["unit"] == "kg" else f"{last['load']:g} cm"
+        pb_y = series[-1]["y"] if series else None
+        recent = sessions[-3:]
+        prior = sessions[-6:-3]
+        trend = ""
+        if prior:
+            diff = (sum(p["est"] for p in recent) / len(recent)) - (sum(p["est"] for p in prior) / len(prior))
+            trend = " Top sets are trending up." if diff > 1 else (" Top sets have dipped." if diff < -1 else "")
+        name = _PB_SHORT.get(event, event)
+        if pb_y:
+            pct = last["est"] / pb_y * 100
+            return (f"{name}: last top set {lift}",
+                    f"≈{last['est']:.0f} {last['unit'] if last['unit'] == 'cm' else 'kg 1RM'} — {pct:.0f}% of PB.{trend}",
+                    "good" if pct >= 100 else "normal")
+        return (f"{name}: last top set {lift}", f"Add a PB for this lift to compare.{trend}", "normal")
     if len(series) < 2:
         p = series[-1]
         val = f"{fmt_time(p['value'])}s" if kind == "Track" else f"{p['value']:g} {p['unit']}"
@@ -6470,7 +6884,11 @@ def update_sprint_quality(athlete_id, _r, _s, mode, event, theme):
         print(f"⚠️ sprint quality: {e}")
         hist = {}
     if not hist and not pbs:
-        return hidden, [], None, None, go.Figure()
+        try:
+            if not gym_session_history(load_tab_cached(athlete_id), athlete_id):
+                return hidden, [], None, None, go.Figure()
+        except Exception:
+            return hidden, [], None, None, go.Figure()
 
     if mode == "Track":
         order = {e: i for i, e in enumerate(SPRINT_EVENTS)}
@@ -6478,7 +6896,13 @@ def update_sprint_quality(athlete_id, _r, _s, mode, event, theme):
                         key=lambda e: order.get(e, 999))
     else:
         order = {e: i for i, e in enumerate(GYM_EVENTS)}
-        events = sorted([e for e, p in pbs.items() if p["type"] == "Gym"], key=lambda e: order.get(e, 999))
+        try:
+            gym_hist = gym_session_history(load_tab_cached(athlete_id), athlete_id)
+        except Exception as e:
+            print(f"⚠️ gym history: {e}")
+            gym_hist = {}
+        events = sorted({e for e, p in pbs.items() if p["type"] == "Gym"} | set(gym_hist),
+                        key=lambda e: order.get(e, 999))
     if not events:
         msg = ("No track PBs or logged reps yet — add a PB on Home, or log rep times in a session."
                if mode == "Track" else "No gym PBs yet — add one from the Personal Bests card on Home.")
@@ -6494,11 +6918,12 @@ def update_sprint_quality(athlete_id, _r, _s, mode, event, theme):
                 build_sprint_quality_plot(hist[event], event, theme))
 
     series = pb_history_series(athlete_id, event)
-    if not series:
+    sessions = gym_hist.get(event, []) if mode == "Gym" else []
+    if not series and not sessions:
         return shown, opts, event, _takeaway_div(f"No history for {event} yet", "", "normal"), go.Figure()
-    head, sub, tone = _pb_progress_takeaway(series, event, mode)
+    head, sub, tone = _pb_progress_takeaway(series, event, mode, sessions)
     return (shown, opts, event, _takeaway_div(head, sub, tone),
-            build_pb_progress_plot(series, event, mode, theme))
+            build_pb_progress_plot(series, event, mode, theme, sessions))
 
 
 # Words that mean "back off". The note must never use them on a green day, and
